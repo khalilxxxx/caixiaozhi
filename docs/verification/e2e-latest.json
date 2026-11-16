@@ -1,0 +1,84 @@
+{
+  "measured_at": "2026-11-07T18:23:59.267797+00:00",
+  "command": "pnpm db:reset && pnpm test:e2e --reporter=list,json",
+  "exit_code": 1,
+  "total": 24,
+  "passed": 19,
+  "failed": 5,
+  "skipped": 0,
+  "duration_seconds": 130.786,
+  "journeys": [
+    {
+      "scenario_id": "E2E-01",
+      "status": "blocked",
+      "error": {
+        "code": "DEPENDENCY_UNAVAILABLE",
+        "message": "agent 返回 failed，已保留真实回执。"
+      },
+      "baseline_generation": 45,
+      "evidence_count": 69
+    },
+    {
+      "scenario_id": "E2E-02",
+      "status": "blocked",
+      "error": {
+        "code": "DEPENDENCY_UNAVAILABLE",
+        "message": "travel_proposal 返回 failed，已保留真实回执。"
+      },
+      "baseline_generation": 46,
+      "evidence_count": 71
+    },
+    {
+      "scenario_id": "E2E-03",
+      "status": "succeeded",
+      "error": null,
+      "baseline_generation": 47,
+      "evidence_count": 112
+    },
+    {
+      "scenario_id": "E2E-04",
+      "status": "blocked",
+      "error": {
+        "code": "DEPENDENCY_UNAVAILABLE",
+        "message": "结构化生成尚未完成，请检查模型配置或修复输入后重试。"
+      },
+      "baseline_generation": 48,
+      "evidence_count": 73
+    },
+    {
+      "scenario_id": "E2E-05",
+      "status": "succeeded",
+      "error": null,
+      "baseline_generation": 49,
+      "evidence_count": 96
+    },
+    {
+      "scenario_id": "E2E-06",
+      "status": "blocked",
+      "error": {
+        "code": "SKILL_VALIDATION_REQUIRED",
+        "message": "费用分析Skill治理前置依赖受阻（DEPENDENCY_UNAVAILABLE）：需要本代真实模型验证、独立审查和本人确认发布。"
+      },
+      "baseline_generation": 50,
+      "evidence_count": 72
+    },
+    {
+      "scenario_id": "E2E-07",
+      "status": "blocked",
+      "error": {
+        "code": "DEPENDENCY_UNAVAILABLE",
+        "message": "agent 返回 failed，已保留真实回执。"
+      },
+      "baseline_generation": 51,
+      "evidence_count": 70
+    },
+    {
+      "scenario_id": "E2E-08",
+      "status": "succeeded",
+      "error": null,
+      "baseline_generation": 52,
+      "evidence_count": 102
+    }
+  ],
+  "note": "16条实际页面用例与正式E2E03/05/08通过；五条依赖真实模型/Skill真实验证的旅程明确blocked，Playwright按失败非零退出，不skip或假通过。之前完整回归发现的旧任务轮询与新Skill种子版本引用已修复并纳入本次全套重跑。"
+}

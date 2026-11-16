@@ -1,0 +1,31 @@
+{
+  "name": "@caixiaozhi/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --import tsx --conditions=development src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@caixiaozhi/contracts": "workspace:*",
+    "@caixiaozhi/platform": "workspace:*",
+    "fastify": "5.12.8",
+    "@caixiaozhi/identity": "workspace:*",
+    "@caixiaozhi/agent-runtime": "workspace:*",
+    "@caixiaozhi/action-service": "workspace:*",
+    "@caixiaozhi/business-adapters": "workspace:*",
+    "ajv": "8.20.0",
+    "drizzle-orm": "0.45.4",
+    "zod": "4.6.7",
+    "@caixiaozhi/assistant": "workspace:*",
+    "@caixiaozhi/finance": "workspace:*",
+    "@caixiaozhi/files": "workspace:*",
+    "@caixiaozhi/insights": "workspace:*",
+    "@caixiaozhi/application": "workspace:*",
+    "@caixiaozhi/integrations": "workspace:*",
+    "@caixiaozhi/demo": "workspace:*"
+  }
+}

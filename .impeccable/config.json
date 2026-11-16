@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "pulsing-dot",
+        "value": "*",
+        "files": [
+          "/Users/khalil/Documents/财小智/artifacts/brand-exploration-20261116/index.html"
+        ],
+        "createdAt": "2026-11-16T09:32:46.041Z",
+        "reason": "用户明确请求 loading、thinking 动效方案；本文件是状态设计评审稿，默认暂停且只在主动播放后演示，不表示真实业务活跃。两处脉冲分别为思考三点和猫眼节奏。"
+      }
+    ]
+  }
+}

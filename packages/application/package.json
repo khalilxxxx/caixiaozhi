@@ -1,0 +1,41 @@
+{
+  "name": "@caixiaozhi/application",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "development": "./src/*.ts",
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@caixiaozhi/action-service": "workspace:*",
+    "@caixiaozhi/agent-runtime": "workspace:*",
+    "@caixiaozhi/assistant": "workspace:*",
+    "@caixiaozhi/business-adapters": "workspace:*",
+    "@caixiaozhi/contracts": "workspace:*",
+    "@caixiaozhi/files": "workspace:*",
+    "@caixiaozhi/finance": "workspace:*",
+    "@caixiaozhi/identity": "workspace:*",
+    "@caixiaozhi/insights": "workspace:*",
+    "@caixiaozhi/integrations": "workspace:*",
+    "@caixiaozhi/jobs": "workspace:*",
+    "@caixiaozhi/platform": "workspace:*",
+    "drizzle-orm": "0.45.4",
+    "zod": "4.6.7",
+    "@caixiaozhi/demo": "workspace:*",
+    "@caixiaozhi/fixtures": "workspace:*",
+    "ajv": "8.20.0"
+  }
+}

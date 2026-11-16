@@ -1,0 +1,28 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+coverage/
+*.log
+.DS_Store
+.runtime/
+.superpowers/
+playwright-report/
+test-results/
+/API KEY/
+dist-document-query/
+dist-agent/
+dist-srs-review/
+
+# 本地验证、历史备份与交付压缩包
+/artifacts/
+/deliverables/
+/*.zip
+/demos/*.zip
+/.impeccable/hook.cache.json
+
+# 本地 Agno 服务
+apps/agno-service/.venv/
+**/__pycache__/
+**/.pytest_cache/

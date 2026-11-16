@@ -1,0 +1,28 @@
+{
+  "checked_at": "2026-11-12T03:32:10.054Z",
+  "provider": "DeepSeek",
+  "base_url": "https://api.deepseek.com",
+  "model": "deepseek-flash",
+  "context_window": 1048576,
+  "protocol": "openai-completions",
+  "credentials_authenticated_http": 200,
+  "real_dsh_tool_roundtrip": {
+    "passed": true,
+    "tests": 1,
+    "duration_ms": 3276
+  },
+  "runtime_tool_alias_compatibility_fixed": true,
+  "worker_model_configured": true,
+  "services": [
+    {
+      "url": "http://127.0.0.1:3000/api/v1/health/ready",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:5173/",
+      "status": 200
+    }
+  ],
+  "browser_rendered": true,
+  "browser_errors": 0
+}

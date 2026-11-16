@@ -1,0 +1,8 @@
+{
+  "checked_at": "2026-11-07T17:57:54.406Z",
+  "node": "v24.22.1",
+  "pnpm": "11.25.0",
+  "docker_available": false,
+  "docker_error_code": "ENOENT",
+  "container_start_verified": false
+}

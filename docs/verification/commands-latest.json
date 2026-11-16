@@ -1,0 +1,90 @@
+{
+  "recorded_at": "2026-11-07T18:25:45.721686+00:00",
+  "commands": [
+    {
+      "command": "pnpm install --frozen-lockfile",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm peers check",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm build",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm format:check",
+      "exit_code": 0
+    },
+    {
+      "command": "pnpm db:migrate",
+      "exit_code": 0,
+      "consecutive_runs": 2,
+      "new_migrations_each_run": [
+        0,
+        0
+      ],
+      "total_applied": 24
+    },
+    {
+      "command": "pnpm db:seed",
+      "exit_code": 0,
+      "generation": 53,
+      "lifecycle": "ready",
+      "idempotent": true
+    },
+    {
+      "command": "pnpm db:reset",
+      "exit_code": 0,
+      "generation": 53,
+      "old_generation_audit_preserved": true
+    },
+    {
+      "command": "pnpm test:unit",
+      "exit_code": 0,
+      "passed": 62
+    },
+    {
+      "command": "pnpm test:contracts",
+      "exit_code": 0,
+      "passed": 125
+    },
+    {
+      "command": "pnpm test:integration",
+      "exit_code": 0,
+      "passed": 205,
+      "skipped": 1
+    },
+    {
+      "command": "pnpm test:e2e --reporter=list,json",
+      "exit_code": 1,
+      "passed": 19,
+      "failed": 5,
+      "skipped": 0,
+      "reason": "E2E01/02/04/06/07真实模型或Skill验证前置依赖缺配置，正式报告blocked。"
+    },
+    {
+      "command": "pnpm test:agent:real",
+      "exit_code": 2,
+      "status": "blocked",
+      "reason": "MODEL_NOT_CONFIGURED"
+    },
+    {
+      "command": "pnpm test:load",
+      "exit_code": 2,
+      "status": "blocked",
+      "reason": "MODEL_NOT_CONFIGURED",
+      "accepted_runs": 0
+    }
+  ],
+  "final_baseline_verified": true,
+  "container_start_verified": false,
+  "container_blocker": "Docker命令ENOENT；实际使用原生PostgreSQL17.6/RustFS1.0.4。",
+  "raw_logs": ".runtime/verification/final/",
+  "scope": "记录本轮实际退出码；确定性测试及页面通过不等于真实Agent、20run/100SSE或生产部署已验收。"
+}

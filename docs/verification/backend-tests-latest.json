@@ -1,0 +1,28 @@
+{
+  "measured_at": "2026-11-07T18:21:21.742088+00:00",
+  "unit": {
+    "command": "pnpm test:unit",
+    "exit_code": 0,
+    "passed": 62,
+    "failed": 0,
+    "skipped": 0
+  },
+  "contracts": {
+    "command": "pnpm test:contracts",
+    "exit_code": 0,
+    "passed": 125,
+    "failed": 0,
+    "skipped": 0
+  },
+  "integration": {
+    "command": "pnpm test:integration",
+    "exit_code": 0,
+    "passed": 205,
+    "failed": 0,
+    "skipped": 1,
+    "skip_reason": "真实模型用例仅由test:agent:real显式启用；四项DSH配置缺失，该专用命令实际退出2。"
+  },
+  "total_passed": 392,
+  "total_skipped": 1,
+  "dependencies": "真实本机PostgreSQL17.6、RustFS1.0.4；SDK传输测试使用显式测试模型网关，非真实模型验收。"
+}

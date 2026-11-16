@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "test_id": "855c81c9-7beb-4972-9093-6642495c7aa0",
+  "status": "blocked",
+  "exit_code": 2,
+  "started_at": "2026-11-07T18:24:42.014Z",
+  "finished_at": "2026-11-07T18:24:42.015Z",
+  "scope": "独立测试租户；真实application HTTP、真实DSH SDK、20并发Worker与100条SSE。无固定模型回复；同进程API/Worker加子进程资源，不代表分布式生产容量。",
+  "reason_codes": [
+    "MODEL_NOT_CONFIGURED"
+  ],
+  "target": {
+    "active_runs": 20,
+    "sse_connections": 100,
+    "minimum_joint_ms": 1000
+  },
+  "parameters": {
+    "required_model_configuration": [
+      "DSH_API_KEY",
+      "DSH_BASE_URL",
+      "DSH_MODEL",
+      "DSH_CONTEXT_WINDOW"
+    ]
+  },
+  "isolation": {
+    "tenant_digest": null,
+    "workload_users": 0,
+    "cross_owner_checks": 0,
+    "cross_owner_denials": 0,
+    "foreign_events": 0,
+    "foreign_markers": 0,
+    "read_only": true,
+    "unexpected_writes": 0
+  },
+  "concurrency": {
+    "worker_limit": 20,
+    "peak_sdk_handles": 0,
+    "peak_model_http_in_flight": 0,
+    "peak_runtime_active_rows": 0,
+    "peak_live_model_slots": 0,
+    "peak_sse_connections": 0,
+    "peak_joint_active_runs": 0,
+    "longest_joint_ms": 0
+  },
+  "model_transport": {
+    "scope": "透明转发真实网关的推理请求，仅记录状态、并发与耗时，不记录正文或认证头。",
+    "requests": 0,
+    "status_counts": {},
+    "http_429": 0,
+    "network_errors": 0,
+    "latency": {
+      "count": 0,
+      "p50_ms": null,
+      "p95_ms": null,
+      "max_ms": null
+    }
+  },
+  "requests": {
+    "accepted_runs": 0,
+    "http_status_counts": {},
+    "http_latency": {
+      "count": 0,
+      "p50_ms": null,
+      "p95_ms": null,
+      "max_ms": null
+    }
+  },
+  "queues": {
+    "to_first_claim": {
+      "count": 0,
+      "p50_ms": null,
+      "p95_ms": null,
+      "max_ms": null
+    },
+    "to_sdk_handle": {
+      "count": 0,
+      "p50_ms": null,
+      "p95_ms": null,
+      "max_ms": null
+    },
+    "after_worker_start": {
+      "count": 0,
+      "p50_ms": null,
+      "p95_ms": null,
+      "max_ms": null
+    }
+  },
+  "runs": [],
+  "streams": [],
+  "resources": {
+    "scope": "当前API+Worker Node进程与其DSH子进程；不含数据库、S3及外部模型服务器。ps CPU为进程生命周期平均值。",
+    "samples": [],
+    "ps_available": null
+  },
+  "rate_limits": {
+    "http_429": 0,
+    "run_rate_limited": 0,
+    "model_error_codes": {},
+    "worker_error_codes": {}
+  },
+  "cleanup": {
+    "worker_graceful": null,
+    "worker_quiescent": null,
+    "connections_closed": true,
+    "http_closed": null,
+    "forced_descendants": 0,
+    "tenant_rows_removed": 0,
+    "tenant_rows_remaining": null,
+    "runtime_directory_removed": null,
+    "error_codes": []
+  }
+}

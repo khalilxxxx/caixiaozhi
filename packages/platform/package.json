@@ -1,0 +1,73 @@
+{
+  "name": "@caixiaozhi/platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./config": {
+      "development": "./src/config.ts",
+      "types": "./dist/config.d.ts",
+      "default": "./dist/config.js"
+    },
+    "./database": {
+      "development": "./src/database.ts",
+      "types": "./dist/database.d.ts",
+      "default": "./dist/database.js"
+    },
+    "./files": {
+      "development": "./src/files.ts",
+      "types": "./dist/files.d.ts",
+      "default": "./dist/files.js"
+    },
+    "./migrations": {
+      "development": "./src/migrations.ts",
+      "types": "./dist/migrations.d.ts",
+      "default": "./dist/migrations.js"
+    },
+    "./storage": {
+      "development": "./src/storage.ts",
+      "types": "./dist/storage.d.ts",
+      "default": "./dist/storage.js"
+    },
+    "./maintenance": {
+      "development": "./src/maintenance.ts",
+      "types": "./dist/maintenance.d.ts",
+      "default": "./dist/maintenance.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "development": "./src/errors.ts",
+      "default": "./dist/errors.js"
+    },
+    "./hash": {
+      "types": "./dist/hash.d.ts",
+      "development": "./src/hash.ts",
+      "default": "./dist/hash.js"
+    },
+    "./paths": {
+      "development": "./src/paths.ts",
+      "types": "./dist/paths.d.ts",
+      "default": "./dist/paths.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1164.0",
+    "dotenv": "18.0.9",
+    "drizzle-orm": "0.45.4",
+    "pg": "8.23.1",
+    "zod": "4.6.7",
+    "@caixiaozhi/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
+  }
+}

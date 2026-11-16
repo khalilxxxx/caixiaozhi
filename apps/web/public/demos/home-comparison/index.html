@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>财小智 · 首页双方案对照</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:#27344a;background:#f9fafc;font-synthesis:none;line-height:1.75;--blue:#326be2;--line:#dfe5ed;--muted:#5d6b80}
+*{box-sizing:border-box}body{margin:0;min-width:1080px}a{color:#285fbe;text-decoration:none;text-underline-offset:4px}a:hover{text-decoration:underline}button{font:inherit;cursor:pointer}a:focus-visible,button:focus-visible{outline:3px solid #8eb3fa;outline-offset:4px}::selection{background:#dae7ff}header{max-width:1184px;margin:auto;padding:32px 32px 23px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}header b{font-size:16px}header span{font-size:12px;color:var(--muted)}main{max-width:1184px;margin:auto;padding:55px 32px 72px}h1{font-size:34px;line-height:1.3;letter-spacing:-.025em;margin:0 0 16px;font-weight:650}h2{font-size:23px;line-height:1.45;margin:0 0 20px;font-weight:600}h3{font-size:18px;line-height:1.5;margin:0 0 10px;font-weight:600}p{margin:0 0 14px}.lead{font-size:17px;max-width:860px;color:#48576e}.actions{display:flex;gap:12px;align-items:center;margin:25px 0 0}.link-button{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:43px;border:1px solid #cad5e7;border-radius:8px;padding:9px 18px;background:white;color:#284d87;font-size:14px;font-weight:550}.link-button.primary{background:var(--blue);border-color:var(--blue);color:white}.link-button:hover{text-decoration:none;background:#edf3ff}.link-button.primary:hover{background:#265bca}section{margin-top:58px}.twins{display:grid;grid-template-columns:1fr 1fr;gap:34px}.version{padding-top:23px;border-top:1px solid #cfd8e6}.version p{color:var(--muted);font-size:14px}.version .path{font-size:14px;font-weight:550;color:#304c72;letter-spacing:.015em;margin:16px 0}.preview-link{display:block;margin:20px 0 15px;border:1px solid #dce3ee;border-radius:10px;overflow:hidden;background:#f1f4f9}.preview-link img{display:block;width:100%;height:auto;aspect-ratio:1.6;object-fit:cover;object-position:top}.caption{font-size:12px;color:var(--muted)}.comparison{width:100%;border-collapse:collapse;font-size:14px}.comparison th{font-weight:600;text-align:left;background:#eef3fb;color:#304a70}.comparison th,.comparison td{padding:15px 17px;border-bottom:1px solid var(--line);vertical-align:top}.comparison th:first-child,.comparison td:first-child{width:185px}.comparison td:not(:first-child){width:calc((100% - 185px)/2)}.comparison strong{display:block;font-weight:600;color:#27344a;margin-bottom:3px}.comparison span{color:var(--muted)}.recommendation{border-top:1px solid var(--line);padding-top:28px;display:grid;grid-template-columns:250px 1fr;gap:42px}.recommendation h2{max-width:230px}.recommendation p{color:#48576e}.recommendation strong{color:#27344a}.numbered{padding-left:23px;margin:18px 0 0}.numbered li{margin:10px 0;padding-left:6px}.source-note{font-size:13px;color:var(--muted);padding:17px 20px;background:#f0f4fa;border-radius:8px;margin-top:20px}.source-note p:last-child{margin-bottom:0}.reading{max-width:900px}.reading p{color:#48576e}.reading ol{padding-left:24px}.reading li{padding-left:5px;margin:10px 0}.small{font-size:13px;color:var(--muted)}.switcher{display:flex;align-items:center;gap:8px;margin:20px 0 12px}.switcher button{padding:9px 17px;border:1px solid var(--line);border-radius:8px;background:white;color:#526178;font-size:14px}.switcher button[aria-pressed=true]{background:#e9f1ff;border-color:#acc6f3;color:#285fbe}.switcher a{margin-left:auto;font-size:13px}.live-frame{display:block;width:100%;height:800px;border:1px solid #dce3ee;border-radius:12px;background:#f9fafc}.test-cases{display:grid;grid-template-columns:1fr 1fr;gap:30px;border-top:1px solid var(--line);padding-top:22px}.test-cases ol{margin:0;padding-left:21px;color:#48576e;font-size:14px}.test-cases li{margin:9px 0}footer{border-top:1px solid var(--line);padding-top:24px;margin-top:52px;color:var(--muted);font-size:12px;display:flex;justify-content:space-between}@media print{body{min-width:0;background:white}header,main{padding-left:0;padding-right:0}.actions,.live-section,.preview-link{display:none}section{break-inside:avoid;margin-top:25px}.comparison{font-size:14px}h1{font-size:27px}}
+</style>
+</head>
+<body>
+<header><b>财小智 · 设计对照</b><span>PC 首页交互 / 2026年11月16日 / 本地原型</span></header>
+<main>
+  <h1>两种入口思路，同一个财务 Agent</h1>
+  <p class="lead">A 帮用户从工作场景找到合适的任务样板；B 让用户直接进入明确的能力输入状态。两版沿用相同品牌、侧栏与对话框，把差异集中在“怎样开始一件事”。</p>
+  <div class="actions"><a class="link-button primary" href="workbuddy.html">打开 A · 场景与模板 <span aria-hidden="true">↗</span></a><a class="link-button" href="kimi.html">打开 B · 能力直达 <span aria-hidden="true">↗</span></a><a href="#live" class="small">在本页切换体验</a></div>
+
+  <section class="twins" aria-label="两版方案概览">
+    <article class="version"><h2>A · 场景与任务模板</h2><p>借鉴 WorkBuddy 的场景组织方式。先按“日常办理 / 经营分析 / 材料处理”找到范围，再选择任务样板，进入同一个对话草稿。</p><p class="path">浏览场景 → 选择任务样板 → 编辑需求</p><a class="preview-link" href="workbuddy.html" aria-label="打开场景与模板版"><img src="preview-workbuddy.jpg" alt="财小智场景与模板版首页"></a><p class="caption">入口在输入框上方；分组帮助发现能力，不限制对话内容。</p></article>
+    <article class="version"><h2>B · 明确能力直达</h2><p>借鉴 Kimi 的专属能力入口。默认保持通用对话，选择“合同分析”等能力后，输入提示、当前能力状态和示例问题一起切换。</p><p class="path">选择能力 → 专属输入状态 → 描述需求</p><a class="preview-link" href="kimi.html" aria-label="打开能力直达版"><img src="preview-kimi.jpg" alt="财小智能力直达版首页"></a><p class="caption">入口在输入框下方；选中后在输入区就近显示能力，可退出。</p></article>
+  </section>
+
+  <section class="reading">
+    <h2>竞品实际做了什么</h2>
+    <p><strong>WorkBuddy：</strong>官方通用首页文档截图展示了框上方的场景入口；Buddy 行业定制版文档进一步明确，工作模式决定业务角色和工具组合，场景入口可绑定专家并提供预设指令。其侧重点是把可用能力组织成用户能识别的工作场景。<a href="https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Buddy-App" target="_blank" rel="noreferrer">查看官方说明</a></p>
+    <p><strong>Kimi：</strong>本次实看 PC 网页，首页框下方提供研究、文档、PPT 等能力入口。点击“深度研究”或“文档”后，会进入对应路由，更换输入提示，并在输入框底部显示当前能力。它先帮助用户明确任务类型，再让用户用语言补足需求。<a href="https://www.kimi.com/deep-research" target="_blank" rel="noreferrer">深度研究</a> · <a href="https://www.kimi.com/docs" target="_blank" rel="noreferrer">文档</a></p>
+    <div class="source-note"><p><strong>版本与证据边界：</strong>WorkBuddy 的官方截图与版本更新存在时间差：<a href="https://www.codebuddy.cn/docs/workbuddy/Changelog" target="_blank" rel="noreferrer">5.11.0 日志</a>已说明下线通用首页“办公 / 开发 / 设计”入口，行业定制版仍保留工作模式与场景机制。A 版是对这一场景思路的财务迁移，不是最新通用版的像素复刻；未证实通用首页每个快捷标签都采取同一种点选行为。B 版的财务能力、示例及状态同样是本次设计。</p></div>
+  </section>
+
+  <section>
+    <h2>放到财小智里，分别适合什么</h2>
+    <table class="comparison"><thead><tr><th scope="col">评估维度</th><th scope="col">A · 场景与模板</th><th scope="col">B · 能力直达</th></tr></thead><tbody>
+    <tr><th scope="row">当前少量高频任务</th><td><strong>可用，但多一层选择</strong><span>只有回单、翻译、合同等少量能力时，分组可能增加找入口的成本。</span></td><td><strong>更适合当前阶段</strong><span>任务名称明确，一次点选即可进入相应输入状态。</span></td></tr>
+    <tr><th scope="row">能力与系统持续增加</th><td><strong>分类扩展空间更大</strong><span>新增能力可收进相应场景；前台不需要随接入系统数量一直变长。</span></td><td><strong>需要控制首页入口数量</strong><span>本版外露六项。其余能力应收进目录或由自然语言触发，不能无限铺开。</span></td></tr>
+    <tr><th scope="row">用户不知道怎么问</th><td><strong>引导更细</strong><span>具体任务样板可以带出月份、对象、关注项等表达结构，但需要维护分类和模板。</span></td><td><strong>引导更直接</strong><span>专属提示与相关示例解释需要什么材料、可以问什么，页面层级更少。</span></td></tr>
+    <tr><th scope="row">Agent 核心定位</th><td><strong>场景必须是可选导航</strong><span>用户始终能直接输入，避免强迫先选模式，再误以为只能做该类工作。</span></td><td><strong>保留通用对话默认态</strong><span>能力只是发起任务的入口；选“合同分析”后仍应支持继续发起提单等后续任务。</span></td></tr>
+    <tr><th scope="row">应用中心的边界</th><td><strong>按任务组织，避免复制应用目录</strong><span>“准备差旅申请”适合任务入口，“规则中心”仍属于操作与管理页面。</span></td><td><strong>用明确动作或产物命名</strong><span>“回单查询 / 合同分析”适合首页；技能、权限、系统配置留在侧栏或对话管理。</span></td></tr>
+    <tr><th scope="row">最需要防止的误解</th><td><strong>分类变成硬模式</strong><span>浏览“材料处理”不代表不能同时查报销制度或准备单据。</span></td><td><strong>能力状态不等于已执行</strong><span>进入“附件翻译”不代表文件已处理；必须等待用户提供材料并发出需求。</span></td></tr>
+    </tbody></table>
+  </section>
+
+  <section class="recommendation">
+    <h2>当前建议：<br>先采用 B 的默认首页</h2>
+    <div><p><strong>财小智目前的高频能力已经有明确名称，用户更需要快速发起任务。</strong>回单查询、附件翻译、合同分析都容易识别，直接入口比先分类再找模板更轻。它也更符合“默认自然语言对话，应用提供辅助”的定位。</p>
+    <p><strong>接入系统的数量不应决定首页按钮数量。</strong>十个财务系统可能共同支撑一个“单据查询”任务；一个系统也可能支撑多个任务。应按用户意图归并为稳定能力，保持有限的常用入口。</p>
+    <p>当能力目录明显增多、不同岗位的任务差异变大，或用户频繁表示“不知道能做什么”时，A 的场景与样板组织更有价值。届时应依据真实使用频次组织入口，而不是按系统名、技术组件或部门架构分类。</p>
+    <p class="small">这是结合当前定位的设计判断，不是用户测试结果。两版均独立保留，便于用同一任务做实际对照。</p></div>
+  </section>
+
+  <section class="live-section" id="live">
+    <h2>在同一窗口切换体验</h2>
+    <p class="small">此处嵌入两个独立 HTML，切换会重新加载所选页；比较连续草稿操作时，请用右侧链接在独立页面中体验。</p>
+    <div class="switcher" role="group" aria-label="切换首页方案"><button data-page="workbuddy" aria-pressed="true">A · 场景与模板</button><button data-page="kimi" aria-pressed="false">B · 能力直达</button><a id="openCurrent" href="workbuddy.html" target="_blank">独立打开当前方案 ↗</a></div>
+    <iframe class="live-frame" id="prototype" src="workbuddy.html" title="场景与模板版交互原型" loading="lazy"></iframe>
+  </section>
+
+  <section>
+    <h2>建议用相同任务比较两版</h2>
+    <div class="test-cases"><div><h3>合同付款条件核对</h3><ol><li>A：进入材料处理，找到合同分析，选一条任务样板。</li><li>B：直接选合同分析，观察输入提示与示例变化。</li><li>输入同一份需求，比较哪个路径更容易开始、哪个更容易补全条件。</li></ol></div><div><h3>已有内容后改变任务</h3><ol><li>先写一段草稿，选择技能；也可添加非敏感测试文件。</li><li>A 切换场景，B 切换能力，检查文字与附件是否保留。</li><li>取消选择、换一条示例，再尝试发送，观察当前状态是否清楚。</li></ol></div></div>
+  </section>
+
+  <section class="reading">
+    <h2>交付范围</h2>
+    <p>两版为独立本地 HTML，样式、脚本和品牌图片已内联，不依赖 CDN 或业务接口。可以双击文件打开，也可以通过已有本地服务查看。没有部署、没有覆盖现有正式首页。</p>
+    <p>可操作范围为首页场景 / 能力选择、样板 / 示例、技能、文件条目、草稿及发送反馈。发送不会调用 Agent 或财务系统，页面会明确反馈尚未执行；文件只在本机保留名称等信息，不上传。导航与示例历史不代表真实业务数据，超出首页范围的入口会说明边界。</p>
+    <p class="small">两版可调用的任务内容是原型示例，不代表服务已接入。正式产品还需接入权限、技能执行、文件处理、历史会话和业务回执。</p>
+  </section>
+  <footer><span>财小智 · 首页方案评审</span><span>只在本地运行 · PC 端</span></footer>
+</main>
+<script>
+document.querySelectorAll('[data-page]').forEach(button=>button.addEventListener('click',()=>{const page=button.dataset.page;document.querySelectorAll('[data-page]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));document.getElementById('prototype').src=page+'.html';document.getElementById('prototype').title=page==='kimi'?'能力直达版交互原型':'场景与模板版交互原型';document.getElementById('openCurrent').href=page+'.html';}));
+</script>
+</body>
+</html>

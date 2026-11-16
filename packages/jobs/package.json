@@ -1,0 +1,37 @@
+{
+  "name": "@caixiaozhi/jobs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./outbox": {
+      "development": "./src/outbox.ts",
+      "types": "./dist/outbox.d.ts",
+      "default": "./dist/outbox.js"
+    },
+    "./queue": {
+      "types": "./dist/queue.d.ts",
+      "development": "./src/queue.ts",
+      "default": "./dist/queue.js"
+    },
+    "./lease": {
+      "types": "./dist/lease.d.ts",
+      "development": "./src/lease.ts",
+      "default": "./dist/lease.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@caixiaozhi/platform": "workspace:*",
+    "drizzle-orm": "0.45.4",
+    "zod": "4.6.7"
+  }
+}

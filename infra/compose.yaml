@@ -1,0 +1,59 @@
+name: caixiaozhi
+
+services:
+  postgres:
+    image: postgres:17.6-alpine3.22@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-caixiaozhi}
+      POSTGRES_USER: ${POSTGRES_USER:-caixiaozhi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 配置数据库开发密码}
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  object-store:
+    image: rustfs/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:?请在 .env 配置私有存储开发账号}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:?请在 .env 配置私有存储开发密钥}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ENABLE: 'false'
+      RUSTFS_OBS_LOG_DIRECTORY: /logs
+    ports:
+      - '127.0.0.1:9000:9000'
+    volumes:
+      - object_data:/data
+      - object_logs:/logs
+    restart: unless-stopped
+
+  storage-init:
+    image: amazon/aws-cli:2.31.37@sha256:a33574ec60204d37f7421c38a3a53a8e00dce44c9cecbabc746d60387c1da69b
+    depends_on:
+      object-store:
+        condition: service_started
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?请在 .env 配置私有存储开发账号}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?请在 .env 配置私有存储开发密钥}
+      AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
+      AWS_EC2_METADATA_DISABLED: 'true'
+      AWS_PAGER: ''
+      S3_BUCKET: ${S3_BUCKET:-caixiaozhi-private}
+    volumes:
+      - ./scripts/init-private-storage.sh:/init-private-storage.sh:ro
+    entrypoint: ['/bin/sh', '/init-private-storage.sh']
+    restart: 'no'
+
+volumes:
+  postgres_data:
+  object_data:
+  object_logs:

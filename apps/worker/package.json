@@ -1,0 +1,29 @@
+{
+  "name": "@caixiaozhi/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --import tsx --conditions=development src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@caixiaozhi/contracts": "workspace:*",
+    "@caixiaozhi/platform": "workspace:*",
+    "@caixiaozhi/jobs": "workspace:*",
+    "pino": "10.4.0",
+    "@caixiaozhi/identity": "workspace:*",
+    "@caixiaozhi/agent-runtime": "workspace:*",
+    "@caixiaozhi/business-adapters": "workspace:*",
+    "@caixiaozhi/action-service": "workspace:*",
+    "@caixiaozhi/assistant": "workspace:*",
+    "@caixiaozhi/finance": "workspace:*",
+    "@caixiaozhi/files": "workspace:*",
+    "@caixiaozhi/insights": "workspace:*",
+    "@caixiaozhi/application": "workspace:*",
+    "@caixiaozhi/integrations": "workspace:*",
+    "@caixiaozhi/demo": "workspace:*"
+  }
+}

@@ -1,0 +1,25 @@
+.tool-center-embedded {
+  position: relative;
+  width: 100%;
+  min-height: 600px;
+}
+.tool-center-embedded > iframe {
+  display: block;
+  width: 100%;
+  height: max(640px, calc(100dvh - 212px));
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+}
+.tool-center-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #65738b;
+  font-size: 13px;
+  background: #f6f8fc;
+}
+.sh-page.sh-tools-view > .as-page-tabs {
+  margin-bottom: 12px;
+}

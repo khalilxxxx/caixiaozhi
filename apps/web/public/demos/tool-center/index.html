@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>工具中心 · 财小智</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./tools.css">
+  <link rel="stylesheet" href="./manage.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <a href="#main" class="skip-link">跳至主要内容</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="主导航">
+      <a class="brand" href="#catalog"><img src="/agent-assets/caixiaozhi.png" alt="" width="38" height="38"><span>财小智<small>财务工作空间</small></span></a>
+      <a href="#chat" class="new-chat" data-nav="chat"><span data-icon="plus"></span>新建对话</a>
+      <nav>
+        <a href="#catalog" data-nav="catalog" aria-label="工具中心"><span data-icon="grid"></span><span>工具中心</span></a>
+        <a href="#mine" data-nav="mine" aria-label="我创建的"><span data-icon="folder"></span><span>我创建的</span></a>
+        <a href="#reviews" data-nav="reviews" aria-label="审核管理"><span data-icon="shield"></span><span>审核管理</span><span id="review-count" class="nav-count"></span></a>
+        <a href="../skills-hub/catalog.html" aria-label="技能中心"><span data-icon="book"></span><span>技能中心</span><span class="nav-external" data-icon="external"></span></a>
+      </nav>
+      <div class="sidebar-recents"><div class="sidebar-label">最近使用</div><div id="recent-nav"></div></div>
+      <div class="sidebar-bottom">
+        <a href="/agent.html" class="workspace-link"><span data-icon="back"></span>返回财小智</a>
+        <button class="profile" id="profile-button" aria-label="当前身份与切换演示身份" aria-haspopup="dialog"><span class="avatar" id="profile-avatar">林</span><span><b id="profile-name">林晓</b><small id="profile-dept">财务共享中心</small></span><span data-icon="chevron"></span></button>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="workspace-top"><span class="workspace-context">财务共享中心</span><div><span class="environment">本地演示</span><button class="text-button" id="guide-button"><span data-icon="help"></span>使用指引</button></div></header>
+      <main id="main" tabindex="-1"><div class="empty">正在加载工具中心…</div></main>
+    </div>
+  </div>
+  <dialog id="drawer" class="drawer" aria-labelledby="drawer-title"><div class="drawer-heading"><h2 id="drawer-title"></h2><button class="icon-button" id="drawer-close" aria-label="关闭面板"><span data-icon="close"></span></button></div><div id="drawer-content" class="drawer-content"></div></dialog>
+  <div id="toasts" class="toast-stack" role="status" aria-live="polite"></div>
+  <noscript>请启用 JavaScript 后使用工具中心。</noscript>
+</body>
+</html>

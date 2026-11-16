@@ -1,0 +1,565 @@
+/* Coral action, warm AI context, and neutral reading surfaces have separate roles. */
+:root {
+  --brand: #db373c;
+  --brand-hover: #cb3038;
+  --brand-bright: #fa283b;
+  --brand-gradient: linear-gradient(135deg, #ff5b4c, #fa283b);
+  --brand-action: linear-gradient(135deg, #db373c, #d9343e);
+  --brand-soft: #fff3eb;
+  --brand-context-ink: #945432;
+  --brand-context-muted: #865a42;
+  --enterprise-canvas: #fafaf9;
+  --enterprise-sidebar: #f4f4f2;
+  --enterprise-ink: #29292d;
+  --enterprise-text: #525257;
+  --enterprise-muted: #6f6f74;
+  --enterprise-line: #e6e5e3;
+  --enterprise-hover: #efefed;
+  --enterprise-focus: #8c8782;
+}
+
+.agent-first {
+  --ink: var(--enterprise-ink);
+  --muted: var(--enterprise-muted);
+  --line: var(--enterprise-line);
+  --canvas: var(--enterprise-canvas);
+  --shadow: 0 16px 50px rgba(36, 33, 30, 0.12);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei',
+    sans-serif;
+  color: var(--enterprise-ink);
+}
+.agent-first .main-shell {
+  background: var(--enterprise-canvas);
+}
+.agent-first.mode-assistant .sidebar {
+  background: var(--enterprise-sidebar);
+  border-right-color: var(--enterprise-line);
+}
+.agent-first .brand,
+.agent-first .home-greeting h1,
+.agent-first .chat-titlebar h1,
+.agent-first .page-heading h1,
+.agent-first .panel-header h2 {
+  color: var(--enterprise-ink);
+}
+
+/* Navigation stays quiet; coral identifies the action, not every label. */
+.agent-first .new-task {
+  background: #fff;
+  color: var(--enterprise-ink);
+  border-color: #e2e1df;
+  font-weight: 550;
+  border-radius: 10px;
+}
+.agent-first .new-task > svg {
+  color: #e24a40;
+}
+.agent-first .new-task:hover {
+  background: #fffaf6;
+  border-color: #ddcabc;
+}
+.agent-first .nav-item,
+.agent-first .recent-chat {
+  color: var(--enterprise-text);
+}
+.agent-first .nav-item.active,
+.agent-first .recent-chat.active {
+  color: var(--enterprise-ink);
+  background: #e9e9e6;
+}
+.agent-first .nav-item.active > svg {
+  color: #d64b40;
+}
+.agent-first .nav-item:hover:not(.active),
+.agent-first .recent-chat:hover:not(.active) {
+  background: var(--enterprise-hover);
+}
+.agent-first .nav-label,
+.agent-first .recent-chat > time,
+.agent-first .recent-heading .all-conversations,
+.agent-first .profile small,
+.agent-first .profile > svg,
+.agent-first .conversation-empty {
+  color: var(--enterprise-muted);
+}
+.agent-first .profile strong {
+  color: var(--enterprise-ink);
+}
+.agent-first .avatar {
+  background: #e7e6e3;
+  color: #62615e;
+}
+
+/* The icon-only send control uses the reference's bright coral gradient.
+   Text-bearing primary controls use a deeper coral ramp for readable white text. */
+.agent-first .send-button:not(:disabled) {
+  color: #fff;
+  background: var(--brand-gradient);
+}
+.agent-first .send-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #f45043, #ee2739);
+}
+.agent-first .send-button {
+  border-radius: 12px;
+}
+.agent-first .btn.primary {
+  color: #fff;
+  background: var(--brand-action);
+}
+.agent-first .btn.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #d33035, #ca2c37);
+}
+.agent-first .btn.primary:disabled,
+.agent-first .send-button:disabled {
+  background: #efefed;
+  color: #96969b;
+  opacity: 1;
+}
+.agent-first .btn.secondary {
+  border-color: var(--enterprise-line);
+}
+.agent-first .btn.ghost,
+.agent-first .icon-btn {
+  color: var(--enterprise-text);
+}
+.agent-first .btn.secondary:hover,
+.agent-first .btn.ghost:hover,
+.agent-first .icon-btn:hover {
+  background: var(--enterprise-hover);
+}
+
+/* A clean white composer and gray text give the action color room to breathe. */
+.agent-first .workspace-home .composer,
+.agent-first .composer {
+  background: #fff;
+  border-color: #e1e0de;
+  border-radius: 18px;
+}
+.agent-first .workspace-home .composer:focus-within,
+.agent-first .composer:focus-within {
+  border-color: var(--enterprise-focus);
+}
+.agent-first .composer textarea {
+  color: var(--enterprise-ink);
+  caret-color: #e64b42;
+}
+.agent-first .composer textarea::placeholder,
+.agent-first input::placeholder,
+.agent-first textarea::placeholder {
+  color: var(--enterprise-muted);
+}
+.agent-first .composer-tool,
+.agent-first .composer-quick-action,
+.agent-first .home-example {
+  color: var(--enterprise-text);
+}
+.agent-first .composer-quick-action {
+  border-color: var(--enterprise-line);
+}
+.agent-first .composer-quick-action > svg,
+.agent-first .home-example > svg {
+  color: #77777c;
+}
+.agent-first .composer-tool:hover,
+.agent-first .home-example:hover,
+.agent-first .home-examples-header button:hover,
+.agent-first .shortcut-item:hover,
+.agent-first .capability-option:hover:not([aria-pressed='true']),
+.agent-first
+  .composer-skill-option:hover:not([aria-pressed='true']):not(:disabled) {
+  color: var(--enterprise-ink);
+  background: #f4f4f2;
+}
+.agent-first .composer-quick-action:hover {
+  color: var(--enterprise-ink);
+  background: #fff;
+  border-color: #c6c3bf;
+}
+.agent-first .composer-quick-action:hover > svg {
+  color: #ce5647;
+}
+.agent-first .composer-hint,
+.agent-first .home-examples-header h2,
+.agent-first .home-examples-header button,
+.agent-first .composer-skill-info small,
+.agent-first .capability-option small,
+.agent-first .shortcut-empty {
+  color: var(--enterprise-muted);
+}
+.agent-first .capability-option,
+.agent-first .composer-skill-option {
+  color: var(--enterprise-text);
+}
+
+/* Pale apricot belongs only to the selected AI context. */
+.agent-first .composer-capability-control.selected,
+.agent-first .composer-capability-control.selected > .composer-tool,
+.agent-first .composer-skill-control.selected,
+.agent-first .composer-skill-control.selected > .composer-tool,
+.agent-first .composer-tool[aria-expanded='true'],
+.agent-first .capability-option[aria-pressed='true'],
+.agent-first .composer-skill-option[aria-pressed='true'] {
+  color: var(--brand-context-ink);
+  background: var(--brand-soft);
+}
+.agent-first .capability-option[aria-pressed='true'] small,
+.agent-first .composer-skill-option[aria-pressed='true'] small {
+  color: var(--brand-context-muted);
+}
+.agent-first .composer-skill-clear {
+  color: var(--brand-context-ink);
+}
+.agent-first .composer-skill-clear:hover {
+  background: #f5e5d7;
+}
+.agent-first .shortcut-menu {
+  box-shadow: 0 12px 38px rgba(36, 33, 30, 0.14);
+}
+
+/* Conversation reading surfaces use neutral ink. Status and chart colors remain semantic. */
+.agent-first .user-bubble {
+  background: #eeeeec;
+  color: #37373b;
+}
+.agent-first .assistant-text,
+.agent-first .result-title strong,
+.agent-first .row-text strong,
+.agent-first .history-row-title {
+  color: var(--enterprise-ink);
+}
+.agent-first .result-subtitle,
+.agent-first .source-meta,
+.agent-first .history-row-preview,
+.agent-first .history-row-meta,
+.agent-first .history-count,
+.agent-first .history-empty {
+  color: var(--enterprise-muted);
+}
+.agent-first .result-card,
+.agent-first .history-search {
+  border-color: var(--enterprise-line);
+}
+.agent-first .result-card:hover,
+.agent-first .history-row:hover {
+  background: #f6f6f4;
+  border-color: #d0cdc8;
+}
+.agent-first .result-icon,
+.agent-first .ref-chip {
+  background: #f2f2f0;
+  color: #626266;
+}
+.agent-first .result-arrow {
+  color: #818184;
+}
+.agent-first .suggestions button,
+.agent-first .row-action {
+  color: #67615d;
+}
+.agent-first .suggestions button:hover {
+  background: var(--enterprise-hover);
+  color: var(--enterprise-ink);
+}
+.agent-first .source-link {
+  color: #496b89;
+}
+.agent-first .history-search {
+  color: var(--enterprise-text);
+}
+.agent-first .history-search:focus-within {
+  border-color: var(--enterprise-focus);
+}
+.agent-first .history-search input {
+  color: var(--enterprise-ink);
+}
+
+/* Shared application chrome also follows the neutral palette. */
+.agent-first input,
+.agent-first select,
+.agent-first textarea {
+  border-color: var(--enterprise-line);
+}
+.agent-first .rs-page,
+.agent-first .rs-panel,
+.agent-first .rs-title-link,
+.agent-first .rs-search input {
+  color: var(--enterprise-ink);
+}
+.agent-first .rs-table-scroll,
+.agent-first .rs-search,
+.agent-first .rs-rule-toolbar > select {
+  border-color: var(--enterprise-line);
+}
+.agent-first .rs-table th {
+  color: var(--enterprise-muted);
+  background: #f6f6f4;
+  border-color: var(--enterprise-line);
+}
+.agent-first .rs-table td {
+  border-bottom-color: #efefed;
+}
+.agent-first .rs-table td > small,
+.agent-first .rs-list-footer,
+.agent-first .rs-rule-toolbar > select {
+  color: var(--enterprise-muted);
+}
+.agent-first .dw-page,
+.agent-first .dw-panel,
+.agent-first .dw-results {
+  --dw-ink: var(--enterprise-ink);
+  --dw-muted: var(--enterprise-muted);
+  --dw-line: var(--enterprise-line);
+}
+.agent-first .panel-header,
+.agent-first .profile {
+  border-color: var(--enterprise-line);
+}
+.agent-first .help-trigger {
+  color: var(--enterprise-muted);
+}
+.agent-first .tabs,
+.agent-first .as-page-tabs,
+.agent-first .as-tabs {
+  border-color: var(--enterprise-line);
+}
+.agent-first .tabs > button,
+.agent-first .as-tabs > button {
+  color: var(--enterprise-muted);
+}
+.agent-first .tabs > button.active,
+.agent-first .as-tabs > button.active {
+  color: var(--enterprise-ink);
+  border-bottom-color: #e95447;
+}
+.agent-first .as-tabs > button.active::after {
+  background: #e95447;
+}
+.agent-first .sh-card,
+.agent-first .sh-search,
+.agent-first .sh-card-bottom,
+.agent-first .as-board,
+.agent-first .as-page-tabs {
+  border-color: var(--enterprise-line);
+}
+.agent-first .sh-card:hover {
+  border-color: #cecac5;
+  box-shadow: none;
+}
+.agent-first .sh-card-title,
+.agent-first .sh-table-title,
+.agent-first .sh-detail-intro strong,
+.agent-first .sh-detail .business-section h3,
+.agent-first .sh-governance .business-section h3,
+.agent-first .sh-version-list strong,
+.agent-first .sh-governance-list strong,
+.agent-first .as-metrics strong,
+.agent-first .as-card-top strong,
+.agent-first .as-card-value,
+.agent-first .as-section-title h3,
+.agent-first .as-report h2 {
+  color: var(--enterprise-ink);
+}
+.agent-first .sh-card > p,
+.agent-first .sh-card-meta,
+.agent-first .sh-tags > span,
+.agent-first .sh-instructions,
+.agent-first .sh-detail > p,
+.agent-first .sh-detail-intro p,
+.agent-first .sh-detail .business-section p,
+.agent-first .sh-version-list p,
+.agent-first .sh-version-list time,
+.agent-first .sh-file-info small,
+.agent-first .sh-governance-list small,
+.agent-first .sh-favorite-filter,
+.agent-first .sh-search,
+.agent-first .as-metrics > div > span,
+.agent-first .as-metrics > div > small,
+.agent-first .as-card-top,
+.agent-first .aw-analysis-card > p,
+.agent-first .as-chart-label,
+.agent-first .as-chart-number,
+.agent-first .as-table {
+  color: var(--enterprise-muted);
+}
+.agent-first .sh-tags > span {
+  background: #f3f3f1;
+}
+.agent-first ::selection {
+  background: #f5e6db;
+  color: #493529;
+}
+.agent-first :is(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--enterprise-focus);
+  outline-offset: 3px;
+}
+
+/* The existing blue-and-white mascot is used unchanged at three quiet scales. */
+.xiaozhi-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+}
+.xiaozhi-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+.agent-first .home-greeting {
+  flex-direction: column;
+  gap: 10px;
+}
+.agent-first .home-brand-mark {
+  width: 64px;
+  height: 64px;
+}
+.agent-first .home-greeting h1 {
+  font-size: 26px;
+  letter-spacing: 0;
+}
+.agent-first .assistant-name {
+  gap: 9px;
+  color: var(--enterprise-text);
+}
+.reply-mark {
+  border-radius: 9px;
+  background: #f1f1ef;
+  padding: 1px;
+}
+.agent-first .assistant-name .xiaozhi-mark img {
+  width: 100%;
+  height: 100%;
+}
+.chat-empty-brand {
+  min-height: 180px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+.empty-chat-mark {
+  width: 96px;
+  height: 96px;
+  opacity: 0.4;
+  filter: grayscale(0.6);
+}
+.chat-empty-brand p {
+  font-size: 13px;
+  color: var(--enterprise-muted);
+}
+.thinking-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0 16px;
+  font-size: 13px;
+  color: var(--enterprise-muted);
+}
+.thinking-mark img {
+  animation: xiaozhi-attend 2400ms ease-in-out infinite;
+}
+.thinking-status[data-paused='true'] .thinking-mark img {
+  animation-play-state: paused;
+}
+@keyframes xiaozhi-attend {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-1px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinking-mark img {
+    animation: none;
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* Keep the desktop conversation shell from overriding the narrow layouts. */
+@media (max-width: 1079px) {
+  .agent-first.mode-assistant {
+    min-width: 0;
+  }
+  .agent-first.mode-assistant .sidebar {
+    width: 190px;
+    padding-inline: 10px;
+  }
+  .agent-first.mode-assistant .main-shell {
+    margin-left: 190px;
+  }
+}
+
+@media (max-width: 900px) {
+  .agent-first.mode-assistant .sidebar {
+    width: 181px;
+  }
+  .agent-first.mode-assistant .main-shell {
+    margin-left: 181px;
+  }
+}
+
+@media (max-width: 640px) {
+  .agent-first.mode-assistant .sidebar {
+    width: 234px;
+    padding-inline: 14px;
+  }
+  .agent-first.mode-assistant .main-shell {
+    margin-left: 0;
+  }
+  .agent-first .mobile-topbar {
+    height: 58px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--enterprise-line);
+    background: var(--enterprise-canvas);
+  }
+  .agent-first .mobile-topbar .icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .agent-first .mobile-topbar strong {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .agent-first .work-layout,
+  .agent-first .workspace-home {
+    min-height: calc(100dvh - 58px);
+  }
+  .agent-first .workspace-home {
+    padding: 24px 18px 64px;
+  }
+  .agent-first .workspace-home .composer {
+    padding: 13px 13px 10px;
+  }
+  .agent-first .composer-tools {
+    gap: 0;
+  }
+  .agent-first .composer-tool {
+    gap: 4px;
+    padding: 6px 5px;
+  }
+  .agent-first .chat-page {
+    height: calc(100dvh - 58px);
+  }
+  .agent-first .chat-titlebar {
+    padding-top: 17px;
+    min-width: 0;
+  }
+  .agent-first .page-container {
+    padding-top: 23px;
+  }
+}

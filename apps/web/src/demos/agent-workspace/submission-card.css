@@ -1,0 +1,277 @@
+.sc-card {
+  width: 100%;
+  max-width: 620px;
+  border: 1px solid #e2e2e0;
+  border-radius: 14px;
+  background: #fff;
+  overflow: hidden;
+  color: #29292d;
+  margin: 3px 0;
+}
+.agent-first.submission-open .chat-page {
+  padding-left: 20px;
+  padding-right: 20px;
+}
+.submission-open .sc-card > header small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-card > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 17px 20px 10px;
+}
+.sc-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  background: #fff2ed;
+  color: #a6513c;
+  border-radius: 9px;
+  flex: none;
+}
+.sc-card > header > div {
+  flex: 1;
+  min-width: 0;
+}
+.sc-card > header strong {
+  font-weight: 600;
+  font-size: 14px;
+}
+.sc-card > header small {
+  display: block;
+  color: #6f6f74;
+  font-size: 11px;
+  margin-top: 2px;
+}
+.sc-card > header .badge {
+  flex: none;
+  font-size: 10px;
+}
+.sc-purpose {
+  margin: 0;
+  padding: 0 20px;
+  font-size: 13px;
+  color: #525257;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-business {
+  padding: 16px 20px;
+}
+.sc-route {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  flex-wrap: wrap;
+  line-height: 1.6;
+}
+.sc-route > span {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+.sc-route b {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+.sc-route svg {
+  color: #aaa8a5;
+}
+.sc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  color: #6f6f74;
+  font-size: 11px;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.sc-empty {
+  color: #6f6f74;
+  font-size: 13px;
+}
+.sc-expense-summary {
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  align-items: center;
+}
+.sc-expense-summary > div > strong {
+  font-size: 23px;
+  font-weight: 600;
+}
+.sc-expense-summary strong small {
+  font-size: 11px;
+  color: #6f6f74;
+  font-weight: 400;
+  margin: 0 5px;
+}
+.sc-money {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sc-money strong {
+  display: block;
+  font-size: 21px !important;
+  font-weight: 600;
+}
+.sc-pending {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  margin: 0 20px 13px;
+  color: #98601f;
+  font-size: 11px;
+}
+.sc-pending > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-pending svg {
+  flex: none;
+}
+.sc-pending-detail {
+  color: #806742;
+}
+.sc-card > footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 20px;
+  border-top: 1px solid #eeedeb;
+  background: #fcfcfb;
+}
+.sc-card > footer > div {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.sc-card .btn {
+  min-height: 32px;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.sc-version {
+  color: #6f6f74;
+  font-size: 11px;
+}
+.sc-history {
+  width: 100%;
+  max-width: 620px;
+  border: 1px solid #e8e7e4;
+  border-radius: 10px;
+  color: #6f6f74;
+  background: #fafaf9;
+}
+.sc-history > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  font-size: 12px;
+  list-style: none;
+}
+.sc-history > summary > span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-history small {
+  font-size: 10px;
+}
+.sc-history > summary::-webkit-details-marker {
+  display: none;
+}
+.sc-history-content {
+  padding: 0 15px 14px;
+  border-top: 1px solid #ecebe8;
+}
+.sc-history-content > p {
+  font-size: 12px;
+}
+.sc-history-content .sc-business {
+  padding: 5px 0 15px;
+}
+.sc-history-content .sc-route b {
+  font-size: 16px;
+}
+.sc-history-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.sc-history-actions .btn {
+  font-size: 11px;
+  min-height: 30px;
+  padding: 5px 9px;
+}
+.sc-history:focus-visible,
+.sc-history summary:focus-visible {
+  outline: 2px solid #8c8782;
+  outline-offset: 3px;
+}
+@media (max-width: 1280px) {
+  .submission-open .sc-card > header,
+  .submission-open .sc-business {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .submission-open .sc-purpose {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .submission-open .sc-card > footer {
+    padding: 10px 14px;
+  }
+  .submission-open .sc-pending {
+    margin-left: 14px;
+    margin-right: 14px;
+  }
+  .submission-open .sc-pending-detail {
+    display: none;
+  }
+  .submission-open .sc-route b {
+    font-size: 17px;
+  }
+}
+@media (max-width: 600px) {
+  .sc-pending-detail {
+    display: none;
+  }
+  .sc-card > footer {
+    padding: 10px 14px;
+    gap: 6px;
+  }
+  .sc-card .btn {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+  .sc-card > header {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .sc-purpose {
+    padding: 0 14px;
+  }
+  .sc-business {
+    padding: 14px;
+  }
+  .sc-route b {
+    font-size: 18px;
+  }
+  .sc-card > header .badge {
+    max-width: 115px;
+    white-space: normal;
+  }
+}

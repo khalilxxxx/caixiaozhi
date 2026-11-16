@@ -1,0 +1,12 @@
+{
+  "measured_at": "2026-11-07T15:46:56.987Z",
+  "live_http": 200,
+  "ready_http": 503,
+  "dependencies": {
+    "database": "ready",
+    "storage": "unavailable"
+  },
+  "web_rendered": true,
+  "secret_details_absent": true,
+  "passed": true
+}

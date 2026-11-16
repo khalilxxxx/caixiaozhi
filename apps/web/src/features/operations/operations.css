@@ -1,0 +1,221 @@
+.operations-page .operations-tabs {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 28px;
+}
+.operations-tabs button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+}
+.operations-tabs button[aria-selected='true'] {
+  border-bottom-color: #1d6b4a;
+  color: #174e37;
+  font-weight: 600;
+}
+.operations-page .operations-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.operations-section-heading h2,
+.operations-section-heading h3 {
+  margin: 0;
+}
+.operations-page .operations-section-heading {
+  margin-bottom: 20px;
+}
+.operations-page .surface-section > p {
+  font-size: 13px;
+  line-height: 1.8;
+  max-width: 72ch;
+}
+.operations-page .operations-success {
+  padding: 14px 18px;
+  background: #e5eee3;
+  color: #234f34;
+  line-height: 1.7;
+  font-size: 13px;
+}
+.operations-page .operations-evidence {
+  margin-top: 26px;
+  font-size: 13px;
+}
+.operations-evidence summary {
+  cursor: pointer;
+  color: #23573b;
+  padding: 10px 0;
+}
+.operations-page .operations-scenarios {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 28px;
+  margin-top: 20px;
+}
+.operations-scenarios article,
+.operations-records article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--line);
+  padding: 20px 0;
+  min-width: 0;
+}
+.operations-scenarios h3,
+.operations-records h3 {
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 600;
+  margin: 0 0 5px;
+}
+.operations-scenarios small,
+.operations-records p,
+.operations-timeline small {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+.operations-scenarios button {
+  flex: none;
+  font-size: 12px;
+}
+.operations-page .operations-job {
+  margin-top: 25px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.operations-job h3 {
+  font-size: 15px;
+  margin: 0 0 14px;
+}
+.operations-page .operations-reference {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+  font-variant-numeric: tabular-nums;
+}
+.operations-page .operations-lookup,
+.operations-page .operations-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 25px 0;
+}
+.operations-page .operations-lookup .form-field,
+.operations-page .operations-filters .form-field {
+  flex: 1;
+  margin: 0;
+  min-width: 150px;
+}
+.operations-page .operations-lookup button,
+.operations-page .operations-filters button {
+  min-height: 44px;
+}
+.operations-page .operations-records p {
+  margin: 8px 0;
+}
+.operations-page .operations-records article > div {
+  min-width: 0;
+}
+.operations-page .operations-records button {
+  flex: none;
+}
+.operations-page .operations-table {
+  min-width: 680px;
+}
+.operations-page .operations-table td:first-child {
+  min-width: 190px;
+  max-width: 240px;
+}
+.operations-page .operations-table td:last-child {
+  text-align: left;
+}
+.operations-page .operations-table small {
+  font-size: 11px;
+  line-height: 1.65;
+}
+.operations-page .operations-table td {
+  padding: 17px 12px;
+}
+.operations-form-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.operations-page .operations-timeline {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 28px;
+}
+.operations-timeline li {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.operations-timeline small {
+  display: block;
+  margin-top: 5px;
+}
+.operations-timeline p {
+  margin: 7px 0 0;
+}
+.operations-timeline .operations-section-heading {
+  margin-bottom: 6px;
+}
+.operations-impact {
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.operations-impact li + li {
+  margin-top: 10px;
+}
+.operations-page :focus-visible {
+  outline: 2px solid #246a48;
+  outline-offset: 3px;
+}
+@media (max-width: 700px) {
+  .operations-page .section-title {
+    flex-direction: column;
+    gap: 16px;
+  }
+  .operations-page .operations-scenarios {
+    grid-template-columns: 1fr;
+  }
+  .operations-page .operations-records article {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .operations-page .operations-lookup,
+  .operations-page .operations-filters {
+    align-items: stretch;
+    gap: 12px;
+  }
+  .operations-page .operations-lookup .form-field,
+  .operations-page .operations-filters .form-field {
+    min-width: 100%;
+    flex-basis: 100%;
+  }
+  .operations-form-pair {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .operations-page .operations-section-heading {
+    gap: 12px;
+  }
+  .operations-page .operations-tabs {
+    gap: 22px;
+  }
+}

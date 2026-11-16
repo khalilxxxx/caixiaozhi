@@ -1,0 +1,30 @@
+{
+  "name": "@caixiaozhi/business-adapters",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "development": "./src/*.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@caixiaozhi/contracts": "workspace:*",
+    "@caixiaozhi/platform": "workspace:*",
+    "zod": "4.6.7",
+    "@caixiaozhi/identity": "workspace:*",
+    "@caixiaozhi/jobs": "workspace:*",
+    "drizzle-orm": "0.45.4"
+  }
+}

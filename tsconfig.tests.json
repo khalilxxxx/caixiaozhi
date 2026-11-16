@@ -1,0 +1,45 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@caixiaozhi/demo": ["packages/demo/src/index.ts"],
+      "@caixiaozhi/demo/*": ["packages/demo/src/*.ts"],
+      "@caixiaozhi/assistant": ["packages/assistant/src/index.ts"],
+      "@caixiaozhi/assistant/*": ["packages/assistant/src/*.ts"],
+      "@caixiaozhi/insights": ["packages/insights/src/index.ts"],
+      "@caixiaozhi/insights/*": ["packages/insights/src/*.ts"],
+      "@caixiaozhi/identity": ["packages/identity/src/index.ts"],
+      "@caixiaozhi/identity/*": ["packages/identity/src/*.ts"],
+      "@caixiaozhi/contracts": ["packages/contracts/src/index.ts"],
+      "@caixiaozhi/contracts/*": ["packages/contracts/src/*.ts"],
+      "@caixiaozhi/platform": ["packages/platform/src/index.ts"],
+      "@caixiaozhi/platform/*": ["packages/platform/src/*.ts"],
+      "@caixiaozhi/integrations": ["packages/integrations/src/index.ts"],
+      "@caixiaozhi/integrations/*": ["packages/integrations/src/*.ts"],
+      "@caixiaozhi/action-service": ["packages/action-service/src/index.ts"],
+      "@caixiaozhi/action-service/*": ["packages/action-service/src/*.ts"],
+      "@caixiaozhi/files": ["packages/files/src/index.ts"],
+      "@caixiaozhi/files/*": ["packages/files/src/*.ts"],
+      "@caixiaozhi/fixtures": ["packages/fixtures/src/index.ts"],
+      "@caixiaozhi/fixtures/*": ["packages/fixtures/src/*.ts"],
+      "@caixiaozhi/finance": ["packages/finance/src/index.ts"],
+      "@caixiaozhi/finance/*": ["packages/finance/src/*.ts"],
+      "@caixiaozhi/application": ["packages/application/src/index.ts"],
+      "@caixiaozhi/application/*": ["packages/application/src/*.ts"],
+      "@caixiaozhi/jobs": ["packages/jobs/src/index.ts"],
+      "@caixiaozhi/jobs/*": ["packages/jobs/src/*.ts"],
+      "@caixiaozhi/business-adapters": [
+        "packages/business-adapters/src/index.ts"
+      ],
+      "@caixiaozhi/business-adapters/*": [
+        "packages/business-adapters/src/*.ts"
+      ],
+      "@caixiaozhi/agent-runtime": ["packages/agent-runtime/src/index.ts"],
+      "@caixiaozhi/agent-runtime/*": ["packages/agent-runtime/src/*.ts"]
+    }
+  },
+  "include": ["tests/**/*.ts", "scripts/**/*.ts", "vitest.config.ts"],
+  "exclude": ["tests/e2e/**"]
+}

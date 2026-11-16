@@ -1,0 +1,2 @@
+# pnpm 管理的生成文件。dsh 的 peer 解析键超出通用 YAML 格式器的隐式键长度上限。
+pnpm-lock.yaml

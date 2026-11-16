@@ -1,0 +1,9 @@
+{
+  "measured_at": "2026-11-07T15:43:33.643Z",
+  "database_record": true,
+  "resource_version": true,
+  "outbox": true,
+  "file_bytes_sha256_match": true,
+  "anonymous_http_status": 403,
+  "passed": true
+}

@@ -1,0 +1,42 @@
+{
+  "scope": "本机纯SRS解释器：100条固定规则×100张固定合成单据，含每次SrsInput校验，不代表模型、HTTP、并发或生产吞吐保证。",
+  "measured_at": "2026-11-07T15:52:29.963Z",
+  "machine": {
+    "hardware_model": "Mac16,12",
+    "cpu_model": "Apple M4",
+    "logical_cpus": 10,
+    "memory_bytes": 17179869184,
+    "os": "Darwin",
+    "os_release": "25.6.0",
+    "arch": "arm64"
+  },
+  "runtime": {
+    "node": "v24.22.1",
+    "v8": "13.6.233.17-node.58"
+  },
+  "fixture": {
+    "rules": 100,
+    "unique_compiled_rules": 100,
+    "documents": 100,
+    "expense_items_per_document": 5,
+    "invoices_per_document": 5,
+    "warmup_evaluations": 100,
+    "rules_hash": "0ab822b8f83f7dda81909175415a0c5c925c0210f41bcec6808a52d78396ede3",
+    "documents_hash": "6b9bb86e8517fad5e783be214c325d7367345481adbc5fc18d94bcb9c63bec48"
+  },
+  "result_count": 10000,
+  "failed_evaluations": 0,
+  "outcomes": {
+    "true": 7950,
+    "false": 1350,
+    "unknown": 700
+  },
+  "compile_elapsed_ms": 14.497500000000002,
+  "evaluate_elapsed_ms": 174.29200000000003,
+  "per_evaluation_ms": {
+    "p50": 0.015500000000031378,
+    "p95": 0.025666999999998552,
+    "p99": 0.04837500000002137,
+    "max": 2.083416999999997
+  }
+}

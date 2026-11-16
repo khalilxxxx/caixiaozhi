@@ -1,0 +1,12 @@
+{
+  "scope": "真实HTTP与数据库/S3就绪探测，不代表Agent并发或100条SSE容量",
+  "requests": 200,
+  "concurrency": 20,
+  "failures": 0,
+  "elapsed_ms": 1025,
+  "rps": 195,
+  "p50_ms": 67,
+  "p95_ms": 265,
+  "p99_ms": 306,
+  "measured_at": "2026-11-07T15:55:06.943Z"
+}

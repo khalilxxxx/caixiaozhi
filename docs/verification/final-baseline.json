@@ -1,0 +1,53 @@
+{
+  "measured_at": "2026-11-07T18:24:09.261Z",
+  "generation": 53,
+  "lifecycle": "ready",
+  "seed_version": "finance-agent-v1.0",
+  "facts": {
+    "users": 7,
+    "claims": 11,
+    "pending_count": 5,
+    "pending_minor": "554000",
+    "completed_minor": "590000",
+    "threads": 0,
+    "inbox_items": 0,
+    "manual_test_sets": 0,
+    "governed_mappings": 0,
+    "missing_rule_metadata": 0,
+    "migrations": 24
+  },
+  "private_skill_owners": [
+    {
+      "id": "skill-finance-private",
+      "owner_id": "u-liu"
+    }
+  ],
+  "admin_skill_grants": 0,
+  "assertions": [
+    {
+      "name": "seven_users",
+      "passed": true
+    },
+    {
+      "name": "eleven_claims",
+      "passed": true
+    },
+    {
+      "name": "baseline_versions_one",
+      "passed": true
+    },
+    {
+      "name": "sales_pending_5_554000",
+      "passed": true
+    },
+    {
+      "name": "sales_completed_590000",
+      "passed": true
+    },
+    {
+      "name": "clm004_known_amount_unknown_verification",
+      "passed": true
+    }
+  ],
+  "passed": true
+}

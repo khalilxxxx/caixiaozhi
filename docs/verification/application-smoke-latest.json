@@ -1,0 +1,11 @@
+{
+  "measured_at": "2026-11-07T16:36:42.874871+00:00",
+  "web_api_worker_start_verified": true,
+  "worker_started_structured_log": true,
+  "worker_model_configured": false,
+  "worker_stopping_structured_log": true,
+  "worker_stopped_structured_log": true,
+  "api_stopping_structured_log": true,
+  "exit_code": 0,
+  "evidence": "实际pnpm dev启动；真实HTTP负载；向所属进程组发送Ctrl+C后结构化退出日志。最新完整Playwright也自动启动并停止同套应用。"
+}

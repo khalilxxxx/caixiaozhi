@@ -1,0 +1,18 @@
+[project]
+name = "caixiaozhi-agno-local"
+version = "0.1.0"
+description = "财小智本地智能体服务"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "agno==3.2.0",
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.34,<1",
+  "openai>=2,<3",
+  "python-dotenv>=1,<2",
+  "python-multipart>=0.0.20,<1",
+  "pypdf>=6,<7",
+  "python-docx>=1.2,<2",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "httpx>=0.28,<1"]

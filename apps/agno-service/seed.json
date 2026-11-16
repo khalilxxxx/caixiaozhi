@@ -1,0 +1,2802 @@
+{
+  "data": {
+    "documents": [
+      {
+        "source": {
+          "id": "travel",
+          "label": "差旅系统"
+        },
+        "typeId": "travel_application",
+        "typeLabel": "差旅申请",
+        "id": "TA-20261116-023",
+        "title": "上海客户交流",
+        "sourceStatus": "审批中",
+        "status": "processing",
+        "phase": "approval",
+        "phaseLabel": "部门负责人审批",
+        "current": {
+          "label": "部门负责人审批",
+          "actors": [
+            "张伟"
+          ],
+          "rule": "single",
+          "since": "2026-11-16T09:10:00+08:00"
+        },
+        "summary": [
+          {
+            "label": "行程",
+            "value": "杭州 → 上海 → 杭州"
+          },
+          {
+            "label": "出差时间",
+            "value": "11月19–21日 · 3天"
+          }
+        ],
+        "amount": {
+          "label": "申请预算",
+          "value": "¥3,600",
+          "currency": "CNY"
+        },
+        "estimate": {
+          "label": "预计还需 1–2 个工作日",
+          "compactLabel": "约1–2工作日",
+          "target": "approval_complete",
+          "basis": "近90天同类型、同流程的86张单据，从当前审批状态到审批完成的剩余耗时 P50–P80；不含付款，也不是完成承诺。"
+        },
+        "updatedAt": "2026-11-16T10:30:00+08:00",
+        "details": [
+          {
+            "label": "申请人",
+            "value": "林悦"
+          },
+          {
+            "label": "所属部门",
+            "value": "财务部"
+          },
+          {
+            "label": "事由",
+            "value": "上海客户需求交流与方案评审。"
+          },
+          {
+            "label": "去程",
+            "value": "2026年11月19日 · 杭州 → 上海 · 高铁"
+          },
+          {
+            "label": "返程",
+            "value": "2026年11月21日 · 上海 → 杭州 · 高铁"
+          },
+          {
+            "label": "申请预算",
+            "value": "人民币 3,600.00 元"
+          },
+          {
+            "label": "提交时间",
+            "value": "2026年11月16日 09:10"
+          },
+          {
+            "label": "所属公司",
+            "value": "华川科技"
+          },
+          {
+            "label": "数据来源",
+            "value": "本地合成业务数据"
+          }
+        ],
+        "steps": [
+          {
+            "id": "travel-submit",
+            "label": "提交申请",
+            "status": "done",
+            "actors": [
+              "林悦"
+            ],
+            "time": "11月16日 09:10"
+          },
+          {
+            "id": "travel-manager",
+            "label": "部门负责人审批",
+            "status": "current",
+            "actors": [
+              "张伟"
+            ],
+            "time": "11月16日 09:10 起",
+            "note": "当前已等待 1 小时 20 分。尚未产生审批意见。"
+          },
+          {
+            "id": "travel-finance",
+            "label": "财务审核",
+            "status": "future",
+            "note": "部门负责人通过后进入；处理人在到达节点后分配。"
+          },
+          {
+            "id": "travel-end",
+            "label": "审批完成",
+            "status": "future",
+            "note": "所有必要审批通过后完成。"
+          }
+        ],
+        "key": "travel/travel_application/TA-20261116-023",
+        "synthetic": true
+      },
+      {
+        "source": {
+          "id": "expense",
+          "label": "费用报销系统"
+        },
+        "typeId": "expense_claim",
+        "typeLabel": "费用报销",
+        "id": "EX-20261116-018",
+        "title": "北京客户拜访",
+        "sourceStatus": "已退回",
+        "status": "needs_action",
+        "phase": "approval",
+        "phaseLabel": "已退回 · 待补充材料",
+        "current": {
+          "label": "补充住宿发票",
+          "actors": [
+            "林悦"
+          ],
+          "since": "2026-11-16T10:05:00+08:00"
+        },
+        "summary": [
+          {
+            "label": "费用期间",
+            "value": "11月5–7日"
+          },
+          {
+            "label": "费用明细",
+            "value": "6笔费用 · 5张发票"
+          }
+        ],
+        "amount": {
+          "label": "报销金额",
+          "value": "¥2,860",
+          "currency": "CNY"
+        },
+        "updatedAt": "2026-11-16T10:30:00+08:00",
+        "paymentStatus": "尚未进入付款阶段",
+        "details": [
+          {
+            "label": "申请人",
+            "value": "林悦"
+          },
+          {
+            "label": "所属部门",
+            "value": "财务部"
+          },
+          {
+            "label": "费用期间",
+            "value": "2026年11月5日至7日"
+          },
+          {
+            "label": "报销金额",
+            "value": "人民币 2,860.00 元"
+          },
+          {
+            "label": "费用明细",
+            "value": "6笔费用，当前上传5张发票。"
+          },
+          {
+            "label": "退回原因",
+            "value": "住宿费用缺少对应发票，请补充后重新提交。"
+          },
+          {
+            "label": "退回人",
+            "value": "刘敏 · 财务审核"
+          },
+          {
+            "label": "提交时间",
+            "value": "2026年11月16日 08:50"
+          },
+          {
+            "label": "所属公司",
+            "value": "华川科技"
+          },
+          {
+            "label": "数据来源",
+            "value": "本地合成业务数据"
+          }
+        ],
+        "steps": [
+          {
+            "id": "expense-submit",
+            "label": "提交报销",
+            "status": "done",
+            "actors": [
+              "林悦"
+            ],
+            "time": "11月16日 08:50"
+          },
+          {
+            "id": "expense-manager",
+            "label": "部门负责人审批",
+            "status": "done",
+            "actors": [
+              "张伟"
+            ],
+            "time": "11月16日 09:20",
+            "note": "同意，转财务审核。"
+          },
+          {
+            "id": "expense-finance",
+            "label": "财务审核",
+            "status": "returned",
+            "actors": [
+              "刘敏"
+            ],
+            "time": "11月16日 10:05",
+            "note": "请补充住宿费用对应发票。"
+          },
+          {
+            "id": "expense-supplement",
+            "label": "补充住宿发票",
+            "status": "current",
+            "actors": [
+              "林悦"
+            ],
+            "time": "11月16日 10:05 起",
+            "note": "当前等待本人处理；重新提交后，以源系统确定的流程为准。"
+          }
+        ],
+        "key": "expense/expense_claim/EX-20261116-018",
+        "synthetic": true
+      },
+      {
+        "source": {
+          "id": "oa",
+          "label": "OA 协同平台"
+        },
+        "typeId": "oa_leave",
+        "typeLabel": "请假申请",
+        "id": "OA-20261116-006",
+        "title": "年假申请",
+        "sourceStatus": "审批中",
+        "status": "processing",
+        "phase": "approval",
+        "phaseLabel": "直属主管审批",
+        "current": {
+          "label": "直属主管审批",
+          "actors": [
+            "李婷"
+          ],
+          "rule": "single",
+          "since": "2026-11-16T09:45:00+08:00"
+        },
+        "summary": [
+          {
+            "label": "请假时间",
+            "value": "11月23–24日"
+          },
+          {
+            "label": "请假时长",
+            "value": "年假 2天"
+          }
+        ],
+        "updatedAt": "2026-11-16T10:30:00+08:00",
+        "details": [
+          {
+            "label": "申请人",
+            "value": "林悦"
+          },
+          {
+            "label": "所属部门",
+            "value": "财务部"
+          },
+          {
+            "label": "假期类型",
+            "value": "年假"
+          },
+          {
+            "label": "请假时间",
+            "value": "2026年11月23日至24日，共2个工作日。"
+          },
+          {
+            "label": "工作交接",
+            "value": "相关事项已安排给项目同事。"
+          },
+          {
+            "label": "提交时间",
+            "value": "2026年11月16日 09:45"
+          },
+          {
+            "label": "预计时间",
+            "value": "暂未取得可用的历史审批耗时。"
+          },
+          {
+            "label": "所属公司",
+            "value": "华川科技"
+          },
+          {
+            "label": "数据来源",
+            "value": "本地合成业务数据"
+          }
+        ],
+        "steps": [
+          {
+            "id": "leave-submit",
+            "label": "提交申请",
+            "status": "done",
+            "actors": [
+              "林悦"
+            ],
+            "time": "11月16日 09:45"
+          },
+          {
+            "id": "leave-manager",
+            "label": "直属主管审批",
+            "status": "current",
+            "actors": [
+              "李婷"
+            ],
+            "time": "11月16日 09:45 起",
+            "note": "当前已等待45分钟。"
+          },
+          {
+            "id": "leave-end",
+            "label": "审批完成",
+            "status": "future",
+            "note": "主管同意后，本申请审批完成。"
+          }
+        ],
+        "key": "oa/oa_leave/OA-20261116-006",
+        "synthetic": true
+      },
+      {
+        "source": {
+          "id": "treasury",
+          "label": "资金管理系统"
+        },
+        "typeId": "payment_request",
+        "typeLabel": "采购付款",
+        "id": "PAY-20261116-009",
+        "title": "办公设备采购付款",
+        "sourceStatus": "待付款",
+        "status": "processing",
+        "phase": "execution",
+        "phaseLabel": "审批已通过 · 待支付处理",
+        "current": {
+          "label": "支付处理 · 待认领",
+          "actors": [
+            "资金共享中心"
+          ],
+          "rule": "pool",
+          "since": "2026-11-16T10:00:00+08:00"
+        },
+        "summary": [
+          {
+            "label": "收款方",
+            "value": "启源办公设备"
+          },
+          {
+            "label": "计划付款日",
+            "value": "11月18日"
+          }
+        ],
+        "amount": {
+          "label": "付款金额",
+          "value": "¥28,000",
+          "currency": "CNY"
+        },
+        "updatedAt": "2026-11-16T10:30:00+08:00",
+        "paymentStatus": "待付款，尚无银行付款成功回执",
+        "details": [
+          {
+            "label": "申请人",
+            "value": "林悦"
+          },
+          {
+            "label": "所属部门",
+            "value": "财务部"
+          },
+          {
+            "label": "收款方",
+            "value": "杭州启源办公设备有限公司"
+          },
+          {
+            "label": "付款用途",
+            "value": "办公设备采购尾款"
+          },
+          {
+            "label": "付款金额",
+            "value": "人民币 28,000.00 元"
+          },
+          {
+            "label": "计划付款日",
+            "value": "2026年11月18日；这是申请计划，不是到账承诺。"
+          },
+          {
+            "label": "审批完成时间",
+            "value": "2026年11月16日 10:00"
+          },
+          {
+            "label": "支付处理",
+            "value": "资金共享中心待认领，尚未指定具体经办人。"
+          },
+          {
+            "label": "所属公司",
+            "value": "华川科技"
+          },
+          {
+            "label": "数据来源",
+            "value": "本地合成业务数据"
+          }
+        ],
+        "steps": [
+          {
+            "id": "payment-submit",
+            "label": "提交付款申请",
+            "status": "done",
+            "actors": [
+              "林悦"
+            ],
+            "time": "11月13日 15:00"
+          },
+          {
+            "id": "payment-business",
+            "label": "业务审批",
+            "status": "done",
+            "actors": [
+              "张伟"
+            ],
+            "time": "11月13日 16:20"
+          },
+          {
+            "id": "payment-finance",
+            "label": "财务审批",
+            "status": "done",
+            "actors": [
+              "刘敏"
+            ],
+            "time": "11月16日 10:00",
+            "note": "审批已通过，移交资金共享中心。"
+          },
+          {
+            "id": "payment-execute",
+            "label": "支付处理",
+            "status": "current",
+            "actors": [
+              "资金共享中心"
+            ],
+            "time": "11月16日 10:00 起",
+            "note": "待认领；该环节属于执行，不是审批。"
+          },
+          {
+            "id": "payment-receipt",
+            "label": "付款结果确认",
+            "status": "future",
+            "note": "以银行回执为准，当前不能判断到账时间。"
+          }
+        ],
+        "key": "treasury/payment_request/PAY-20261116-009",
+        "synthetic": true
+      },
+      {
+        "source": {
+          "id": "contract",
+          "label": "合同管理系统"
+        },
+        "typeId": "contract_approval",
+        "typeLabel": "合同审批",
+        "id": "CT-20261116-012",
+        "title": "年度技术服务合同",
+        "sourceStatus": "会签中",
+        "status": "processing",
+        "phase": "approval",
+        "phaseLabel": "合同会签",
+        "current": {
+          "label": "会签 · 1/2已通过",
+          "actors": [
+            "张伟"
+          ],
+          "rule": "all",
+          "since": "2026-11-16T09:20:00+08:00"
+        },
+        "summary": [
+          {
+            "label": "相对方",
+            "value": "云舟技术服务"
+          },
+          {
+            "label": "合同期限",
+            "value": "2027年1–12月"
+          }
+        ],
+        "amount": {
+          "label": "合同金额",
+          "value": "¥120,000",
+          "currency": "CNY"
+        },
+        "updatedAt": "2026-11-16T10:30:00+08:00",
+        "details": [
+          {
+            "label": "申请人",
+            "value": "林悦"
+          },
+          {
+            "label": "所属部门",
+            "value": "财务部"
+          },
+          {
+            "label": "合同相对方",
+            "value": "杭州云舟技术服务有限公司"
+          },
+          {
+            "label": "合同金额",
+            "value": "人民币 120,000.00 元"
+          },
+          {
+            "label": "合同期限",
+            "value": "2027年1月1日至12月31日"
+          },
+          {
+            "label": "会签规则",
+            "value": "李婷与张伟均通过后，进入法务复核。"
+          },
+          {
+            "label": "已通过",
+            "value": "李婷 · 11月16日 09:50"
+          },
+          {
+            "label": "待处理",
+            "value": "张伟 · 自11月16日 09:20起"
+          },
+          {
+            "label": "预计时间",
+            "value": "同类型会签流程样本不足，暂无法预估。"
+          },
+          {
+            "label": "所属公司",
+            "value": "华川科技"
+          },
+          {
+            "label": "数据来源",
+            "value": "本地合成业务数据"
+          }
+        ],
+        "steps": [
+          {
+            "id": "contract-submit",
+            "label": "提交合同审批",
+            "status": "done",
+            "actors": [
+              "林悦"
+            ],
+            "time": "11月16日 09:20"
+          },
+          {
+            "id": "contract-counter",
+            "label": "业务会签",
+            "status": "current",
+            "actors": [
+              "张伟",
+              "李婷"
+            ],
+            "time": "11月16日 09:20 起",
+            "note": "需全部通过。李婷已于09:50同意，张伟待处理。"
+          },
+          {
+            "id": "contract-legal",
+            "label": "法务复核",
+            "status": "future",
+            "note": "业务会签全部通过后进入；当前处理人尚未分配。"
+          },
+          {
+            "id": "contract-end",
+            "label": "审批完成",
+            "status": "future",
+            "note": "审批完成不等于合同已签署或已履约。"
+          }
+        ],
+        "key": "contract/contract_approval/CT-20261116-012",
+        "synthetic": true
+      },
+      {
+        "source": {
+          "id": "budget",
+          "label": "预算管理系统"
+        },
+        "typeId": "budget_transfer",
+        "typeLabel": "预算调拨",
+        "id": "BD-20261112-008",
+        "title": "四季度项目预算调拨",
+        "sourceStatus": "已完成",
+        "status": "completed",
+        "phase": "closed",
+        "phaseLabel": "预算调拨已生效",
+        "summary": [
+          {
+            "label": "调拨方向",
+            "value": "平台建设 → 客户试点"
+          },
+          {
+            "label": "预算期间",
+            "value": "2026年第四季度"
+          }
+        ],
+        "amount": {
+          "label": "调拨金额",
+          "value": "¥15,000",
+          "currency": "CNY"
+        },
+        "updatedAt": "2026-11-16T10:30:00+08:00",
+        "details": [
+          {
+            "label": "申请人",
+            "value": "林悦"
+          },
+          {
+            "label": "所属部门",
+            "value": "财务部"
+          },
+          {
+            "label": "调出预算",
+            "value": "平台建设项目 · 第四季度预算"
+          },
+          {
+            "label": "调入预算",
+            "value": "客户试点项目 · 第四季度预算"
+          },
+          {
+            "label": "调拨金额",
+            "value": "人民币 15,000.00 元"
+          },
+          {
+            "label": "调整原因",
+            "value": "根据试点推进安排调整项目预算分配。"
+          },
+          {
+            "label": "完成时间",
+            "value": "2026年11月13日 15:20"
+          },
+          {
+            "label": "执行结果",
+            "value": "源系统已确认调出与调入预算更新完成。"
+          },
+          {
+            "label": "所属公司",
+            "value": "华川科技"
+          },
+          {
+            "label": "数据来源",
+            "value": "本地合成业务数据"
+          }
+        ],
+        "steps": [
+          {
+            "id": "budget-submit",
+            "label": "提交调拨申请",
+            "status": "done",
+            "actors": [
+              "林悦"
+            ],
+            "time": "11月12日 10:00"
+          },
+          {
+            "id": "budget-owner",
+            "label": "预算负责人审批",
+            "status": "done",
+            "actors": [
+              "李婷"
+            ],
+            "time": "11月12日 14:30"
+          },
+          {
+            "id": "budget-finance",
+            "label": "预算管理复核",
+            "status": "done",
+            "actors": [
+              "刘敏"
+            ],
+            "time": "11月13日 15:00"
+          },
+          {
+            "id": "budget-execution",
+            "label": "调拨生效",
+            "status": "done",
+            "actors": [
+              "预算系统"
+            ],
+            "time": "11月13日 15:20",
+            "note": "预算余额已更新，本次调拨完成。"
+          }
+        ],
+        "key": "budget/budget_transfer/BD-20261112-008",
+        "synthetic": true
+      }
+    ],
+    "documentSources": {
+      "states": {
+        "oa": "ready",
+        "expense": "ready"
+      }
+    },
+    "analysisRecords": [
+      {
+        "id": "BX202609001",
+        "month": "09",
+        "dept": "销售",
+        "type": "差旅",
+        "amount": 110000,
+        "date": "2026-09-05"
+      },
+      {
+        "id": "BX202609002",
+        "month": "09",
+        "dept": "销售",
+        "type": "招待",
+        "amount": 48000,
+        "date": "2026-09-06"
+      },
+      {
+        "id": "BX202609003",
+        "month": "09",
+        "dept": "销售",
+        "type": "办公",
+        "amount": 23000,
+        "date": "2026-09-07"
+      },
+      {
+        "id": "BX202609004",
+        "month": "09",
+        "dept": "销售",
+        "type": "其他",
+        "amount": 9000,
+        "date": "2026-09-08"
+      },
+      {
+        "id": "BX202609005",
+        "month": "09",
+        "dept": "研发",
+        "type": "差旅",
+        "amount": 45000,
+        "date": "2026-09-10"
+      },
+      {
+        "id": "BX202609006",
+        "month": "09",
+        "dept": "研发",
+        "type": "招待",
+        "amount": 8000,
+        "date": "2026-09-11"
+      },
+      {
+        "id": "BX202609007",
+        "month": "09",
+        "dept": "研发",
+        "type": "办公",
+        "amount": 35000,
+        "date": "2026-09-12"
+      },
+      {
+        "id": "BX202609008",
+        "month": "09",
+        "dept": "研发",
+        "type": "其他",
+        "amount": 22000,
+        "date": "2026-09-13"
+      },
+      {
+        "id": "BX202609009",
+        "month": "09",
+        "dept": "行政",
+        "type": "差旅",
+        "amount": 26000,
+        "date": "2026-09-15"
+      },
+      {
+        "id": "BX202609010",
+        "month": "09",
+        "dept": "行政",
+        "type": "招待",
+        "amount": 24000,
+        "date": "2026-09-16"
+      },
+      {
+        "id": "BX202609011",
+        "month": "09",
+        "dept": "行政",
+        "type": "办公",
+        "amount": 14000,
+        "date": "2026-09-17"
+      },
+      {
+        "id": "BX202609012",
+        "month": "09",
+        "dept": "行政",
+        "type": "其他",
+        "amount": 6000,
+        "date": "2026-09-18"
+      },
+      {
+        "id": "BX202609013",
+        "month": "09",
+        "dept": "运营",
+        "type": "差旅",
+        "amount": 25000,
+        "date": "2026-09-20"
+      },
+      {
+        "id": "BX202609014",
+        "month": "09",
+        "dept": "运营",
+        "type": "招待",
+        "amount": 20000,
+        "date": "2026-09-21"
+      },
+      {
+        "id": "BX202609016",
+        "month": "09",
+        "dept": "运营",
+        "type": "其他",
+        "amount": 13000,
+        "date": "2026-09-23"
+      },
+      {
+        "id": "BX202610001",
+        "month": "10",
+        "dept": "销售",
+        "type": "差旅",
+        "amount": 140000,
+        "date": "2026-10-05"
+      },
+      {
+        "id": "BX202610002",
+        "month": "10",
+        "dept": "销售",
+        "type": "招待",
+        "amount": 50000,
+        "date": "2026-10-06"
+      },
+      {
+        "id": "BX202610003",
+        "month": "10",
+        "dept": "销售",
+        "type": "办公",
+        "amount": 18000,
+        "date": "2026-10-07"
+      },
+      {
+        "id": "BX202610004",
+        "month": "10",
+        "dept": "销售",
+        "type": "其他",
+        "amount": 10000,
+        "date": "2026-10-08"
+      },
+      {
+        "id": "BX202610005",
+        "month": "10",
+        "dept": "研发",
+        "type": "差旅",
+        "amount": 60000,
+        "date": "2026-10-10"
+      },
+      {
+        "id": "BX202610006",
+        "month": "10",
+        "dept": "研发",
+        "type": "招待",
+        "amount": 10000,
+        "date": "2026-10-11"
+      },
+      {
+        "id": "BX202610007",
+        "month": "10",
+        "dept": "研发",
+        "type": "办公",
+        "amount": 30000,
+        "date": "2026-10-12"
+      },
+      {
+        "id": "BX202610008",
+        "month": "10",
+        "dept": "研发",
+        "type": "其他",
+        "amount": 20000,
+        "date": "2026-10-13"
+      },
+      {
+        "id": "BX202610009",
+        "month": "10",
+        "dept": "行政",
+        "type": "差旅",
+        "amount": 30000,
+        "date": "2026-10-15"
+      },
+      {
+        "id": "BX202610010",
+        "month": "10",
+        "dept": "行政",
+        "type": "招待",
+        "amount": 28000,
+        "date": "2026-10-16"
+      },
+      {
+        "id": "BX202610011",
+        "month": "10",
+        "dept": "行政",
+        "type": "办公",
+        "amount": 16000,
+        "date": "2026-10-17"
+      },
+      {
+        "id": "BX202610012",
+        "month": "10",
+        "dept": "行政",
+        "type": "其他",
+        "amount": 6000,
+        "date": "2026-10-18"
+      },
+      {
+        "id": "BX202610013",
+        "month": "10",
+        "dept": "运营",
+        "type": "差旅",
+        "amount": 34000,
+        "date": "2026-10-20"
+      },
+      {
+        "id": "BX202610014",
+        "month": "10",
+        "dept": "运营",
+        "type": "招待",
+        "amount": 20000,
+        "date": "2026-10-21"
+      },
+      {
+        "id": "BX202610016",
+        "month": "10",
+        "dept": "运营",
+        "type": "其他",
+        "amount": 14000,
+        "date": "2026-10-23"
+      }
+    ],
+    "policies": [
+      {
+        "id": "travel-policy",
+        "title": "差旅费用管理办法",
+        "version": "2026.09",
+        "date": "2026-09-01",
+        "dept": "财务共享中心",
+        "category": "差旅",
+        "clauses": [
+          {
+            "title": "第十二条 · 住宿费用",
+            "text": "上海、北京住宿标准为每人每晚 600 元。费用按实际入住间夜计算，发票金额与住宿期间应相互对应。超标准部分需提供专项说明并按审批权限处理。"
+          },
+          {
+            "title": "第十六条 · 材料要求",
+            "text": "住宿费用需提供有效发票及入住期间。交通费用应关联出行日期和行程；开票日期不能直接替代费用发生日期。"
+          }
+        ],
+        "synthetic": true,
+        "source": "本地合成制度"
+      },
+      {
+        "id": "expense-policy",
+        "title": "费用报销及票据管理细则",
+        "version": "2026.08",
+        "date": "2026-08-15",
+        "dept": "财务共享中心",
+        "category": "报销",
+        "clauses": [
+          {
+            "title": "第五条 · 报销资料",
+            "text": "申请人需对费用真实性与归属负责。票据识别信息需要本人核对，重复票据不得重复报销。查验结果不明确的票据应补充核验。"
+          },
+          {
+            "title": "第九条 · 审批与支付",
+            "text": "报销申请经业务与财务审核后进入资金支付。审批完成不代表已支付，以业务系统支付回执为准。"
+          }
+        ],
+        "synthetic": true,
+        "source": "本地合成制度"
+      },
+      {
+        "id": "hospitality-policy",
+        "title": "业务招待管理规范",
+        "version": "2026.06",
+        "date": "2026-06-01",
+        "dept": "综合管理部",
+        "category": "招待",
+        "clauses": [
+          {
+            "title": "第七条 · 前置申请",
+            "text": "业务招待需关联已批准的前置申请。申请中应明确招待事由、人员及预算，实际费用应与关联申请的适用范围一致。"
+          }
+        ],
+        "synthetic": true,
+        "source": "本地合成制度"
+      }
+    ],
+    "skillsHub": {
+      "skills": [
+        {
+          "id": "monthly-analysis",
+          "title": "月度费用分析",
+          "category": "数据分析",
+          "icon": "chart",
+          "description": "汇总费用结构、比较月份变化，生成带数据口径的费用报告。",
+          "owner": "财务共享中心",
+          "tags": [
+            "费用分析",
+            "报告"
+          ],
+          "favorite": true,
+          "view": true,
+          "download": false,
+          "call": true,
+          "instructions": "输入：月份、部门与费用类型。\n输出：费用汇总、同比较期变化、待核实解释及报告。\n先确认统计范围；缺少比较期或预算时明确标记，不推断业务原因。",
+          "versions": [
+            {
+              "version": "1.2.0",
+              "status": "published",
+              "business": "pass",
+              "security": "pass",
+              "compatibility": "pass",
+              "technical": "pass",
+              "mode": "runnable",
+              "note": "已核对输入、输出与适用范围。",
+              "updated": "2026-11-12",
+              "events": [
+                "2026-11-12 · 业务审核通过",
+                "2026-11-12 · 技术审核通过",
+                "2026-11-12 · 可调用版本已上架"
+              ]
+            },
+            {
+              "version": "1.1.0",
+              "status": "published",
+              "business": "pass",
+              "security": "pass",
+              "compatibility": "pass",
+              "technical": "pass",
+              "mode": "runnable",
+              "note": "已核对输入、输出与适用范围。",
+              "updated": "2026-11-12",
+              "events": [
+                "2026-11-12 · 业务审核通过",
+                "2026-11-12 · 技术审核通过",
+                "2026-11-12 · 可调用版本已上架"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "invoice-check",
+          "title": "报销票据核验",
+          "category": "单据处理",
+          "icon": "shield",
+          "description": "检查票据要素、重复风险与报销规则，汇总待补材料。",
+          "owner": "财务共享中心",
+          "tags": [
+            "票据",
+            "规则核验"
+          ],
+          "favorite": true,
+          "view": true,
+          "download": true,
+          "call": true,
+          "instructions": "输入：报销单与票据。\n输出：字段核验结果、疑点与补充材料清单。\n核验结果作为经办参考，关键提交动作仍需用户确认。",
+          "versions": [
+            {
+              "version": "2.1.0",
+              "status": "published",
+              "business": "pass",
+              "security": "pass",
+              "compatibility": "pass",
+              "technical": "pass",
+              "mode": "runnable",
+              "note": "已核对输入、输出与适用范围。",
+              "updated": "2026-11-12",
+              "events": [
+                "2026-11-12 · 业务审核通过",
+                "2026-11-12 · 技术审核通过",
+                "2026-11-12 · 可调用版本已上架"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "travel-guide",
+          "title": "差旅政策问答",
+          "category": "知识问答",
+          "icon": "book",
+          "description": "依据当前差旅制度回答额度、交通、住宿与材料问题。",
+          "owner": "费用管理组",
+          "tags": [
+            "差旅",
+            "制度"
+          ],
+          "favorite": false,
+          "view": true,
+          "download": true,
+          "call": true,
+          "instructions": "输入：差旅安排及政策问题。\n输出：带来源和生效日期的制度答复。\n缺少目的地、职级等条件时先澄清，冲突制度交由财务确认。",
+          "versions": [
+            {
+              "version": "1.0.0",
+              "status": "published",
+              "business": "pass",
+              "security": "pass",
+              "compatibility": "pass",
+              "technical": "pass",
+              "mode": "runnable",
+              "note": "已核对输入、输出与适用范围。",
+              "updated": "2026-11-12",
+              "events": [
+                "2026-11-12 · 业务审核通过",
+                "2026-11-12 · 技术审核通过",
+                "2026-11-12 · 可调用版本已上架"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "english-report",
+          "title": "英文报告写作风格",
+          "category": "内容生成",
+          "icon": "file",
+          "description": "财务英文报告的术语、语气与章节规范。",
+          "owner": "财务运营组",
+          "tags": [
+            "写作",
+            "英文"
+          ],
+          "favorite": false,
+          "view": true,
+          "download": true,
+          "call": false,
+          "instructions": "使用简洁、客观的财务表达。区分事实、解释与建议。金额明确币种、单位及比较期。",
+          "versions": [
+            {
+              "version": "1.0.0",
+              "status": "published",
+              "business": "pass",
+              "security": "pass",
+              "compatibility": "fail",
+              "technical": "pass",
+              "mode": "storage",
+              "note": "保留内容资料；当前运行环境不支持。",
+              "updated": "2026-11-12",
+              "events": [
+                "2026-11-12 · 业务审核通过",
+                "2026-11-12 · 技术审核通过",
+                "2026-11-12 · 仅存储版本已上架"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "close-checklist",
+          "title": "月末结账检查",
+          "category": "单据处理",
+          "icon": "tasks",
+          "description": "按关账清单整理待处理事项，核对凭证与附件完整性。",
+          "owner": "我",
+          "tags": [
+            "月末",
+            "结账"
+          ],
+          "favorite": false,
+          "view": true,
+          "download": true,
+          "call": false,
+          "instructions": "核对关账事项、责任人与截止时间；生成待办清单。",
+          "versions": [
+            {
+              "version": "1.2",
+              "status": "returned",
+              "business": "fail",
+              "security": "pass",
+              "compatibility": "pass",
+              "technical": "pending",
+              "mode": "runnable",
+              "note": "业务退回：补充跨月调整事项与责任人要求。",
+              "updated": "2026-11-13",
+              "events": [
+                "2026-11-13 · 申请审核",
+                "2026-11-13 · 业务退回：补充跨月调整事项与责任人要求。"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "contract-audit",
+          "title": "合同付款条件检查",
+          "category": "单据处理",
+          "icon": "brief",
+          "description": "提取付款节点、验收材料与发票约定，生成核对清单。",
+          "owner": "我",
+          "tags": [
+            "合同",
+            "付款"
+          ],
+          "favorite": false,
+          "view": true,
+          "download": false,
+          "call": false,
+          "instructions": "对照合同正文和付款申请核对条件。无法确定的条款标记为待人工核实。",
+          "versions": [
+            {
+              "version": "0.9.0",
+              "status": "review",
+              "business": "pending",
+              "security": "pending",
+              "compatibility": "pending",
+              "technical": "pending",
+              "mode": "runnable",
+              "note": "待业务和技术审核。",
+              "updated": "2026-11-15",
+              "events": [
+                "2026-11-15 · 资产入库",
+                "2026-11-15 · 申请审核"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "rulesSubmission": {
+      "rules": [
+        {
+          "id": "R001",
+          "name": "发票重复报销校验",
+          "system": "expense",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "invoiceUnique",
+          "effect": "block",
+          "enabled": true,
+          "version": 2,
+          "description": "同一张发票不得重复用于费用报销。"
+        },
+        {
+          "id": "R002",
+          "name": "住宿费用标准",
+          "system": "expense",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "hotelNight",
+          "effect": "block",
+          "enabled": true,
+          "version": 3,
+          "description": "普通员工差旅住宿费用不超过600元/间夜。",
+          "thresholdMinor": 60000
+        },
+        {
+          "id": "R003",
+          "name": "发票有效性检查",
+          "system": "expense",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "validInvoice",
+          "effect": "block",
+          "enabled": true,
+          "version": 2,
+          "description": "报销发票须取得有效的查验结果。"
+        },
+        {
+          "id": "R004",
+          "name": "费用附件完整性",
+          "system": "expense",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "attachment",
+          "effect": "block",
+          "enabled": true,
+          "version": 1,
+          "description": "报销单须包含对应的费用凭证。"
+        },
+        {
+          "id": "R005",
+          "name": "申请材料完整性",
+          "system": "oa",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "attachment",
+          "effect": "block",
+          "enabled": true,
+          "version": 1,
+          "description": "OA申请须附对应的证明材料。"
+        },
+        {
+          "id": "P001",
+          "name": "大额餐饮提醒",
+          "system": "expense",
+          "origin": "personal",
+          "scope": "review",
+          "metric": "meal",
+          "effect": "warn",
+          "enabled": true,
+          "version": 1,
+          "description": "餐饮费用合计超过1500元时，审单时提醒我。",
+          "thresholdMinor": 150000
+        },
+        {
+          "id": "P002",
+          "name": "长时间出差提醒",
+          "system": "oa",
+          "origin": "personal",
+          "scope": "review",
+          "metric": "days",
+          "effect": "warn",
+          "enabled": false,
+          "version": 1,
+          "description": "申请天数超过5天时，审单时提醒我。",
+          "thresholdDays": 5
+        }
+      ],
+      "reviewedRules": [
+        {
+          "id": "R001",
+          "name": "发票重复报销校验",
+          "system": "expense",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "invoiceUnique",
+          "effect": "block",
+          "enabled": true,
+          "version": 2,
+          "description": "同一张发票不得重复用于费用报销。"
+        },
+        {
+          "id": "R002",
+          "name": "住宿费用标准",
+          "system": "expense",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "hotelNight",
+          "effect": "block",
+          "enabled": true,
+          "version": 3,
+          "description": "普通员工差旅住宿费用不超过600元/间夜。",
+          "thresholdMinor": 60000
+        },
+        {
+          "id": "R003",
+          "name": "发票有效性检查",
+          "system": "expense",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "validInvoice",
+          "effect": "block",
+          "enabled": true,
+          "version": 2,
+          "description": "报销发票须取得有效的查验结果。"
+        },
+        {
+          "id": "R004",
+          "name": "费用附件完整性",
+          "system": "expense",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "attachment",
+          "effect": "block",
+          "enabled": true,
+          "version": 1,
+          "description": "报销单须包含对应的费用凭证。"
+        },
+        {
+          "id": "R005",
+          "name": "申请材料完整性",
+          "system": "oa",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "attachment",
+          "effect": "block",
+          "enabled": true,
+          "version": 1,
+          "description": "OA申请须附对应的证明材料。"
+        },
+        {
+          "id": "P001",
+          "name": "大额餐饮提醒",
+          "system": "expense",
+          "origin": "personal",
+          "scope": "review",
+          "metric": "meal",
+          "effect": "warn",
+          "enabled": true,
+          "version": 1,
+          "description": "餐饮费用合计超过1500元时，审单时提醒我。",
+          "thresholdMinor": 150000
+        },
+        {
+          "id": "P002",
+          "name": "长时间出差提醒",
+          "system": "oa",
+          "origin": "personal",
+          "scope": "review",
+          "metric": "days",
+          "effect": "warn",
+          "enabled": false,
+          "version": 1,
+          "description": "申请天数超过5天时，审单时提醒我。",
+          "thresholdDays": 5
+        }
+      ],
+      "reviewedAt": {
+        "expense": "",
+        "oa": ""
+      },
+      "notes": {},
+      "schedule": {
+        "enabled": false,
+        "time": "08:30"
+      },
+      "ruleForms": {},
+      "auditFilter": "all"
+    },
+    "srsRuleCenterV1": {
+      "rules": [
+        {
+          "id": "R001",
+          "name": "发票重复报销校验",
+          "system": "expense",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "invoiceUnique",
+          "effect": "block",
+          "enabled": true,
+          "version": 2,
+          "description": "同一张发票不得重复用于费用报销。",
+          "category": "invoice",
+          "applicability": [
+            "费用报销系统",
+            "提单和审单场景",
+            "报销单关联发票"
+          ],
+          "evidence": [
+            {
+              "name": "发票标识",
+              "source": "报销单 · 发票信息",
+              "purpose": "识别同一张发票"
+            },
+            {
+              "name": "发票使用记录",
+              "source": "费用报销 · 发票关联记录",
+              "purpose": "核对当前发票是否已用于其他报销单"
+            }
+          ],
+          "output": "按每张发票输出重复校验结果；发现重复时列明发票标识与关联报销单。",
+          "missing": "必要字段或核对依据缺失时标记为“待核实”，列明缺失内容；补充后重新检查，不直接判为通过。",
+          "logic": "同一张发票重复用于费用报销时，阻断提单。",
+          "source": "公司通用规则",
+          "updatedAt": "2026/11/16 21:52",
+          "revisions": [
+            {
+              "version": 2,
+              "at": "2026/11/16 21:52",
+              "summary": "载入现有规则",
+              "logic": "同一张发票重复用于费用报销时，阻断提单。"
+            }
+          ],
+          "stage": "published"
+        },
+        {
+          "id": "R002",
+          "name": "住宿费用标准",
+          "system": "expense",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "hotelNight",
+          "effect": "block",
+          "enabled": true,
+          "version": 3,
+          "description": "普通员工差旅住宿费用不超过600元/间夜。",
+          "thresholdMinor": 60000,
+          "category": "lodging",
+          "applicability": [
+            "费用报销系统",
+            "提单和审单场景",
+            "报销单包含住宿费用项"
+          ],
+          "evidence": [
+            {
+              "name": "住宿金额与间夜数",
+              "source": "报销单 · 住宿明细",
+              "purpose": "计算每项住宿的每间夜单价"
+            },
+            {
+              "name": "住宿费用凭证",
+              "source": "报销单 · 关联附件",
+              "purpose": "核对住宿金额与入住、离店信息"
+            }
+          ],
+          "output": "按每项住宿费用输出检查结果，列明每间夜单价、标准和超额金额；不同住宿项分别核对。",
+          "missing": "必要字段或核对依据缺失时标记为“待核实”，列明缺失内容；补充后重新检查，不直接判为通过。",
+          "logic": "住宿费用每间夜超过600元时，阻断提单。",
+          "source": "公司通用规则",
+          "updatedAt": "2026/11/16 21:52",
+          "revisions": [
+            {
+              "version": 3,
+              "at": "2026/11/16 21:52",
+              "summary": "载入现有规则",
+              "logic": "住宿费用每间夜超过600元时，阻断提单。"
+            }
+          ],
+          "stage": "published"
+        },
+        {
+          "id": "R003",
+          "name": "发票有效性检查",
+          "system": "expense",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "validInvoice",
+          "effect": "block",
+          "enabled": true,
+          "version": 2,
+          "description": "报销发票须取得有效的查验结果。",
+          "category": "invoice",
+          "applicability": [
+            "费用报销系统",
+            "提单和审单场景",
+            "报销单关联发票"
+          ],
+          "evidence": [
+            {
+              "name": "发票查验结果",
+              "source": "发票查验 · 返回记录",
+              "purpose": "核对发票是否已取得有效的查验结论"
+            }
+          ],
+          "output": "按每张发票输出有效性检查结果；未取得查验结果的发票保持待核实。",
+          "missing": "必要字段或核对依据缺失时标记为“待核实”，列明缺失内容；补充后重新检查，不直接判为通过。",
+          "logic": "报销发票查验为无效时，阻断提单。",
+          "source": "公司通用规则",
+          "updatedAt": "2026/11/16 21:52",
+          "revisions": [
+            {
+              "version": 2,
+              "at": "2026/11/16 21:52",
+              "summary": "载入现有规则",
+              "logic": "报销发票查验为无效时，阻断提单。"
+            }
+          ],
+          "stage": "published"
+        },
+        {
+          "id": "R004",
+          "name": "费用附件完整性",
+          "system": "expense",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "attachment",
+          "effect": "block",
+          "enabled": true,
+          "version": 1,
+          "description": "报销单须包含对应的费用凭证。",
+          "category": "general",
+          "applicability": [
+            "费用报销系统",
+            "提单和审单场景"
+          ],
+          "evidence": [
+            {
+              "name": "费用凭证",
+              "source": "费用报销 · 单据关联附件",
+              "purpose": "核对当前单据是否包含对应材料"
+            }
+          ],
+          "output": "每张单据输出一条材料完整性检查结果，缺失时列明待补充的材料类型。",
+          "missing": "确认未附必需材料时，判为不符合要求并阻断提单，列明待补材料；附件信息尚未取得或无法核对时标记为“待核实”，补充后重新检查。",
+          "logic": "报销单缺少对应费用凭证时，阻断提单。",
+          "source": "公司通用规则",
+          "updatedAt": "2026/11/16 21:52",
+          "revisions": [
+            {
+              "version": 1,
+              "at": "2026/11/16 21:52",
+              "summary": "载入现有规则",
+              "logic": "报销单缺少对应费用凭证时，阻断提单。"
+            }
+          ],
+          "stage": "published"
+        },
+        {
+          "id": "R005",
+          "name": "申请材料完整性",
+          "system": "oa",
+          "origin": "builtin",
+          "scope": "both",
+          "metric": "attachment",
+          "effect": "block",
+          "enabled": true,
+          "version": 1,
+          "description": "OA申请须附对应的证明材料。",
+          "category": "general",
+          "applicability": [
+            "OA办公系统",
+            "提单和审单场景"
+          ],
+          "evidence": [
+            {
+              "name": "申请证明材料",
+              "source": "OA办公 · 单据关联附件",
+              "purpose": "核对当前单据是否包含对应材料"
+            }
+          ],
+          "output": "每张单据输出一条材料完整性检查结果，缺失时列明待补充的材料类型。",
+          "missing": "确认未附必需材料时，判为不符合要求并阻断提单，列明待补材料；附件信息尚未取得或无法核对时标记为“待核实”，补充后重新检查。",
+          "logic": "OA申请缺少对应证明材料时，阻断提单。",
+          "source": "公司通用规则",
+          "updatedAt": "2026/11/16 21:52",
+          "revisions": [
+            {
+              "version": 1,
+              "at": "2026/11/16 21:52",
+              "summary": "载入现有规则",
+              "logic": "OA申请缺少对应证明材料时，阻断提单。"
+            }
+          ],
+          "stage": "published"
+        },
+        {
+          "id": "P001",
+          "name": "大额餐饮提醒",
+          "system": "expense",
+          "origin": "personal",
+          "scope": "review",
+          "metric": "meal",
+          "effect": "warn",
+          "enabled": true,
+          "version": 1,
+          "description": "餐饮费用合计超过1500元时，审单时提醒我。",
+          "thresholdMinor": 150000,
+          "category": "business_entertainment",
+          "applicability": [
+            "费用报销系统",
+            "审单场景",
+            "报销单包含餐饮费用项"
+          ],
+          "evidence": [
+            {
+              "name": "餐饮费用明细",
+              "source": "报销单 · 费用明细",
+              "purpose": "归集同一张报销单中的全部餐饮费用"
+            },
+            {
+              "name": "餐饮费用凭证",
+              "source": "报销单 · 关联附件",
+              "purpose": "核对餐饮类别与金额"
+            }
+          ],
+          "output": "每张报销单输出一条餐饮合计检查结果，列明餐饮合计金额与阈值，不按单张发票分别触发。",
+          "missing": "必要字段或核对依据缺失时标记为“待核实”，列明缺失内容；补充后重新检查，不直接判为通过。",
+          "logic": "每张报销单的餐饮费用合计超过1500元时，审单时提醒本人。",
+          "source": "本人维护",
+          "updatedAt": "2026/11/16 21:52",
+          "revisions": [
+            {
+              "version": 1,
+              "at": "2026/11/16 21:52",
+              "summary": "载入现有规则",
+              "logic": "每张报销单的餐饮费用合计超过1500元时，审单时提醒本人。"
+            }
+          ],
+          "stage": "published"
+        },
+        {
+          "id": "P002",
+          "name": "长时间出差提醒",
+          "system": "oa",
+          "origin": "personal",
+          "scope": "review",
+          "metric": "days",
+          "effect": "warn",
+          "enabled": false,
+          "version": 1,
+          "description": "申请天数超过5天时，审单时提醒我。",
+          "thresholdDays": 5,
+          "category": "itinerary",
+          "applicability": [
+            "OA办公系统",
+            "审单场景"
+          ],
+          "evidence": [
+            {
+              "name": "申请天数",
+              "source": "OA申请 · 申请信息",
+              "purpose": "读取本次申请的天数"
+            }
+          ],
+          "output": "每张OA申请输出一条天数检查结果，列明申请天数与阈值。",
+          "missing": "必要字段或核对依据缺失时标记为“待核实”，列明缺失内容；补充后重新检查，不直接判为通过。",
+          "logic": "OA申请天数超过5天时，审单时提醒本人。",
+          "source": "本人维护",
+          "updatedAt": "2026/11/16 21:52",
+          "revisions": [
+            {
+              "version": 1,
+              "at": "2026/11/16 21:52",
+              "summary": "载入现有规则",
+              "logic": "OA申请天数超过5天时，审单时提醒本人。"
+            }
+          ],
+          "stage": "published"
+        }
+      ],
+      "drafts": {},
+      "editingId": null
+    },
+    "submissions": {
+      "drafts": {
+        "travel": {
+          "id": "travel",
+          "title": "差旅申请",
+          "applicant": "林悦",
+          "department": "财务部",
+          "paymentCompany": "华川科技",
+          "travelType": "普通差旅",
+          "purpose": "",
+          "legs": [],
+          "activities": [],
+          "activityMode": "optional",
+          "companions": [],
+          "applicationId": "",
+          "expenses": [],
+          "files": [],
+          "subsidyCents": null,
+          "materialIds": [],
+          "version": 1,
+          "savedAt": null,
+          "status": "draft"
+        },
+        "expense": {
+          "id": "expense",
+          "title": "差旅报销",
+          "applicant": "林悦",
+          "department": "财务部",
+          "paymentCompany": "华川科技",
+          "travelType": "普通差旅",
+          "purpose": "",
+          "legs": [],
+          "activities": [],
+          "activityMode": "optional",
+          "companions": [],
+          "applicationId": "",
+          "expenses": [],
+          "files": [],
+          "subsidyCents": null,
+          "materialIds": [],
+          "version": 1,
+          "savedAt": null,
+          "status": "draft"
+        },
+        "personal": {
+          "id": "personal",
+          "title": "个人费用报销",
+          "applicant": "林悦",
+          "department": "财务部",
+          "paymentCompany": "华川科技",
+          "travelType": "普通差旅",
+          "purpose": "",
+          "legs": [],
+          "activities": [],
+          "activityMode": "optional",
+          "companions": [],
+          "applicationId": "",
+          "expenses": [],
+          "files": [],
+          "subsidyCents": null,
+          "materialIds": [],
+          "version": 1,
+          "savedAt": null,
+          "status": "draft"
+        }
+      },
+      "edits": {},
+      "checks": {},
+      "requests": []
+    },
+    "materials": {
+      "files": [
+        {
+          "id": "material-rail",
+          "name": "高铁电子客票.pdf",
+          "size": 124000,
+          "type": "application/pdf",
+          "addedAt": "11月11日 17:30",
+          "status": "recognized",
+          "batchId": "batch-20261111",
+          "synthetic": true,
+          "source": "本地合成材料"
+        },
+        {
+          "id": "material-hotel",
+          "name": "酒店住宿发票.pdf",
+          "size": 143800,
+          "type": "application/pdf",
+          "addedAt": "11月11日 17:30",
+          "status": "recognized",
+          "batchId": "batch-20261111",
+          "synthetic": true,
+          "source": "本地合成材料"
+        },
+        {
+          "id": "material-taxi",
+          "name": "网约车行程单.pdf",
+          "size": 163600,
+          "type": "application/pdf",
+          "addedAt": "11月11日 17:30",
+          "status": "recognized",
+          "batchId": "batch-20261111",
+          "synthetic": true,
+          "source": "本地合成材料"
+        },
+        {
+          "id": "material-meal",
+          "name": "商务用餐发票.pdf",
+          "size": 183400,
+          "type": "application/pdf",
+          "addedAt": "11月11日 17:30",
+          "status": "recognized",
+          "batchId": "batch-20261111",
+          "synthetic": true,
+          "source": "本地合成材料"
+        },
+        {
+          "id": "material-reception",
+          "name": "客户接待发票.pdf",
+          "size": 203200,
+          "type": "application/pdf",
+          "addedAt": "11月11日 17:30",
+          "status": "recognized",
+          "batchId": "batch-20261111",
+          "synthetic": true,
+          "source": "本地合成材料"
+        },
+        {
+          "id": "material-office",
+          "name": "办公用品发票.pdf",
+          "size": 223000,
+          "type": "application/pdf",
+          "addedAt": "11月11日 17:30",
+          "status": "recognized",
+          "batchId": "batch-20261111",
+          "synthetic": true,
+          "source": "本地合成材料"
+        },
+        {
+          "id": "material-duplicate",
+          "name": "高铁电子客票_副本.pdf",
+          "size": 242800,
+          "type": "application/pdf",
+          "addedAt": "11月11日 17:30",
+          "status": "duplicate",
+          "batchId": "batch-20261111",
+          "synthetic": true,
+          "source": "本地合成材料"
+        },
+        {
+          "id": "material-failed",
+          "name": "出租车票_模糊.jpg",
+          "size": 262600,
+          "type": "image/jpeg",
+          "addedAt": "11月11日 17:30",
+          "status": "failed",
+          "batchId": "batch-20261111",
+          "synthetic": true,
+          "source": "本地合成材料"
+        }
+      ],
+      "revision": 1,
+      "acknowledged": false,
+      "items": [
+        {
+          "id": "rail",
+          "name": "北京南 → 上海虹桥",
+          "category": "交通",
+          "amount": 55200,
+          "date": "2026-11-10",
+          "purpose": "客户拜访往程高铁",
+          "group": "travel",
+          "sourceFileId": "material-rail",
+          "confirmed": true
+        },
+        {
+          "id": "hotel",
+          "name": "上海静安商旅酒店",
+          "category": "住宿",
+          "amount": 65000,
+          "date": "2026-11-10",
+          "end": "2026-11-11",
+          "purpose": "上海客户拜访住宿",
+          "group": "travel",
+          "sourceFileId": "material-hotel",
+          "confirmed": false,
+          "issue": "date"
+        },
+        {
+          "id": "taxi",
+          "name": "上海网约车行程",
+          "category": "交通",
+          "amount": 8000,
+          "date": "2026-11-11",
+          "purpose": "酒店至客户办公区",
+          "group": "travel",
+          "sourceFileId": "material-taxi",
+          "confirmed": true
+        },
+        {
+          "id": "meal",
+          "name": "外滩会客餐厅",
+          "category": "餐饮",
+          "amount": 68000,
+          "date": "2026-11-10",
+          "purpose": "项目交流工作餐",
+          "oaId": "OA-2026-0609",
+          "group": "daily",
+          "sourceFileId": "material-meal",
+          "confirmed": true
+        },
+        {
+          "id": "reception",
+          "name": "浦江商务餐厅",
+          "category": "餐饮",
+          "amount": 92000,
+          "date": "2026-11-11",
+          "purpose": "客户接待用餐",
+          "group": "daily",
+          "sourceFileId": "material-reception",
+          "confirmed": false,
+          "issue": "oa"
+        },
+        {
+          "id": "office",
+          "name": "晨光办公用品",
+          "category": "办公",
+          "amount": 8000,
+          "date": "2026-11-11",
+          "purpose": "",
+          "group": "daily",
+          "sourceFileId": "material-office",
+          "confirmed": false,
+          "issue": "purpose"
+        }
+      ]
+    },
+    "auditDocuments": [
+      {
+        "id": "BX-20261116-001",
+        "title": "上海客户拜访差旅报销",
+        "system": "expense",
+        "kind": "差旅报销",
+        "person": "林晓",
+        "department": "市场部",
+        "nights": 2,
+        "period": "11月12日 — 11月14日",
+        "invoiceUnique": true,
+        "validInvoice": true,
+        "attachment": true,
+        "stage": "待审批",
+        "version": 2,
+        "amountCents": 326000,
+        "mealCents": 28000,
+        "hotelNightCents": 78000,
+        "categories": [
+          "hotel",
+          "meal"
+        ]
+      },
+      {
+        "id": "BX-20261116-002",
+        "title": "客户交流活动费用",
+        "system": "expense",
+        "kind": "费用报销",
+        "person": "陈澄",
+        "department": "销售部",
+        "period": "11月13日",
+        "invoiceUnique": false,
+        "validInvoice": true,
+        "attachment": true,
+        "stage": "待审批",
+        "version": 1,
+        "amountCents": 186000,
+        "mealCents": 68000,
+        "categories": [
+          "meal"
+        ]
+      },
+      {
+        "id": "BX-20261116-003",
+        "title": "北京项目交付差旅",
+        "system": "expense",
+        "kind": "差旅报销",
+        "person": "周宁",
+        "department": "研发部",
+        "nights": 2,
+        "period": "11月10日 — 11月12日",
+        "invoiceUnique": true,
+        "validInvoice": null,
+        "attachment": true,
+        "stage": "待审批",
+        "version": 1,
+        "amountCents": 240000,
+        "hotelNightCents": 56000,
+        "categories": [
+          "hotel"
+        ]
+      },
+      {
+        "id": "BX-20261116-004",
+        "title": "渠道客户商务午餐",
+        "system": "expense",
+        "kind": "费用报销",
+        "person": "刘昕",
+        "department": "销售部",
+        "period": "11月14日",
+        "invoiceUnique": true,
+        "validInvoice": true,
+        "attachment": true,
+        "stage": "待审批",
+        "version": 1,
+        "amountCents": 168000,
+        "mealCents": 168000,
+        "categories": [
+          "meal"
+        ]
+      },
+      {
+        "id": "BX-20261116-005",
+        "title": "杭州项目交通费用",
+        "system": "expense",
+        "kind": "费用报销",
+        "person": "沈一",
+        "department": "研发部",
+        "period": "11月13日",
+        "invoiceUnique": true,
+        "validInvoice": true,
+        "attachment": true,
+        "stage": "待审批",
+        "version": 1,
+        "amountCents": 68000,
+        "categories": []
+      },
+      {
+        "id": "BX-20261116-006",
+        "title": "财务培训交通费用",
+        "system": "expense",
+        "kind": "费用报销",
+        "person": "孙悦",
+        "department": "财务部",
+        "period": "11月14日",
+        "invoiceUnique": true,
+        "validInvoice": true,
+        "attachment": true,
+        "stage": "待审批",
+        "version": 1,
+        "amountCents": 92000,
+        "categories": []
+      },
+      {
+        "id": "OA-20261116-017",
+        "title": "年休假申请",
+        "system": "oa",
+        "kind": "请假申请",
+        "person": "赵佳",
+        "department": "人力资源部",
+        "days": 3,
+        "period": "11月18日 — 11月20日",
+        "attachment": true,
+        "stage": "待审批",
+        "version": 1,
+        "categories": []
+      },
+      {
+        "id": "OA-20261116-021",
+        "title": "南京项目出差申请",
+        "system": "oa",
+        "kind": "出差申请",
+        "person": "许言",
+        "department": "运营部",
+        "days": 6,
+        "period": "11月23日 — 11月28日",
+        "attachment": true,
+        "stage": "待审批",
+        "version": 1,
+        "categories": []
+      }
+    ],
+    "expenseCategories": [
+      {
+        "id": "long-distance",
+        "label": "长途交通费",
+        "group": "长途交通",
+        "template": "T01",
+        "draftTypes": [
+          "expense"
+        ],
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "tripId"
+        ]
+      },
+      {
+        "id": "taxi",
+        "label": "出租车",
+        "group": "市内交通",
+        "template": "T02",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date",
+          "transport"
+        ]
+      },
+      {
+        "id": "metro",
+        "label": "地铁",
+        "group": "市内交通",
+        "template": "T02",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date",
+          "transport"
+        ]
+      },
+      {
+        "id": "bus",
+        "label": "公交车",
+        "group": "市内交通",
+        "template": "T02",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date",
+          "transport"
+        ]
+      },
+      {
+        "id": "hotel",
+        "label": "住宿费",
+        "group": "住宿",
+        "template": "T03",
+        "draftTypes": [
+          "expense"
+        ],
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "checkIn",
+          "checkOut",
+          "city",
+          "rooms"
+        ]
+      },
+      {
+        "id": "reception-hotel",
+        "label": "住宿费",
+        "group": "业务招待",
+        "template": "T04",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date",
+          "standard",
+          "city",
+          "rooms",
+          "nights"
+        ]
+      },
+      {
+        "id": "reception-meal-oa",
+        "label": "餐饮费-OA",
+        "group": "业务招待",
+        "template": "T05",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date",
+          "standard",
+          "people",
+          "oaId"
+        ]
+      },
+      {
+        "id": "reception-meal",
+        "label": "餐饮费-非OA",
+        "group": "业务招待",
+        "template": "T05",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date",
+          "standard",
+          "people"
+        ]
+      },
+      {
+        "id": "reception-ticket",
+        "label": "门票／入场费",
+        "group": "业务招待",
+        "template": "T06",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date",
+          "people"
+        ]
+      },
+      {
+        "id": "reception-gift",
+        "label": "纪念品",
+        "group": "业务招待",
+        "template": "T07",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date",
+          "people",
+          "quantity"
+        ]
+      },
+      {
+        "id": "other-parking",
+        "label": "停车过路费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "otherGroup": "车辆杂费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-fuel",
+        "label": "汽油费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "otherGroup": "车辆杂费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-charging",
+        "label": "车辆充电费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "otherGroup": "车辆杂费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-rental-car",
+        "label": "车辆租赁费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "otherGroup": "车辆杂费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-car-inspection",
+        "label": "车辆年检费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "车辆杂费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-express",
+        "label": "快递费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "otherGroup": "办公费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-office",
+        "label": "办公费零星采购",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "otherGroup": "办公费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-printing",
+        "label": "印刷费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "办公费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-tender",
+        "label": "招投标费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "办公费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-books",
+        "label": "书报资料费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "办公费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-visa",
+        "label": "签证办证费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "otherGroup": "办公费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-water",
+        "label": "饮用水",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "办公费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-notary",
+        "label": "公证费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "办公费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-household",
+        "label": "户档费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "办公费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-conference",
+        "label": "参会费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "otherGroup": "办公费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-network",
+        "label": "网络服务费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "otherGroup": "咨询与服务",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-telecom",
+        "label": "员工通讯费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "otherGroup": "咨询与服务",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-certification",
+        "label": "一般认证费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "咨询与服务",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-platform",
+        "label": "电商平台服务费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "咨询与服务",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-consulting",
+        "label": "咨询费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "咨询与服务",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-health",
+        "label": "防疫检测费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "otherGroup": "体检费用",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-utilities-water",
+        "label": "水费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "水电燃气费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-electricity",
+        "label": "电费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "水电燃气费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-gas",
+        "label": "燃气费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "水电燃气费",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-recruiting",
+        "label": "招聘费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "人员招聘",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-travel-subsidy",
+        "label": "AMR差旅补贴",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "expense"
+        ],
+        "otherGroup": "差旅补助",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-living-subsidy",
+        "label": "生活补贴",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "其他",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-finance",
+        "label": "金融机构手续费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "其他",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-long-distance",
+        "label": "长途交通",
+        "group": "其他",
+        "template": "T08",
+        "draftTypes": [
+          "expense",
+          "personal"
+        ],
+        "otherGroup": "其他",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "departureDate",
+          "arrivalDate",
+          "departureCity",
+          "arrivalCity",
+          "transport"
+        ]
+      },
+      {
+        "id": "other-travel-misc",
+        "label": "长途交通杂费",
+        "group": "其他",
+        "template": "T10",
+        "draftTypes": [
+          "expense"
+        ],
+        "otherGroup": "其他",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "date"
+        ]
+      },
+      {
+        "id": "other-hotel",
+        "label": "住宿费",
+        "group": "其他",
+        "template": "T09",
+        "draftTypes": [
+          "personal"
+        ],
+        "otherGroup": "其他",
+        "requiredFields": [
+          "currency",
+          "amount",
+          "reason",
+          "checkIn",
+          "checkOut",
+          "city"
+        ]
+      }
+    ],
+    "receipts": {},
+    "submissionLedger": {}
+  },
+  "tasks": [],
+  "activeTask": null
+}

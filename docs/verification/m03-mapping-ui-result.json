@@ -1,0 +1,40 @@
+{
+  "command": "node node_modules/@playwright/test/cli.js test tests/e2e/mapping-governance.spec.ts --reporter=list",
+  "tests": {
+    "passed": 1,
+    "failed": 0
+  },
+  "suite_seconds": 16.9,
+  "test_seconds": 10.2,
+  "viewport_sizes": [
+    {
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "width": 390,
+      "height": 844
+    }
+  ],
+  "verified": [
+    "browser_generated_canonical_input_hash",
+    "independent_manual_expected_values",
+    "failed_sample_cannot_publish",
+    "proof_cleared_after_edit",
+    "two_real_confirmation_actions",
+    "immutable_old_version",
+    "preaudit_groups_low_incomplete_low",
+    "ordinary_employee_no_mapping_tab",
+    "no_browser_page_errors",
+    "no_narrow_drawer_horizontal_overflow"
+  ],
+  "screenshots": [
+    "m03-mapping-ui-desktop.png",
+    "m03-mapping-ui-mobile.png"
+  ],
+  "services_released": {
+    "3000": true,
+    "5173": true
+  },
+  "models_invoked": false
+}
