@@ -10,14 +10,15 @@ import { Badge, Button, Empty, Icon, Money, Section } from './ui.js';
 import {
   INITIAL_RULES_SUBMISSION,
   RULES_SUBMISSION_KEY,
+  RuleEvaluationResults,
   evaluateWorkspaceRules,
-  ruleSignature,
   type RuleReview,
   type RulesSubmissionState,
   type WorkspaceRule,
 } from './RulesSubmission.js';
 import {
   draftPeriod,
+  getDraftType,
   draftCurrencyTotals,
   draftTotal,
   expenseNights,
@@ -26,11 +27,14 @@ import {
   amountCents as parseCents,
   validateDraft,
   type DraftId,
+  type DraftType,
   type MaterialExpenseImport,
   type SubmissionDraft,
   type ValidationIssue,
 } from './submission-model.js';
 import { SubmissionFields } from './SubmissionFields.js';
+import { SubmissionDefaults } from './SubmissionDefaults';
+import { activeSubmissionDefaults } from './submission-defaults';
 import { materialsInitial } from './Documents.js';
 import {
   SUBMISSIONS_KEY,
@@ -45,7 +49,7 @@ export { SUBMISSIONS_KEY } from './submission-state.js';
 import './submission.css';
 import { api } from './runtime-client';
 
-export const submissionLabels: Record<DraftId, string> = {
+export const submissionLabels: Record<DraftType, string> = {
   travel: '差旅申请',
   expense: '差旅报销',
   personal: '个人费用报销',
@@ -88,7 +92,10 @@ function submissionPanel(
   return {
     kind: 'submission',
     id,
-    title: data?.step === 'confirm' ? '确认提交' : submissionLabels[id],
+    title:
+      data?.step === 'confirm'
+        ? '确认提交'
+        : submissionLabels[getDraftType(id)],
     data,
   };
 }
@@ -107,18 +114,65 @@ function useSubmissionData() {
   );
 }
 
-function applicableRules(id: DraftId, rules: WorkspaceRule[]) {
-  // Travel applications have no invoice or reimbursement attachment requirement.
-  return id === 'travel'
-    ? rules.filter((rule) => rule.metric === 'days')
-    : rules;
+export function applicableRules(
+  id: DraftId | SubmissionDraft,
+  rules: WorkspaceRule[],
+) {
+  const documentType = getDraftType(id);
+  return rules.filter(
+    (rule) =>
+      rule.metric !== 'validInvoice' &&
+      (documentType !== 'travel' ||
+        rule.metric === 'days' ||
+        rule.metric === 'semantic') &&
+      (!rule.documentTypes?.length ||
+        rule.documentTypes.includes(documentType)),
+  );
 }
 
-function checkSignature(id: DraftId, rules: WorkspaceRule[]) {
-  return ruleSignature(
-    applicableRules(id, rules),
-    'submit',
-    id === 'travel' ? 'oa' : 'expense',
+export function checkSignature(
+  id: DraftId | SubmissionDraft,
+  rules: WorkspaceRule[],
+) {
+  const system = getDraftType(id) === 'travel' ? 'oa' : 'expense';
+  // Match the server's rule signature, including the semantic rule inputs.
+  const keys = [
+    'id',
+    'name',
+    'system',
+    'origin',
+    'scope',
+    'metric',
+    'thresholdMinor',
+    'thresholdDays',
+    'effect',
+    'enabled',
+    'version',
+    'description',
+    'instruction',
+    'requiredFields',
+    'documentTypes',
+  ];
+  return JSON.stringify(
+    applicableRules(id, rules)
+      .filter(
+        (rule) =>
+          rule.enabled &&
+          rule.system === system &&
+          (rule.scope === 'both' || rule.scope === 'submit'),
+      )
+      // Rule IDs are ASCII; compare code points to match Python sorted.
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .map((rule) =>
+        Object.fromEntries(
+          keys
+            .filter((key) => key in rule)
+            .map((key) => [
+              key,
+              (rule as unknown as Record<string, unknown>)[key],
+            ]),
+        ),
+      ),
   );
 }
 
@@ -130,17 +184,18 @@ function isCheckCurrent(
   return Boolean(
     check &&
     check.version === draft.version &&
-    check.signature === checkSignature(draft.id, rules),
+    check.signature === checkSignature(draft, rules),
   );
 }
 
-function hasBlockingIssues(check: SubmissionCheck | undefined) {
+export function hasBlockingIssues(check: SubmissionCheck | undefined) {
   return (
     !check ||
     check.issues.length > 0 ||
     check.review.findings.some(
       (finding) =>
-        finding.state === 'unknown' || finding.rule.effect === 'block',
+        finding.rule.effect === 'block' ||
+        (finding.state === 'unknown' && finding.rule.metric !== 'semantic'),
     )
   );
 }
@@ -177,12 +232,13 @@ function reviewDraft(
     {
       id: draft.id,
       title: draft.title,
-      system: draft.id === 'travel' ? 'oa' : 'expense',
-      kind: submissionLabels[draft.id],
+      system: getDraftType(draft) === 'travel' ? 'oa' : 'expense',
+      kind: submissionLabels[getDraftType(draft)],
+      documentType: getDraftType(draft),
       person: draft.applicant,
       department: draft.department,
       amountCents:
-        draft.id === 'travel' || !currenciesKnown
+        getDraftType(draft) === 'travel' || !currenciesKnown
           ? undefined
           : draftTotal(draft),
       mealCents: meals.every((item) => item.currency === 'CNY')
@@ -210,7 +266,6 @@ function reviewDraft(
       days,
       period: [period.start, period.end].filter(Boolean).join(' — '),
       invoiceUnique: draft.invoiceUnique,
-      validInvoice: draft.validInvoice,
       attachment:
         draft.files.length > 0 ||
         draft.expenses.every((item) => item.files.length > 0),
@@ -221,7 +276,7 @@ function reviewDraft(
         ...(meals.length ? ['meal' as const] : []),
       ],
     },
-    applicableRules(draft.id, rules),
+    applicableRules(draft, rules),
     'submit',
   );
 }
@@ -258,6 +313,14 @@ export function getSubmissionSummary(
 ): ResultCard {
   const state = readSubmissionState(data);
   const saved = state.drafts[id];
+  if (!saved)
+    return {
+      kind: 'submission',
+      id,
+      title: '单据不存在',
+      status: '不可用',
+      tone: 'warning',
+    };
   const draft = state.edits[id] ?? saved;
   const issues = validateDraft(draft, { submit: true });
   const rules = (data[RULES_SUBMISSION_KEY] ?? INITIAL_RULES_SUBMISSION)
@@ -279,11 +342,12 @@ export function getSubmissionSummary(
     kind: 'submission',
     id,
     title: draft.title,
-    subtitle: `${submissionLabels[id]}${id === 'travel' ? '' : ' · ' + amountLabel(draft)} · v${draft.version}`,
+    subtitle: `${submissionLabels[getDraftType(id)]}${getDraftType(id) === 'travel' ? '' : ' · ' + amountLabel(draft)} · v${draft.version}`,
     status,
     tone: status === '待回执' || status === '待完善' ? 'warning' : 'neutral',
     data: {
-      amountCents: id === 'travel' ? undefined : draftTotal(draft),
+      amountCents:
+        getDraftType(id) === 'travel' ? undefined : draftTotal(draft),
       amounts: draftCurrencyTotals(draft),
       version: saved.version,
       snapshot: structuredClone(draft),
@@ -334,7 +398,7 @@ function DraftOverview({
   issues: ValidationIssue[];
   onEdit: (issuePath?: string) => void;
 }) {
-  const travel = draft.id === 'travel';
+  const travel = getDraftType(draft) === 'travel';
   return (
     <div className="sf-overview">
       <section className="sf-overview-sheet">
@@ -343,7 +407,7 @@ function DraftOverview({
             <Icon name={travel ? 'plane' : 'wallet'} size={20} />
           </span>
           <div>
-            <span>{submissionLabels[draft.id]}</span>
+            <span>{submissionLabels[getDraftType(draft)]}</span>
             <h3>{draft.title || '未命名单据'}</h3>
           </div>
           {!travel && (
@@ -400,6 +464,9 @@ function DraftOverview({
                     </div>
                     <span className="sf-route-transport">
                       {leg.transport || '交通待补充'}
+                      {activeSubmissionDefaults(draft).some(
+                        (entry) => entry.path === `legs.${leg.id}.transport`,
+                      ) && <small>建议值</small>}
                     </span>
                   </li>
                 ))}
@@ -493,7 +560,7 @@ function DraftOverview({
             </span>
           )}
         </div>
-        {draft.id === 'expense' && (
+        {getDraftType(draft) === 'expense' && (
           <div className="sf-overview-link">
             <span>关联差旅申请</span>
             <strong>{draft.applicationId || '待补充'}</strong>
@@ -513,6 +580,7 @@ function DraftOverview({
           </div>
         )}
       </section>
+      <SubmissionDefaults draft={draft} />
       {issues.length > 0 && (
         <div className="sf-completion-notice">
           <Icon name="alert" size={17} />
@@ -566,24 +634,47 @@ function CheckResults({
             <strong>{finding.rule.name}</strong>
             <Badge tone="warning">
               {finding.state === 'unknown'
-                ? '待返回'
+                ? '待核实'
                 : finding.rule.effect === 'block'
                   ? '需处理'
                   : '提醒'}
             </Badge>
           </div>
           <p>{finding.detail}</p>
+          {finding.evidence?.length ? (
+            <details className="rs-source">
+              <summary>执行证据</summary>
+              {finding.evidence.map((e, index) => (
+                <p key={e.path + index}>
+                  <code>{e.path}</code> · {e.quote}
+                </p>
+              ))}
+            </details>
+          ) : finding.rule.metric === 'semantic' ? (
+            <small>暂无可引用的原文证据</small>
+          ) : null}
           <small>{finding.actual}</small>
         </div>
       ))}
+      <RuleEvaluationResults review={check.review} />
       {!hasBlockingIssues(check) && (
         <div className="rs-clear">
           <Icon name="check" size={16} />
-          本次填写及适用规则检查已通过
+          {check.review.findings.some((f) => f.state === 'unknown')
+            ? '基础检查已通过，提醒项待核实'
+            : check.review.findings.length
+              ? '基础检查已通过，请核对提醒项'
+              : '本次填写及适用规则检查已通过'}
         </div>
       )}
       <div className="rs-check-meta">
         <span>{businessTime(check.checkedAt)}</span>
+        {check.review.engine && (
+          <span>
+            {check.review.engine}
+            {check.review.model ? ` · ${check.review.model}` : ''}
+          </span>
+        )}
         <span>
           草稿 v{check.version} · {check.review.applicable.length} 项规则
         </span>
@@ -596,6 +687,9 @@ export function SubmissionPage() {
   const workspace = useWorkspace();
   const [state] = useSubmissionData();
   const [tab, setTab] = useState<'drafts' | 'requests'>('drafts');
+  const activeDrafts = Object.values(state.drafts)
+    .filter((draft) => draft.status === 'draft')
+    .reverse();
   return (
     <div className="rs-page sf-page">
       <div className="sf-entry-grid">
@@ -608,16 +702,16 @@ export function SubmissionPage() {
             <span className="sf-entry-icon">
               <Icon
                 name={
-                  id === 'travel'
+                  getDraftType(id) === 'travel'
                     ? 'plane'
-                    : id === 'expense'
+                    : getDraftType(id) === 'expense'
                       ? 'wallet'
                       : 'file'
                 }
                 size={21}
               />
             </span>
-            <strong>{submissionLabels[id]}</strong>
+            <strong>{submissionLabels[getDraftType(id)]}</strong>
             <Icon name="arrow" size={17} />
           </button>
         ))}
@@ -628,7 +722,7 @@ export function SubmissionPage() {
             className={tab === 'drafts' ? 'active' : ''}
             onClick={() => setTab('drafts')}
           >
-            当前单据 <small>{draftIds.length}</small>
+            未提交草稿 <small>{activeDrafts.length}</small>
           </button>
           <button
             className={tab === 'requests' ? 'active' : ''}
@@ -640,8 +734,8 @@ export function SubmissionPage() {
       </div>
       {tab === 'drafts' ? (
         <div className="sf-draft-cards">
-          {draftIds.map((id) => {
-            const saved = state.drafts[id];
+          {activeDrafts.map((saved) => {
+            const id = saved.id;
             const draft = state.edits[id] ?? saved;
             const summary = getSubmissionSummary(workspace.state.data, id);
             const missingCount = Number(summary.data?.missingCount ?? 0);
@@ -650,10 +744,10 @@ export function SubmissionPage() {
                 <div className="sf-card-heading">
                   <span>
                     <Icon
-                      name={id === 'travel' ? 'plane' : 'wallet'}
+                      name={getDraftType(id) === 'travel' ? 'plane' : 'wallet'}
                       size={16}
                     />
-                    {submissionLabels[id]}
+                    {submissionLabels[getDraftType(id)]}
                     <small>v{saved.version}</small>
                   </span>
                   <Badge tone={summary.tone}>{summary.status}</Badge>
@@ -662,9 +756,9 @@ export function SubmissionPage() {
                   className="sf-card-title"
                   onClick={() => workspace.openPanel(submissionPanel(id))}
                 >
-                  {draft.title || submissionLabels[id]}
+                  {draft.title || submissionLabels[getDraftType(id)]}
                 </button>
-                {id === 'travel' ? (
+                {getDraftType(id) === 'travel' ? (
                   <div className="sf-card-route">
                     {draft.legs.length ? (
                       draft.legs.map((leg) => (
@@ -733,10 +827,11 @@ export function SubmissionPage() {
               <span>
                 <strong>{request.title}</strong>
                 <small>
-                  {request.applicant} · {request.id} · {businessTime(request.createdAt)}
+                  {request.applicant} · {request.id} ·{' '}
+                  {businessTime(request.createdAt)}
                 </small>
               </span>
-              {request.draftId !== 'travel' && (
+              {getDraftType(request.snapshot) !== 'travel' && (
                 <DraftAmount draft={request.snapshot} />
               )}
               <Badge tone={request.localStatus ? 'success' : 'warning'}>
@@ -755,9 +850,17 @@ export function SubmissionPage() {
 
 export function SubmissionPanel({ panel }: { panel: PanelSpec }) {
   const workspace = useWorkspace();
+  const id = resolveDraftId(panel.id);
+  if (!readSubmissionState(workspace.state.data).drafts[id])
+    return <Empty title="单据不存在">请从我的单据重新选择。</Empty>;
+  return <ExistingSubmissionPanel key={id} panel={panel} />;
+}
+
+function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
+  const workspace = useWorkspace();
   const [state, setState] = useSubmissionData();
   const id = resolveDraftId(panel.id);
-  const saved = state.drafts[id];
+  const saved = state.drafts[id]!;
   const draft = state.edits[id] ?? saved;
   const ruleState = (workspace.state.data[RULES_SUBMISSION_KEY] ??
     INITIAL_RULES_SUBMISSION) as RulesSubmissionState;
@@ -794,18 +897,19 @@ export function SubmissionPanel({ panel }: { panel: PanelSpec }) {
     ? affectedMaterialDrafts(state.drafts, incoming)
     : [];
   const pendingImport =
-    id !== 'travel' &&
+    getDraftType(id) !== 'travel' &&
     incoming &&
     panel.data?.materialBatchId === incoming.materialBatchId &&
-    importTargets.some((key) => state.drafts[key].sourceImportKey !== batchKey);
+    importTargets.includes(id) &&
+    importTargets.some((key) => state.drafts[key]?.sourceImportKey !== batchKey);
   const hasImportEdits = importTargets.some(
-    (key) => state.edits[key] && isDirty(state.edits[key]!, state.drafts[key]),
+    (key) => state.edits[key] && isDirty(state.edits[key]!, state.drafts[key]!),
   );
   const importEditingId = importTargets.find(
     (key) => !!workspace.state.data.submissionExpenseEditors?.[key],
   );
   const importBlocked = importTargets.some(
-    (key) => state.drafts[key].status === 'awaiting_receipt',
+    (key) => state.drafts[key]?.status !== 'draft',
   );
 
   useEffect(() => {
@@ -827,7 +931,7 @@ export function SubmissionPanel({ panel }: { panel: PanelSpec }) {
     saved.version,
     dirty,
     check?.signature,
-    checkSignature(id, ruleState.rules),
+    checkSignature(saved, ruleState.rules),
   ]);
 
   const editDraft = (issuePath?: string) => {
@@ -911,9 +1015,7 @@ export function SubmissionPanel({ panel }: { panel: PanelSpec }) {
       ...draft,
       version: saved.version + 1,
       savedAt: stamp(),
-      ...(invoiceChanged
-        ? { invoiceUnique: undefined, validInvoice: null }
-        : {}),
+      ...(invoiceChanged ? { invoiceUnique: undefined } : {}),
     };
   };
 
@@ -1047,14 +1149,14 @@ export function SubmissionPanel({ panel }: { panel: PanelSpec }) {
         </div>
         <dl className="rs-definition">
           <dt>单据类型</dt>
-          <dd>{submissionLabels[id]}</dd>
+          <dd>{submissionLabels[getDraftType(id)]}</dd>
           <dt>申请人</dt>
           <dd>{request?.applicant || snapshot.applicant}</dd>
           <dt>部门</dt>
           <dd>{snapshot.department}</dd>
           <dt>付款公司</dt>
           <dd>{snapshot.paymentCompany}</dd>
-          {id !== 'travel' && (
+          {getDraftType(id) !== 'travel' && (
             <>
               <dt>报销金额</dt>
               <dd>
@@ -1149,9 +1251,14 @@ export function SubmissionPanel({ panel }: { panel: PanelSpec }) {
                 setError('');
                 try {
                   await workspace.flush();
-                  await api('/business/new-draft', { id });
+                  const result = await api<{ draft: SubmissionDraft }>(
+                    '/business/new-draft',
+                    { id },
+                  );
                   await workspace.refresh();
-                  workspace.openPanel(submissionPanel(id, { view: 'edit' }));
+                  workspace.openPanel(
+                    submissionPanel(result.draft.id, { view: 'edit' }),
+                  );
                   workspace.notify('已新建同类草稿，原回执已保留');
                 } catch (error) {
                   setError(
@@ -1176,8 +1283,8 @@ export function SubmissionPanel({ panel }: { panel: PanelSpec }) {
       <div className="rs-panel sf-panel">
         <SubmissionStages stage={1} />
         <div className="rs-confirm-amount">
-          <span>{submissionLabels[id]}</span>
-          {id !== 'travel' && <DraftAmount draft={saved} />}
+          <span>{submissionLabels[getDraftType(id)]}</span>
+          {getDraftType(id) !== 'travel' && <DraftAmount draft={saved} />}
         </div>
         <dl className="rs-definition">
           <dt>申请人</dt>
@@ -1192,7 +1299,7 @@ export function SubmissionPanel({ panel }: { panel: PanelSpec }) {
           <dd>
             {period.start} — {period.end}
           </dd>
-          {id === 'travel' && (
+          {getDraftType(id) === 'travel' && (
             <>
               <dt>行程</dt>
               <dd>
@@ -1204,7 +1311,7 @@ export function SubmissionPanel({ panel }: { panel: PanelSpec }) {
               <dd>{saved.companions.join('、') || '无'}</dd>
             </>
           )}
-          {id !== 'travel' && (
+          {getDraftType(id) !== 'travel' && (
             <>
               <dt>费用笔数</dt>
               <dd>{saved.expenses.length} 笔</dd>
@@ -1260,7 +1367,7 @@ export function SubmissionPanel({ panel }: { panel: PanelSpec }) {
               {importBlocked
                 ? '当前报销单有待回执请求，请先核实办理结果。'
                 : importEditingId
-                  ? `${submissionLabels[importEditingId]}有未确认的费用编辑，请先保存或取消。`
+                  ? `${submissionLabels[getDraftType(importEditingId)]}有未确认的费用编辑，请先保存或取消。`
                   : '载入将更新本批次费用，并保留当前填写内容。'}
             </small>
           </div>
@@ -1337,7 +1444,7 @@ export function SubmissionPanel({ panel }: { panel: PanelSpec }) {
               current && !dirty ? check?.issues : showValidation ? issues : []
             }
           />
-          {id !== 'travel' && (
+          {getDraftType(id) !== 'travel' && (
             <div className="sf-material-actions">
               <Button
                 icon="upload"
@@ -1347,6 +1454,7 @@ export function SubmissionPanel({ panel }: { panel: PanelSpec }) {
                     kind: 'materials',
                     id: 'batch-20261111',
                     title: 'AI 发票转费用',
+                    data: { draftId: id },
                   })
                 }
               >

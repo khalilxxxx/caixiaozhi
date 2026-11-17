@@ -133,6 +133,17 @@ export function rebaseWorkspaceValue(
       if (i < 0) result.push(merged);
       else result[i] = merged;
     }
+    const retainedBefore = before.filter((item) => next.has(item.id)).map((item) => item.id);
+    const retainedAfter = after.filter((item) => previous.has(item.id)).map((item) => item.id);
+    const reordered = !equal(retainedBefore, retainedAfter) || after.some((item) => !previous.has(item.id));
+    if (reordered) {
+      const byId = new Map(result.map((item) => [item.id, item]));
+      const ordered = after.filter((item) => byId.has(item.id)).map((item) => byId.get(item.id));
+      let index = 0;
+      // Remote-only additions keep their slots; local row order owns the
+      // remaining slots without replacing remote fields on those rows.
+      return result.map((item) => next.has(item.id) ? ordered[index++] : item);
+    }
     return result;
   }
   return structuredClone(after);

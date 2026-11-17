@@ -4,7 +4,7 @@ import io
 import uuid
 from datetime import datetime, timezone
 
-ALLOWED = {'.txt', '.md', '.csv', '.json', '.pdf', '.docx', '.png', '.jpg', '.jpeg', '.webp', '.xlsx', '.xls', '.zip', '.yaml', '.yml'}
+ALLOWED = {'.txt', '.md', '.csv', '.json', '.pdf', '.docx', '.pptx', '.png', '.jpg', '.jpeg', '.webp', '.xlsx', '.xls', '.zip', '.yaml', '.yml'}
 
 
 def extract_text(name, content):

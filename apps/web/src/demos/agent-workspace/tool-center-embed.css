@@ -1,25 +1,22 @@
-.tool-center-embedded {
-  position: relative;
-  width: 100%;
-  min-height: 600px;
-}
-.tool-center-embedded > iframe {
-  display: block;
-  width: 100%;
-  height: max(640px, calc(100dvh - 212px));
-  border: 0;
-  background: transparent;
-  border-radius: 8px;
-}
-.tool-center-loading {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: #65738b;
-  font-size: 13px;
-  background: #f6f8fc;
-}
-.sh-page.sh-tools-view > .as-page-tabs {
-  margin-bottom: 12px;
-}
+.tool-center-embedded{position:relative;width:100%;min-width:0}
+.tool-center-embedded>iframe{display:block;width:100%;border:0;background:transparent}
+.tool-center-loading{position:absolute;inset:0;z-index:1;display:flex;gap:14px;align-items:center;justify-content:center;color:#66666c;font-size:14px;background:#fafafa}
+.tool-center-native>.btn{margin-bottom:20px}
+.tool-detail-state{padding:32px 24px;color:#66666c;font-size:14px;line-height:1.7}
+.tool-detail-state>.btn{margin:16px 0;display:block}
+.tool-detail{padding:8px 0;font-size:14px;color:#343438}
+.tool-detail-heading{display:flex;gap:14px;align-items:center;margin-bottom:20px}
+.tool-detail-icon{display:grid;place-items:center;width:44px;height:44px;border:1px solid #e5e5e3;border-radius:10px;background:#f7f7f6;flex:none}
+.tool-detail-heading h2{margin:0 0 5px;font-size:20px;line-height:1.4;font-weight:600}
+.tool-detail-heading span:not(.tool-detail-icon){color:#6d6d72;font-size:13px}
+.tool-detail-description{line-height:1.8;margin:0 0 24px;color:#626267}
+.tool-detail-fields{display:grid;gap:16px;margin:20px 0 26px}
+.tool-detail-fields>div{display:grid;grid-template-columns:80px minmax(0,1fr);gap:14px}
+.tool-detail-fields dt{color:#737378;font-size:13px}.tool-detail-fields dd{margin:0;line-height:1.65;overflow-wrap:anywhere}
+.tool-detail-actions,.tool-detail-management{display:flex;flex-wrap:wrap;gap:8px}
+.tool-detail-unavailable{font-size:13px;color:#826021;padding:9px 0}
+.tool-detail-notice{font-size:13px;padding:12px 14px;background:#faf5ed;color:#826021;border-radius:6px;line-height:1.7;margin:18px 0}
+.tool-detail-section{border-top:1px solid #e8e8e6;margin-top:24px;padding-top:18px}
+.tool-detail-section summary{font-weight:550;cursor:pointer;padding:3px 0}.tool-detail-section>p{font-size:13px;color:#66666c;margin:16px 0}
+.tool-detail-management{margin-top:24px;padding-top:20px;border-top:1px solid #e8e8e6}
+@media(max-width:480px){.tool-detail-fields>div{grid-template-columns:70px minmax(0,1fr);gap:10px}.tool-detail-actions>.btn{flex:1;white-space:nowrap}}

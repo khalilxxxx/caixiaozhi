@@ -4,8 +4,13 @@ import copy
 import json
 import sqlite3
 import threading
+import time
 from pathlib import Path
 from datetime import datetime, timezone
+from rule_catalog import migrate_rules
+from rule_service import validate_semantic_rule
+from submission_defaults import apply_submission_defaults, merge_draft_patch
+from clarification_service import expire_questions, pending_question
 
 
 def now():
@@ -14,6 +19,70 @@ def now():
 
 def encode(value):
     return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+
+
+def finish_message_steps(message, run_status):
+    """Close interrupted operations without discarding earlier outcomes/cards."""
+    message['runStatus'] = run_status
+    finished = int(time.time() * 1000)
+    changed = []
+    for step in message.get('tools', []):
+        if step.get('status') != 'running':
+            continue
+        started = step.get('startedAt')
+        step.update(status='cancelled', finishedAt=finished,
+                    durationMs=max(0, finished - started) if isinstance(started, (int, float)) else 0)
+        changed.append(copy.deepcopy(step))
+    return changed
+
+
+def remove_invoice_verification(data):
+    """迁移当前规则与缓存，历史申请快照和回执由原事务继续持有。"""
+    before = encode(data)
+    centers = [data[key] for key in ('rulesSubmission', 'srsRuleCenterV1') if isinstance(data.get(key), dict)]
+    removed_ids = {'R003'}
+    for center in centers:
+        for field in ('rules', 'reviewedRules'):
+            removed_ids.update(rule['id'] for rule in center.get(field, [])
+                               if rule.get('metric') == 'validInvoice' and rule.get('id'))
+        for field in ('drafts', 'ruleForms'):
+            forms = center.get(field, {})
+            if isinstance(forms, dict):
+                removed_ids.update(key for key, value in forms.items()
+                                   if isinstance(value, dict) and value.get('metric') == 'validInvoice')
+
+    def obsolete(value):
+        return isinstance(value, dict) and (value.get('metric') == 'validInvoice' or value.get('id') in removed_ids)
+
+    def clean(value):
+        if isinstance(value, list):
+            return [clean(item) for item in value if not obsolete(item)]
+        if isinstance(value, dict):
+            return {key: clean(item) for key, item in value.items() if key not in removed_ids and not obsolete(item)}
+        return value
+
+    changed_rules = False
+    for center in centers:
+        old = encode(center)
+        for field in ('rules', 'reviewedRules', 'ruleForms', 'drafts', 'notes'):
+            if field in center:
+                center[field] = clean(center[field])
+        if center.get('editingId') in removed_ids:
+            center['editingId'] = None
+        if encode(center) != old:
+            changed_rules = True
+    checks = data.get('submissions', {}).get('checks', {})
+    if changed_rules or 'validInvoice' in encode(checks):
+        checks.clear()
+    if changed_rules and 'rulesSubmission' in data:
+        data['rulesSubmission'].setdefault('reviewedAt', {})['expense'] = ''
+    for document in data.get('auditDocuments', []):
+        document.pop('validInvoice', None)
+    for policy in data.get('policies', []):
+        for clause in policy.get('clauses', []):
+            if isinstance(clause.get('text'), str):
+                clause['text'] = clause['text'].replace('查验结果不明确的票据应补充核验。', '提取信息缺失或不明确时，由本人补充并核对。')
+    return encode(data) != before
 
 
 class Conflict(Exception):
@@ -27,7 +96,7 @@ def merge_submissions(current, incoming):
         'title', 'applicant', 'department', 'paymentCompany', 'travelType',
         'purpose', 'legs', 'activities', 'activityMode', 'companions',
         'applicationId', 'expenses', 'files', 'subsidyCents', 'materialIds',
-        'sourceImportKey', 'legacyPeriod',
+        'sourceImportKey', 'legacyPeriod', 'returnDatePending',
     }
     if not isinstance(incoming, dict):
         raise Conflict('草稿数据格式无效。')
@@ -44,22 +113,36 @@ def merge_submissions(current, incoming):
         if received is not None:
             if not isinstance(received, dict):
                 raise Conflict('草稿字段格式无效。')
+            if 'returnDatePending' in received and not isinstance(received['returnDatePending'], bool):
+                raise Conflict('返程日期待定标志必须为布尔值。')
             changed = any(key in received and received[key] != original.get(key) for key in editable)
             if changed:
-                saved.update({key: copy.deepcopy(received[key]) for key in editable if key in received})
+                baseline = current.get('edits', {}).get(draft_id, original)
+                try:
+                    candidate = merge_draft_patch(baseline, {key: received[key] for key in editable if key in received})
+                    saved.update(apply_submission_defaults(candidate, baseline))
+                except ValueError as exc:
+                    raise Conflict(str(exc)) from None
                 saved['version'] = original['version'] + 1
                 saved['savedAt'] = now()
                 result.setdefault('checks', {}).pop(draft_id, None)
+                if 'edits' not in incoming:
+                    result.setdefault('edits', {}).pop(draft_id, None)
         if 'edits' in incoming:
             edit = incoming_edits.get(draft_id)
             if edit is None:
                 result.setdefault('edits', {}).pop(draft_id, None)
             elif isinstance(edit, dict):
-                result.setdefault('edits', {})[draft_id] = {
-                    **copy.deepcopy(saved),
-                    **{key: copy.deepcopy(edit[key]) for key in editable if key in edit},
-                    'version': saved['version'], 'status': 'draft', 'id': draft_id,
-                }
+                baseline = current.get('edits', {}).get(draft_id, original)
+                try:
+                    candidate = merge_draft_patch(baseline, {key: edit[key] for key in editable if key in edit})
+                    effective = apply_submission_defaults(candidate, baseline)
+                except ValueError as exc:
+                    raise Conflict(str(exc)) from None
+                effective.update(version=saved['version'], status='draft', id=draft_id)
+                result.setdefault('edits', {})[draft_id] = effective
+                if any(effective.get(key) != baseline.get(key) for key in editable):
+                    result.setdefault('checks', {}).pop(draft_id, None)
             else:
                 raise Conflict('草稿编辑内容格式无效。')
     return result
@@ -83,10 +166,16 @@ def merge_rule_list(previous, incoming, detailed=False):
                 value['enabled'] = received['enabled']
             output.append(value)
             continue
-        if received.get('metric') not in ('amount', 'meal', 'hotelNight', 'days', 'invoiceUnique', 'validInvoice', 'attachment') or received.get('system') not in ('oa', 'expense') or received.get('scope') not in ('both', 'submit', 'review'):
+        if received.get('metric') not in ('amount', 'meal', 'hotelNight', 'days', 'invoiceUnique', 'attachment', 'semantic') or received.get('system') not in ('oa', 'expense') or received.get('scope') not in ('both', 'submit', 'review'):
             raise Conflict('个人规则条件或范围无效。')
         value = copy.deepcopy(received)
         value['origin'] = 'personal'
+        if value.get('effect') != 'warn':
+            raise Conflict('个人规则仅可提醒本人，不能阻断提单。')
+        try:
+            validate_semantic_rule(value)
+        except ValueError as error:
+            raise Conflict(str(error)) from None
         if detailed:
             value['source'] = '本人维护'
         for key in ('thresholdMinor', 'thresholdDays'):
@@ -109,11 +198,22 @@ class Store:
                 CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL);
                 CREATE INDEX IF NOT EXISTS events_run ON events(run_id,id);
                 CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, metadata TEXT NOT NULL, storage_name TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS translations (file_id TEXT PRIMARY KEY REFERENCES files(id), result TEXT NOT NULL);
             ''')
             if seed is None:
                 seed_path = Path(__file__).with_name('seed.json')
                 seed = json.loads(seed_path.read_text()) if seed_path.exists() else {'data': {}, 'tasks': [], 'activeTask': None}
+            seed = copy.deepcopy(seed)
+            remove_invoice_verification(seed.get('data', {}))
+            migrate_rules(seed.get('data', {}))
             db.execute('INSERT OR IGNORE INTO workspace VALUES(1,0,?)', (encode(seed),))
+            row = db.execute('SELECT revision,state FROM workspace WHERE id=1').fetchone()
+            state = json.loads(row['state'])
+            changed = remove_invoice_verification(state.get('data', {}))
+            changed = migrate_rules(state.get('data', {})) or changed
+            changed = expire_questions(state) or changed
+            if changed:
+                db.execute('UPDATE workspace SET revision=?,state=? WHERE id=1', (row['revision'] + 1, encode(state)))
 
     def connect(self):
         db = sqlite3.connect(self.path, timeout=20)
@@ -136,6 +236,7 @@ class Store:
             row = db.execute('SELECT revision,state FROM workspace WHERE id=1').fetchone()
             state = json.loads(row['state'])
             result = fn(state)
+            expire_questions(state)
             db.execute('UPDATE workspace SET revision=?,state=? WHERE id=1', (row['revision'] + 1, encode(state)))
             return copy.deepcopy(result)
 
@@ -146,7 +247,7 @@ class Store:
             def apply(state):
                 updates = patch.get('data', {})
                 # Receipts and ledgers can only be written by business transactions.
-                protected = {'receipts', 'submissionLedger', 'documents', 'analysisRecords', 'auditDocuments', 'expenseCategories', 'policies'}
+                protected = {'receipts', 'submissionLedger', 'documents', 'analysisRecords', 'auditDocuments', 'expenseCategories', 'policies', 'toolResults', 'ruleMigration'}
                 for key, value in updates.items():
                     if key == 'submissions' and key in state['data']:
                         state['data'][key] = merge_submissions(state['data'][key], value)
@@ -166,6 +267,7 @@ class Store:
                         state['data'][key] = merged
                     elif key not in protected:
                         state['data'][key] = value
+                remove_invoice_verification(state['data'])
                 deleted = set(patch.get('deletedTaskIds', []))
                 state['tasks'] = [t for t in state['tasks'] if t['id'] not in deleted or t.get('activeRunId')]
                 for incoming in patch.get('tasks', []):
@@ -173,13 +275,24 @@ class Store:
                     if current is None:
                         fresh = copy.deepcopy(incoming)
                         fresh.pop('activeRunId', None)
+                        for message in fresh.get('messages', []):
+                            message.pop('question', None)
+                            message.pop('questionAnswer', None)
+                        if fresh.get('status') == '待你回答':
+                            fresh['status'] = '已暂停'
                         state['tasks'].append(fresh)
                         continue
                     for key in ('title', 'input', 'refs', 'capability', 'updated'):
                         if key in incoming:
                             current[key] = incoming[key]
                     known = {m['id'] for m in current.get('messages', [])}
-                    current.setdefault('messages', []).extend(m for m in incoming.get('messages', []) if m['id'] not in known and not m['id'].startswith('assistant-'))
+                    for message in incoming.get('messages', []):
+                        if message['id'] not in known and not message['id'].startswith('assistant-'):
+                            clean = copy.deepcopy(message)
+                            clean.pop('question', None)
+                            clean.pop('questionAnswer', None)
+                            current.setdefault('messages', []).append(clean)
+                            known.add(message['id'])
                 if 'activeTask' in patch:
                     state['activeTask'] = patch['activeTask']
             self.mutate(apply)
@@ -192,6 +305,7 @@ class Store:
                 row = db.execute('SELECT revision,state FROM workspace WHERE id=1').fetchone()
                 state = json.loads(row['state'])
                 initialize(state)
+                expire_questions(state)
                 db.execute('UPDATE workspace SET revision=?,state=? WHERE id=1', (row['revision'] + 1, encode(state)))
             db.execute('INSERT INTO runs VALUES(?,?,?,?,?,?)', (run_id, task_id, 'running', encode(request), now(), now()))
 
@@ -219,22 +333,43 @@ class Store:
             return [{'id': row['id'], 'kind': row['kind'], 'data': json.loads(row['data'])} for row in rows]
 
     def recover(self):
-        with self.lock, self.connect() as db:
-            rows = db.execute("SELECT id,task_id FROM runs WHERE status='running'").fetchall()
-        for row in rows:
-            self.finish_run(row['id'], 'interrupted')
-            self.append_event(row['id'], 'error', {'message': '服务已重启，上次任务已暂停，可重新发送继续。'})
-            self.append_event(row['id'], 'done', {})
-        if rows or any(t.get('activeRunId') for t in self.get_state()['tasks']):
+        with self.lock:
+            with self.connect() as db:
+                rows = db.execute("SELECT id,task_id FROM runs WHERE status='running'").fetchall()
+            interrupted = {row['id']: row['task_id'] for row in rows}
+            for task in self.get_state()['tasks']:
+                if task.get('activeRunId'):
+                    interrupted.setdefault(task['activeRunId'], task['id'])
+            if not interrupted:
+                return
+            changed_steps = []
             def recover_state(state):
-                for task in state['tasks']:
-                    if task.get('activeRunId'):
-                        message_id = 'assistant-' + task['activeRunId']
-                        if not any(m['id'] == message_id for m in task.get('messages', [])):
-                            task.setdefault('messages', []).append({'id': message_id, 'role': 'assistant', 'text': '服务已重启，上次任务已暂停，可重新发送继续。'})
+                for run_id, task_id in interrupted.items():
+                    task = next((item for item in state['tasks'] if item['id'] == task_id), None)
+                    if task is None:
+                        continue
+                    message_id = 'assistant-' + run_id
+                    existing = next((m for m in task.get('messages', []) if m.get('id') == message_id), None)
+                    if existing is None:
+                        existing = {'id': message_id, 'role': 'assistant', 'createdAt': int(time.time()*1000)}
+                        task.setdefault('messages', []).append(existing)
+                    existing['runId'] = run_id
+                    changed_steps.extend((run_id, step) for step in finish_message_steps(existing, 'interrupted'))
+                    if not existing.get('question'):
+                        existing['text'] = '服务已重启，上次任务已暂停，可重新发送继续。'
+                        if any(card.get('kind') == 'submission' for card in existing.get('cards', [])):
+                            existing['submissionPhase'] = 'collecting' if pending_question(task) else 'ready'
+                    if task.get('activeRunId') in {None, run_id}:
                         task['activeRunId'] = None
-                        task['status'] = '已暂停'
+                        task['status'] = '待你回答' if pending_question(task) else '已暂停'
             self.mutate(recover_state)
+            for run_id in interrupted:
+                self.finish_run(run_id, 'interrupted')
+            for run_id, step in changed_steps:
+                self.append_event(run_id, 'tool', step)
+            for run_id in interrupted:
+                self.append_event(run_id, 'error', {'message': '服务已重启，上次任务已暂停，可重新发送继续。'})
+                self.append_event(run_id, 'done', {})
 
     def add_file(self, metadata, storage_name):
         with self.lock, self.connect() as db:
@@ -248,3 +383,12 @@ class Store:
     def list_files(self):
         with self.connect() as db:
             return [json.loads(row[0]) for row in db.execute('SELECT metadata FROM files ORDER BY rowid DESC').fetchall()]
+
+    def get_translation(self, file_id):
+        with self.connect() as db:
+            row = db.execute('SELECT result FROM translations WHERE file_id=?', (file_id,)).fetchone()
+            return json.loads(row[0]) if row else None
+
+    def save_translation(self, file_id, result):
+        with self.lock, self.connect() as db:
+            db.execute('INSERT INTO translations VALUES(?,?) ON CONFLICT(file_id) DO UPDATE SET result=excluded.result', (file_id, encode(result)))

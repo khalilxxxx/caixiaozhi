@@ -830,3 +830,116 @@
     scroll-behavior: auto;
   }
 }
+.rc-sample-test,
+.rc-migration-history {
+  border-top: 1px solid var(--line);
+  margin-top: 24px;
+  padding-top: 16px;
+  font-size: 13px;
+}
+.rc-migration-history {
+  margin: 0 0 18px;
+  border-top: 0;
+  padding-top: 0;
+}
+.rc-sample-test > summary,
+.rc-migration-history > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.rc-sample-test > summary:focus-visible,
+.rc-migration-history > summary:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+}
+.rc-sample-body {
+  display: grid;
+  gap: 12px;
+  padding-top: 18px;
+}
+.rc-sample-body > label {
+  font-weight: 500;
+}
+.rc-sample-body > select {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: var(--ink);
+  font: inherit;
+}
+.rc-sample-input {
+  background: var(--page, #fafaf9);
+  padding: 14px;
+  border-radius: 8px;
+}
+.rc-sample-input dl {
+  margin: 12px 0 0;
+}
+.rc-sample-input dl > div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+}
+.rc-sample-input dt {
+  color: var(--muted);
+}
+.rc-sample-input dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+.rc-sample-input p {
+  margin: 0 0 5px;
+}
+.rc-sample-actions,
+.rc-sample-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.rc-sample-actions > span,
+.rc-sample-result-head time,
+.rc-sample-result small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.rc-sample-result {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  line-height: 1.7;
+}
+.rc-sample-result p {
+  margin: 12px 0 8px;
+}
+.rc-sample-result blockquote {
+  margin: 8px 0;
+  padding: 10px 12px;
+  background: var(--page, #fafaf9);
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.rc-migration-history ul {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.rc-migration-history li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.rc-migration-history li > span {
+  margin-left: 12px;
+  color: var(--muted);
+}
+.rc-migration-history li > p {
+  margin: 6px 0 0;
+  line-height: 1.6;
+  color: var(--muted);
+}

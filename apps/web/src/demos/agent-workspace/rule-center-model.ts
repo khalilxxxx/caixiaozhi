@@ -4,7 +4,7 @@ import {
   type Scope,
   type SystemKey,
 } from '../srs-review/model.js';
-import type { WorkspaceRule } from './RulesSubmission.js';
+import type { RuleMetric, WorkspaceRule } from './RulesSubmission.js';
 
 export type DemoRule = WorkspaceRule & {
   category:
@@ -77,7 +77,8 @@ const now = () =>
     minute: '2-digit',
     hour12: false,
   });
-const categoryByMetric: Record<Metric, DemoRule['category']> = {
+const categoryByMetric: Record<RuleMetric, DemoRule['category']> = {
+  semantic: 'general',
   amount: 'general',
   meal: 'business_entertainment',
   hotelNight: 'lodging',
@@ -86,13 +87,14 @@ const categoryByMetric: Record<Metric, DemoRule['category']> = {
   validInvoice: 'invoice',
   attachment: 'general',
 };
-const ruleNames: Record<Metric, string> = {
+const ruleNames: Record<RuleMetric, string> = {
+  semantic: '业务语义检查',
   amount: '单据金额检查',
   meal: '每单餐饮费用检查',
   hotelNight: '住宿费用标准',
   days: '申请天数检查',
   invoiceUnique: '发票重复报销校验',
-  validInvoice: '发票有效性检查',
+  validInvoice: '',
   attachment: '附件完整性检查',
 };
 const scopeText: Record<Scope, string> = {
@@ -115,19 +117,22 @@ function actionText(rule: WorkspaceRule): string {
 
 function businessLogic(rule: WorkspaceRule): string {
   const amount = (rule.thresholdMinor ?? 0) / 100;
-  const condition: Record<Metric, string> = {
+  const condition: Record<RuleMetric, string> = {
+    semantic: rule.instruction || rule.description,
     amount: `每张报销单的报销金额超过${amount}元`,
     meal: `每张报销单的餐饮费用合计超过${amount}元`,
     hotelNight: `住宿费用每间夜超过${amount}元`,
     days: `OA申请天数超过${rule.thresholdDays ?? 0}天`,
     invoiceUnique: '同一张发票重复用于费用报销',
-    validInvoice: '报销发票查验为无效',
+    validInvoice: '',
     attachment:
       rule.system === 'oa'
         ? 'OA申请缺少对应证明材料'
         : '报销单缺少对应费用凭证',
   };
-  return `${condition[rule.metric]}时，${actionText(rule)}。`;
+  return rule.metric === 'semantic'
+    ? condition.semantic
+    : `${condition[rule.metric]}时，${actionText(rule)}。`;
 }
 
 function metadata(
@@ -143,6 +148,14 @@ function metadata(
   let evidence: DemoRule['evidence'];
   let output: string;
   switch (rule.metric) {
+    case 'semantic':
+      evidence = (rule.requiredFields ?? []).map((path) => ({
+        name: path,
+        source: path,
+        purpose: '核对原文事实',
+      }));
+      output = '逐规则返回命中、未命中或证据不足，并列明原因及原文证据。';
+      break;
     case 'hotelNight':
       applicability.push('报销单包含住宿费用项');
       evidence = [
@@ -215,15 +228,9 @@ function metadata(
         '按每张发票输出重复校验结果；发现重复时列明发票标识与关联报销单。';
       break;
     case 'validInvoice':
-      applicability.push('报销单关联发票');
-      evidence = [
-        {
-          name: '发票查验结果',
-          source: '发票查验 · 返回记录',
-          purpose: '核对发票是否已取得有效的查验结论',
-        },
-      ];
-      output = '按每张发票输出有效性检查结果；未取得查验结果的发票保持待核实。';
+      applicability.push('已停用');
+      evidence = [];
+      output = '';
       break;
     case 'attachment':
       evidence = [
@@ -252,26 +259,47 @@ function metadata(
 export function readRuleCenter(data: Record<string, any>): RuleCenterState {
   if (data[RULE_CENTER_KEY]) {
     const cached = data[RULE_CENTER_KEY] as RuleCenterState;
-    let changed = false;
+    let changed = cached.rules.some((rule) => rule.metric === 'validInvoice');
     const refreshMissing = (rule: DemoRule): DemoRule => {
       if (rule.metric !== 'attachment' || rule.missing !== genericMissing)
         return rule;
       changed = true;
       return { ...rule, missing: metadata(rule).missing };
     };
-    const rules = cached.rules.map(refreshMissing);
+    const rules = cached.rules
+      .filter((rule) => rule.metric !== 'validInvoice')
+      .map(refreshMissing);
     const drafts = Object.fromEntries(
-      Object.entries(cached.drafts).map(([id, draft]) => {
-        const generated = draft.generated
-          ? refreshMissing(draft.generated)
-          : null;
-        return [
-          id,
-          generated === draft.generated ? draft : { ...draft, generated },
-        ];
-      }),
+      Object.entries(cached.drafts)
+        .filter(
+          ([id, draft]) =>
+            draft.generated?.metric !== 'validInvoice' &&
+            cached.rules.find((rule) => rule.id === id)?.metric !==
+              'validInvoice',
+        )
+        .map(([id, draft]) => {
+          const generated = draft.generated
+            ? refreshMissing(draft.generated)
+            : null;
+          return [
+            id,
+            generated === draft.generated ? draft : { ...draft, generated },
+          ];
+        }),
     );
-    return changed ? { ...cached, rules, drafts } : cached;
+    return changed ||
+      Object.keys(drafts).length !== Object.keys(cached.drafts).length
+      ? {
+          ...cached,
+          rules,
+          drafts,
+          editingId:
+            cached.rules.find((rule) => rule.id === cached.editingId)
+              ?.metric === 'validInvoice'
+              ? null
+              : cached.editingId,
+        }
+      : cached;
   }
   const localRules = data.rulesSubmission?.rules;
   const rules: WorkspaceRule[] = Array.isArray(localRules)
@@ -286,20 +314,22 @@ export function readRuleCenter(data: Record<string, any>): RuleCenterState {
       }));
   const at = now();
   return {
-    rules: rules.map((rule) => {
-      const logic = businessLogic(rule);
-      return {
-        ...rule,
-        ...metadata(rule),
-        logic,
-        source: rule.origin === 'builtin' ? '公司通用规则' : '本人维护',
-        updatedAt: at,
-        revisions: [
-          { version: rule.version, at, summary: '载入现有规则', logic },
-        ],
-        stage: 'published',
-      };
-    }),
+    rules: rules
+      .filter((rule) => rule.metric !== 'validInvoice')
+      .map((rule) => {
+        const logic = businessLogic(rule);
+        return {
+          ...rule,
+          ...metadata(rule),
+          logic,
+          source: rule.origin === 'builtin' ? '公司通用规则' : '本人维护',
+          updatedAt: at,
+          revisions: [
+            { version: rule.version, at, summary: '载入现有规则', logic },
+          ],
+          stage: 'published',
+        };
+      }),
     drafts: {},
     editingId: null,
   };
@@ -366,7 +396,6 @@ function parseCondition(text: string): ParsedCondition | null {
     同一张发票重复用于费用报销: { metric: 'invoiceUnique', system: 'expense' },
     发票重复用于费用报销: { metric: 'invoiceUnique', system: 'expense' },
     发票重复报销: { metric: 'invoiceUnique', system: 'expense' },
-    报销发票查验为无效: { metric: 'validInvoice', system: 'expense' },
     报销单缺少对应费用凭证: { metric: 'attachment', system: 'expense' },
     OA申请缺少对应证明材料: { metric: 'attachment', system: 'oa' },
   };
@@ -475,6 +504,15 @@ export function toWorkspaceRule(rule: DemoRule): WorkspaceRule {
     enabled: rule.enabled,
     version: rule.version,
     description: rule.description,
+    ...(rule.instruction === undefined
+      ? {}
+      : { instruction: rule.instruction }),
+    ...(rule.requiredFields === undefined
+      ? {}
+      : { requiredFields: [...rule.requiredFields] }),
+    ...(rule.documentTypes === undefined
+      ? {}
+      : { documentTypes: [...rule.documentTypes] }),
     ...(rule.thresholdMinor === undefined
       ? {}
       : { thresholdMinor: rule.thresholdMinor }),

@@ -1,5 +1,10 @@
 import { createContext, useContext } from 'react';
 import type { CapabilityId } from './capability-model';
+import type { ToolStep } from './run-progress-model';
+import type {
+  ClarificationQuestion,
+  QuestionAnswerInput,
+} from './question-model';
 
 export type PageId =
   | 'home'
@@ -23,6 +28,7 @@ export interface ContextRef {
   id: string;
   title: string;
   version?: string;
+  fileIds?: string[];
 }
 export interface ResultCard {
   kind: string;
@@ -38,8 +44,14 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
   cards?: ResultCard[];
+  submissionPhase?: 'collecting' | 'ready';
+  tools?: ToolStep[];
+  runId?: string;
+  runStatus?: string;
   time?: string;
   createdAt?: number;
+  question?: ClarificationQuestion;
+  questionAnswer?: QuestionAnswerInput;
 }
 export interface Task {
   id: string;
@@ -70,7 +82,9 @@ export interface WorkspaceAPI {
   closePanel: () => void;
   navigate: (page: PageId) => void;
   attach: (ref: ContextRef) => void;
+  selectSkill: (ref: ContextRef) => void;
   send: (text: string, refs?: ContextRef[]) => void;
+  answerQuestion: (answer: QuestionAnswerInput) => Promise<void>;
   message: (text: string, cards?: ResultCard[]) => void;
   notify: (text: string) => void;
   setTaskStatus: (status: string) => void;

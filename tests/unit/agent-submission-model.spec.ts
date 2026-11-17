@@ -681,6 +681,84 @@ describe('智能提单业务字段', () => {
     ).toHaveLength(1);
   });
 
+  it('单选A到A+B再回到A保留人工金额和事由，重复选择不产生重复项', () => {
+    const single: MaterialExpenseImport = {
+      ...batch,
+      id: 'selection-a',
+      materialBatchId: 'selection-a',
+      items: [batch.items[0]!],
+      files: [batch.files![0]!],
+      materialIds: ['invoice-hotel'],
+    };
+    const combined: MaterialExpenseImport = {
+      ...batch,
+      id: 'selection-ab',
+      materialBatchId: 'selection-ab',
+      items: [batch.items[0]!, batch.items[2]!],
+    };
+    let current = importMaterialExpenses(createInitialDrafts(), single);
+    current.expense.expenses[0]!.amount = '12.00';
+    current.expense.expenses[0]!.reason = '人工修正事由';
+    current.expense.expenses[0]!.currency = 'USD';
+    for (const selection of [combined, single, combined, single]) {
+      current = importMaterialExpenses(current, selection);
+      expect(
+        current.expense.expenses.find((item) => item.id === 'hotel'),
+      ).toMatchObject({
+        amount: '12.00',
+        reason: '人工修正事由',
+        currency: 'USD',
+        sourceBatchId: selection.materialBatchId,
+      });
+      expect(current.expense.expenses.map((item) => item.id).sort()).toEqual([
+        'hotel',
+        'rail',
+      ]);
+      expect(
+        current.expense.expenses.filter((item) => item.id === 'hotel'),
+      ).toHaveLength(1);
+    }
+  });
+
+  it('改变选区并跨费用归属载入仍保留人工修改及主动清空字段', () => {
+    const first = importMaterialExpenses(createInitialDrafts(), batch);
+    first.expense.expenses[0]!.amount = '12.00';
+    first.expense.expenses[0]!.reason = '';
+    const changedSelection: MaterialExpenseImport = {
+      ...batch,
+      id: 'selection-daily',
+      materialBatchId: 'selection-daily',
+      items: [
+        {
+          ...batch.items[0]!,
+          group: 'daily',
+          amount: 70000,
+          purpose: '更新的材料事由',
+        },
+      ],
+    };
+    expect(affectedMaterialDrafts(first, changedSelection)).toEqual([
+      'expense',
+      'personal',
+    ]);
+    const changed = importMaterialExpenses(first, changedSelection);
+    expect(changed.expense.expenses.some((item) => item.id === 'hotel')).toBe(
+      false,
+    );
+    expect(
+      changed.personal.expenses.filter((item) => item.id === 'hotel'),
+    ).toHaveLength(1);
+    expect(
+      changed.personal.expenses.find((item) => item.id === 'hotel'),
+    ).toMatchObject({
+      amount: '12.00',
+      reason: '',
+      group: 'daily',
+      categoryId: 'other-hotel',
+      sourceBatchId: 'selection-daily',
+    });
+  });
+
   it('新材料版本刷新未改动字段，保留人工修改与主动清空字段', () => {
     const first = importMaterialExpenses(createInitialDrafts(), batch);
     first.expense.expenses[0]!.amount = '600.00';

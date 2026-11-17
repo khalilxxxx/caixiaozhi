@@ -40,3 +40,51 @@ export function safeState(raw){
  raw.apps=raw.apps.filter(a=>a&&typeof a.id==='string'&&typeof a.name==='string');
  return raw.apps.length?raw:createSeed();
 }
+
+// The React catalog and standalone workspace share this state and permission source.
+export const TOOL_STORE = 'caixiaozhi-tool-center-v1';
+export const TOOL_CHANGE_EVENT = 'caixiaozhi-tool-catalog-change';
+export function readToolState(storage = localStorage) {
+  const text = storage.getItem(TOOL_STORE);
+  if (!text) return createSeed();
+  let raw;
+  try { raw = JSON.parse(text); } catch { throw new Error('工具数据无法读取，请保留浏览器数据后重试。'); }
+  return safeState(raw);
+}
+export function writeToolState(state, storage = localStorage) {
+  storage.setItem(TOOL_STORE, JSON.stringify(state));
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(TOOL_CHANGE_EVENT));
+}
+export function canReviewTool(app, user) {
+  return !!app && !!user && ['business','technical','admin'].includes(user.role) && (app.pendingRevision || app).status !== 'draft';
+}
+export function getToolCatalog(state) {
+  const identity = USERS[state.persona] || USERS.finance;
+  const items = state.apps.filter(app => canDiscover(app,identity) && (app.status === 'published' || canManage(app,identity)) || canReviewTool(app,identity)).map(app => ({
+    id:app.id, name:app.name, description:app.description || '', category:app.category || '办公效率', icon:app.icon || 'code',
+    version:app.version || '—', owner:app.maintainer || app.owner || '—', status:app.status,
+    latestVersion:app.pendingRevision?.version || app.version || '—', latestStatus:app.pendingRevision?.status || app.status,
+    favorite:state.favorites.includes(app.id), canUse:canUse(app,identity), canManage:canManage(app,identity), canReview:canReviewTool(app,identity), canView:canDiscover(app,identity),
+    updatedAt:app.pendingRevision?.submittedAt || app.updatedAt || app.publishedAt || app.submittedAt || app.createdAt || '', sourceLabel:'演示权限 · 浏览器本地保存',
+  }));
+  items.unshift({id:'expense-summary',name:'CSV 费用汇总',description:'按费用类别汇总 CSV 明细，保存结果并导出汇总表。',category:'分析报告',icon:'chart',version:'1.0',owner:'财小智',status:'published',latestVersion:'1.0',latestStatus:'published',favorite:state.favorites.includes('expense-summary'),canUse:true,canManage:false,canReview:false,canView:true,updatedAt:'',sourceLabel:'服务端工具'});
+  return {items,identity,canUpload:['author','admin'].includes(identity.role),canReview:['business','technical','admin'].includes(identity.role)};
+}
+export function toggleToolFavorite(id, storage = localStorage) {
+  const state = readToolState(storage);
+  if (!getToolCatalog(state).items.some(item => item.id === id && item.canView)) throw new Error('工具不存在或没有查看权限。');
+  state.favorites = state.favorites.includes(id) ? state.favorites.filter(value => value !== id) : [...state.favorites,id];
+  writeToolState(state, storage);
+}
+export function setToolPersona(id, storage = localStorage) {
+  if (!USERS[id]) throw new Error('演示身份不存在。');
+  const state = readToolState(storage); state.persona = id; writeToolState(state, storage);
+}
+export function getToolDetail(state, id) {
+  const item = getToolCatalog(state).items.find(value => value.id === id && value.canView);
+  if (!item) return null;
+  if (id === 'expense-summary') return {...item,execution:'服务端处理，可在对话中调用',input:'CSV 费用明细',output:'按费用类别汇总的结果与 CSV 文件',visibilityLabel:'当前工作区',useScopeLabel:'当前工作区',resultLabel:'完整结果保存在服务端，可重新打开和下载。',history:[]};
+  const app = state.apps.find(value => value.id === id);
+  const scope = value => ({all:'全体员工',finance:'财务共享中心',selected:'指定人员'})[value] || '财务共享中心';
+  return {...item,execution:app.builtIn ? '浏览器内处理' : '隔离 HTML 工具',input:app.builtIn ? 'UTF-8 CSV 文件' : '由工具表单定义',output:app.builtIn ? (id === 'report' ? '基础费用报告与 HTML 导出' : '计算结果与 CSV 导出') : '由工具本身提供',visibilityLabel:scope(app.visibility),useScopeLabel:scope(app.useScope || app.visibility),resultLabel:app.builtIn ? '活动记录仅保存摘要；重新打开需重新处理文件。' : '结果与导出能力由工具本身提供。',history:(app.history || []).map(value => ({version:value.version,status:value.status,archivedAt:value.archivedAt || ''}))};
+}

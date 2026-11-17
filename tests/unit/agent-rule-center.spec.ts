@@ -11,9 +11,12 @@ import {
 } from '../../apps/web/src/demos/agent-workspace/rule-center-model.js';
 
 describe('规则中心本地规则模型', () => {
-  it('迁移现有规则的金额分值、停用状态和版本，并补充七条示例的只读信息', () => {
+  it('迁移现有规则的金额分值、停用状态和版本，并补充六条规则的只读信息', () => {
     const initial = readRuleCenter({});
-    expect(initial.rules).toHaveLength(7);
+    expect(initial.rules).toHaveLength(6);
+    expect(initial.rules.some((rule) => rule.metric === 'validInvoice')).toBe(
+      false,
+    );
     const hotel = initial.rules.find((rule) => rule.id === 'R002')!;
     expect(hotel.thresholdMinor).toBe(60000);
     expect(hotel.version).toBe(3);
@@ -262,5 +265,36 @@ describe('规则中心本地规则模型', () => {
       version: 3,
       description: '普通员工差旅住宿费用不超过600元/间夜。',
     });
+  });
+  it('旧有效性规则与生成草稿退出当前规则中心，拒绝重新生成', () => {
+    const initial = readRuleCenter({});
+    const removed = {
+      ...initial.rules[0]!,
+      id: 'R003',
+      metric: 'validInvoice' as const,
+      name: '发票有效性检查',
+    };
+    const cached = {
+      ...initial,
+      rules: [...initial.rules, removed],
+      editingId: 'R003',
+      drafts: {
+        R003: {
+          text: '报销发票查验为无效时，审单时提醒本人。',
+          generated: removed,
+          generatedFrom: '',
+          savedAt: '',
+          baseVersion: 1,
+        },
+      },
+    };
+    const restored = readRuleCenter({ [RULE_CENTER_KEY]: cached });
+    expect(restored.rules.some((rule) => rule.metric === 'validInvoice')).toBe(
+      false,
+    );
+    expect(restored.drafts.R003).toBeUndefined();
+    expect(restored.editingId).toBeNull();
+    expect(generateDemoRule(cached.drafts.R003.text).rule).toBeUndefined();
+    expect(readRuleCenter({ [RULE_CENTER_KEY]: restored })).toBe(restored);
   });
 });

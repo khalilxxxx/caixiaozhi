@@ -1,3 +1,4 @@
+import { getDraftType } from './submission-model.js';
 import type {
   DraftId,
   SubmissionDraft,
@@ -84,7 +85,7 @@ const datePattern =
   '(?:\\d{4}年)?\\d{1,2}月\\d{1,2}[日号]|\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{1,2}[日号]';
 const transportPattern = '(?:高铁|动车|飞机|火车|汽车|自驾)';
 const changePattern = '(?:改为|改到|改成|调整为|调整到|设为|设置为|为|是)';
-const legFields: Array<[keyof Omit<TravelLeg, 'id'>, string]> = [
+const legFields: Array<[keyof Omit<TravelLeg, 'id' | 'isReturn' | 'isOvernight'>, string]> = [
   ['departureCity', '出发城市'],
   ['arrivalCity', '到达城市'],
   ['departureDate', '出发日期'],
@@ -146,7 +147,7 @@ function isRoundTrip(legs: TravelLeg[]): boolean {
 }
 
 function missingFields(draft: SubmissionDraft): string {
-  if (draft.id !== 'travel') return '请在单据中补充事由和费用明细。';
+  if (getDraftType(draft) !== 'travel') return '请在单据中补充事由和费用明细。';
   if (!draft.legs.length) return '请在单据中补充行程、日期和交通工具。';
   const fields: string[] = [];
   if (draft.legs.some((item) => !item.departureCity || !item.arrivalCity))
@@ -171,9 +172,10 @@ export function applySubmissionMessage<TCheck>(
     changes: [],
     message,
   });
+  if (!current || !state.drafts[draftId]) return unchanged('草稿不存在，请从我的单据重新选择。');
   if (
     current.status === 'awaiting_receipt' ||
-    state.drafts[draftId].status === 'awaiting_receipt'
+    state.drafts[draftId]?.status === 'awaiting_receipt'
   ) {
     return unchanged('单据正在等待回执，请查询回执。');
   }
@@ -216,7 +218,7 @@ export function applySubmissionMessage<TCheck>(
     else travelClauses.push(clause);
   }
 
-  if (draftId === 'travel' && travelClauses.length) {
+  if (getDraftType(draftId) === 'travel' && travelClauses.length) {
     const travelText = travelClauses.join('，');
     if (
       /下周|下星期|下个月|明天|后天|月底|周[一二三四五六日天]/.test(travelText)

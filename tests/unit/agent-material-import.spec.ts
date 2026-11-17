@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildMaterialExpenseBatch,
+  materialExpenseError,
+  materialSelectionId,
+  selectMaterialScope,
   type MaterialExpense,
   type MaterialFile,
 } from '../../apps/web/src/demos/agent-workspace/material-import.js';
@@ -149,18 +152,79 @@ describe('材料费用导出', () => {
     ]);
   });
 
-  it('保留未补全的住宿日期，晚数留待用户确认', () => {
+  it('未补全住宿日期的费用留待核对，不能转入草稿', () => {
     const batch = buildMaterialExpenseBatch({
       items: [{ ...hotel, end: undefined }],
       files,
       revision: 3,
     });
 
-    expect(batch.items[0]).toMatchObject({
-      start: '2026-11-10',
-      purpose: '客户现场沟通住宿',
-    });
-    expect(batch.items[0]?.end).toBeUndefined();
-    expect(batch.items[0]?.nights).toBeUndefined();
+    expect(batch.items).toEqual([]);
+    expect(batch.materialIds).toEqual([]);
+  });
+  it('只整理选中文件，未知文件和空选择均不会混入样例', () => {
+    const state = { files, items: [hotel, meal], revision: 1 };
+    expect(
+      selectMaterialScope(state, { fileIds: ['meal-file'] }).items,
+    ).toEqual([meal]);
+    expect(
+      selectMaterialScope(state, { fileId: 'unknown-file' }).items,
+    ).toEqual([]);
+    expect(
+      selectMaterialScope(state, { fileIds: [], batchId: 'batch-20261111' })
+        .items,
+    ).toEqual([]);
+    expect(
+      selectMaterialScope(state, { batchId: 'unknown-batch' }).files,
+    ).toEqual([]);
+    expect(
+      selectMaterialScope(state, { batchId: 'batch-20261111' }).items,
+    ).toEqual([hotel, meal]);
+  });
+
+  it('独立文件选择使用稳定批次标识且只导出该范围的原件', () => {
+    const state = selectMaterialScope(
+      { files, items: [hotel, meal], revision: 3 },
+      { fileIds: ['meal-file'] },
+    );
+    const batchId = materialSelectionId(state.files);
+    const batch = buildMaterialExpenseBatch(state, batchId);
+    expect(batch.materialBatchId).toBe(batchId);
+    expect(batch.items).toEqual([expect.objectContaining({ id: 'meal' })]);
+    expect(batch.files.map((file) => file.id)).toEqual(['meal-file']);
+    expect(materialSelectionId(files)).toBe(
+      materialSelectionId([...files].reverse()),
+    );
+    expect(batchId).not.toBe(materialSelectionId(files));
+  });
+
+  it.each([
+    { amount: null },
+    { amount: 0 },
+    { amount: -100 },
+    { amount: 1.5 },
+    { date: '' },
+    { date: '2026-02-30' },
+    { category: null },
+    { group: null },
+    { name: '' },
+    { purpose: ' ' },
+  ])('缺失或无效字段不可确认也不可转入草稿 %j', (patch) => {
+    const item = { ...meal, ...patch };
+    expect(materialExpenseError(item)).not.toBe('');
+    expect(
+      buildMaterialExpenseBatch({ items: [item], files, revision: 1 }).items,
+    ).toEqual([]);
+  });
+
+  it('尚未人工确认的完整提取结果不能转入草稿', () => {
+    expect(materialExpenseError(meal)).toBe('');
+    expect(
+      buildMaterialExpenseBatch({
+        items: [{ ...meal, confirmed: false }],
+        files,
+        revision: 1,
+      }).items,
+    ).toEqual([]);
   });
 });

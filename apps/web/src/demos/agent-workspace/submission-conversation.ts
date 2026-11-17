@@ -1,5 +1,5 @@
-import type { ContextRef, Task } from './workspace';
-import type { DraftId } from './submission-model';
+import type { ChatMessage, ContextRef, Task } from './workspace';
+import { getDraftType, type DraftId, type DraftType } from './submission-model';
 import { resolveDraftId } from './submission-state';
 
 export function conversationDraft(
@@ -12,16 +12,31 @@ export function conversationDraft(
   )
     ? ''
     : text;
-  if (/个人.*报销|日常.*报销|非差旅.*报销/.test(intent)) return 'personal';
-  if (/报销/.test(intent)) return 'expense';
-  if (/差旅申请|出差申请|申请.*出差|申请差旅/.test(intent)) return 'travel';
   const ref = refs.filter((item) => item.kind === 'submission').at(-1);
-  if (ref) return resolveDraftId(ref.id);
   const previous = task.messages
     .flatMap((message) => message.cards ?? [])
     .filter((card) => card.kind === 'submission')
     .at(-1);
-  if (previous) return resolveDraftId(previous.id);
+  const context = ref ?? previous;
+  const requested: DraftType | undefined =
+    /个人.*报销|日常.*报销|非差旅.*报销/.test(intent)
+      ? 'personal'
+      : /报销/.test(intent)
+        ? 'expense'
+        : /差旅申请|出差申请|申请.*出差|申请差旅/.test(intent)
+          ? 'travel'
+          : undefined;
+  if (requested) {
+    const currentId = context?.id;
+    if (
+      currentId &&
+      getDraftType(currentId) === requested &&
+      !/新建|新增|另[建开]|再[建开]|新[的单]/.test(intent)
+    )
+      return currentId;
+    return requested;
+  }
+  if (context) return resolveDraftId(context.id);
   return /出差|返程|往返|从.+(?:去|到|前往)/.test(text) ? 'travel' : 'expense';
 }
 
@@ -40,10 +55,19 @@ export function isSubmissionFollowUp(
   );
 }
 
+export function visibleMessageCards(message: ChatMessage) {
+  return (message.cards ?? [])
+    .map((card, index) => ({ card, index }))
+    .filter(
+      ({ card }) =>
+        message.submissionPhase !== 'collecting' || card.kind !== 'submission',
+    );
+}
+
 export function latestSubmissionCards(task: Task): Set<string> {
   const latest = new Map<DraftId, string>();
   task.messages.forEach((message) =>
-    message.cards?.forEach((card, index) => {
+    visibleMessageCards(message).forEach(({ card, index }) => {
       if (card.kind === 'submission')
         latest.set(resolveDraftId(card.id), `${message.id}:${index}`);
     }),

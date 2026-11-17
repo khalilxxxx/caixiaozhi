@@ -1,7 +1,7 @@
 import type { Task } from './workspace';
 
 export function needsAttention(task: Task): boolean {
-  return /待我|暂停/.test(task.status);
+  return /待我|待你回答|暂停/.test(task.status);
 }
 
 export function selectHomeTasks(tasks: Task[]): {

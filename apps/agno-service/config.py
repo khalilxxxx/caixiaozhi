@@ -8,6 +8,11 @@ DATA_DIR = Path(os.getenv('AGNO_DATA_DIR', str(ROOT / '.runtime' / 'agno-local')
 MODEL = os.getenv('AGNO_MODEL') or os.getenv('DSH_MODEL') or 'deepseek-chat'
 API_KEY = os.getenv('AGNO_API_KEY') or os.getenv('DSH_API_KEY') or ''
 BASE_URL = os.getenv('AGNO_BASE_URL') or os.getenv('DSH_BASE_URL') or 'https://api.deepseek.com/v1'
+THINKING = os.getenv('AGNO_THINKING', 'true').strip().lower() not in {'0', 'false', 'off', 'disabled', 'no'}
 PORT = int(os.getenv('AGNO_PORT', '5191'))
 ALLOWED_ORIGINS = {'http://127.0.0.1:5190', 'http://localhost:5190', f'http://127.0.0.1:{PORT}'}
+for origin in os.getenv('AGNO_ALLOWED_ORIGINS', '').split(','):
+    origin = origin.strip()
+    if origin:
+        ALLOWED_ORIGINS.add(origin)
 MAX_FILE_BYTES = 10 * 1024 * 1024

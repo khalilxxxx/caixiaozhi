@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
   createBlankExpense,
+  getDraftType,
   draftCurrencyTotals,
   expenseNights,
   getExpenseCategories,
@@ -16,6 +17,8 @@ import {
 import { Button, Icon } from './ui';
 import { useSlice, useWorkspace } from './workspace';
 import { api, uploadFile } from './runtime-client';
+import { SubmissionDefaults } from './SubmissionDefaults';
+import { setManualExpenseField } from './submission-defaults';
 import './submission.css';
 
 type Issue = { path: string; message: string };
@@ -288,7 +291,7 @@ function FilePicker({
         <p className="sf-empty-inline">尚未添加{title}</p>
       )}
       {!multiple && files.length > 0 && (
-        <p className="sf-source-line">已关联文件 · 尚未取得发票查验结果</p>
+        <p className="sf-source-line">已关联文件 · 请核对费用信息</p>
       )}
     </div>
   );
@@ -324,12 +327,14 @@ function LegFields({
             <Icon name="plane" size={16} />
             <span>
               <strong>
+                {leg.isReturn ? '回程 · ' : ''}
                 {leg.departureCity || '出发城市待填'} →{' '}
                 {leg.arrivalCity || '到达城市待填'}
               </strong>
               <small>
-                {leg.departureDate || '出发日期待填'} —{' '}
-                {leg.arrivalDate || '到达日期待填'}
+                {leg.isReturn && !leg.departureDate
+                  ? '回程日期待补'
+                  : `${leg.departureDate || '出发日期待填'} — ${leg.arrivalDate || '到达日期待填'}`}
               </small>
             </span>
             <Icon name="down" size={15} />
@@ -688,7 +693,7 @@ function ExpenseEditor({
   }, []);
 
   function change(field: ExpenseField, value: string) {
-    onChange({ ...item, [field]: value });
+    onChange(setManualExpenseField(item, field, value));
   }
 
   function input(
@@ -1238,10 +1243,10 @@ export function SubmissionFields({
               <input aria-label={label} value={draft[field]} readOnly />
             </FormField>
           ))}
-          {draft.id !== 'personal' && (
+          {getDraftType(draft) !== 'personal' && (
             <FormField
               label="差旅类型"
-              required={draft.id === 'travel'}
+              required={getDraftType(draft) === 'travel'}
               error={
                 issues.find((issue) => issue.path === 'travelType')?.message
               }
@@ -1277,7 +1282,7 @@ export function SubmissionFields({
         </div>
       </FormSection>
 
-      {draft.id === 'expense' && (
+      {getDraftType(draft) === 'expense' && (
         <FormSection title="差旅申请关联">
           <FormField
             label="申请单号"
@@ -1328,9 +1333,9 @@ export function SubmissionFields({
         </FormSection>
       )}
 
-      {draft.id !== 'personal' && (
+      {getDraftType(draft) !== 'personal' && (
         <FormSection
-          title={draft.id === 'travel' ? '差旅行程' : '实际行程'}
+          title={getDraftType(draft) === 'travel' ? '差旅行程' : '实际行程'}
           action={
             <Button variant="ghost" icon="plus" onClick={addLeg}>
               添加行程
@@ -1348,6 +1353,7 @@ export function SubmissionFields({
             onChange={(legs) => change('legs', legs)}
             issues={issues}
           />
+          <SubmissionDefaults draft={draft} />
         </FormSection>
       )}
 
@@ -1355,7 +1361,7 @@ export function SubmissionFields({
         <ActivityFields draft={draft} onChange={onChange} issues={issues} />
       )}
 
-      {draft.id === 'travel' && (
+      {getDraftType(draft) === 'travel' && (
         <FormSection title="同行人">
           <div className="sf-companion-input">
             <FormField label="姓名" error={companionError}>
@@ -1403,7 +1409,7 @@ export function SubmissionFields({
         </FormSection>
       )}
 
-      {draft.id !== 'travel' && (
+      {getDraftType(draft) !== 'travel' && (
         <FormSection
           title="报销费用"
           action={
@@ -1561,7 +1567,7 @@ export function SubmissionFields({
               </div>
             </div>
           )}
-          {draft.id === 'expense' && draft.subsidyCents !== null && (
+          {getDraftType(draft) === 'expense' && draft.subsidyCents !== null && (
             <div className="sf-subsidy">
               <span>差旅补助</span>
               <strong>

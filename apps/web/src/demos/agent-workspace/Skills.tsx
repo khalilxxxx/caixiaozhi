@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import {
   useSlice,
   useWorkspace,
@@ -7,48 +7,35 @@ import {
 } from './workspace';
 import { Badge, Button, Empty, Field, Icon, Section } from './ui';
 import './analytics-skills.css';
+import './skills-catalog.css';
+import { useToolCatalog } from './tool-catalog';
+import { ToolDetailPanel } from './ToolDetailPanel';
+import {
+  available,
+  currentVersion,
+  filterCatalog,
+  formatCatalogUpdatedAt,
+  readCatalogRoute,
+  reviewStage,
+  skillCatalogItem,
+  skillUnavailableReason,
+  writeCatalogRoute,
+  type CatalogItem,
+  type CatalogRoute,
+  type Conclusion,
+  type Skill,
+  type SkillVersion,
+  type VersionStatus,
+} from './skills-catalog-model';
 import { ToolCenterEmbed } from './ToolCenterEmbed';
-import { uploadFile } from './runtime-client';
+import { api, uploadFile } from './runtime-client';
+import {
+  inspectedSkillDraft,
+  skillExecutionBlock,
+  type SkillFile,
+  type SkillInspection,
+} from './skill-package-model';
 
-type Conclusion = 'pending' | 'pass' | 'fail';
-type VersionStatus = 'draft' | 'review' | 'returned' | 'published';
-interface SkillFile {
-  id?: string;
-  name: string;
-  size: number;
-  type: string;
-  text?: string;
-  sha256?: string;
-}
-interface SkillVersion {
-  version: string;
-  status: VersionStatus;
-  business: Conclusion;
-  security: Conclusion;
-  compatibility: Conclusion;
-  technical: Conclusion;
-  mode: 'runnable' | 'storage';
-  note: string;
-  updated: string;
-  file?: SkillFile;
-  instructions?: string;
-  events: string[];
-}
-interface Skill {
-  id: string;
-  title: string;
-  category: string;
-  icon: string;
-  description: string;
-  owner: string;
-  tags: string[];
-  favorite: boolean;
-  view: boolean;
-  download: boolean;
-  call: boolean;
-  instructions: string;
-  versions: SkillVersion[];
-}
 interface SkillDraft {
   name: string;
   category: string;
@@ -235,16 +222,6 @@ const versionKey = (input: string) =>
     .concat(['0', '0'])
     .slice(0, 3)
     .join('.');
-const currentVersion = (s: Skill) =>
-  s.versions.find((v) => v.status === 'published') || s.versions[0]!;
-const available = (s: Skill, v = currentVersion(s)) =>
-  s.call &&
-  v.status === 'published' &&
-  v.mode === 'runnable' &&
-  v.business === 'pass' &&
-  v.technical === 'pass' &&
-  v.security === 'pass' &&
-  v.compatibility === 'pass';
 function useHub() {
   return useSlice<Hub>('skillsHub', initialHub);
 }
@@ -253,21 +230,29 @@ function VersionBadge({ version }: { version: SkillVersion }) {
     <Badge
       tone={
         version.status === 'published'
-          ? version.mode === 'runnable'
-            ? 'success'
-            : 'neutral'
+          ? 'success'
           : version.status === 'returned'
             ? 'danger'
             : 'warning'
       }
     >
-      {version.status === 'published'
-        ? version.mode === 'runnable'
-          ? '可调用'
-          : '仅存储'
-        : statusLabel[version.status]}
+      {statusLabel[version.status]}
     </Badge>
   );
+}
+function selectSkillInConversation(
+  w: ReturnType<typeof useWorkspace>,
+  skill: Skill,
+  version = currentVersion(skill),
+) {
+  if (!available(skill, version)) return;
+  w.selectSkill({
+    kind: 'skill',
+    id: skill.id,
+    title: skill.title,
+    version: version.version,
+  });
+  w.notify('已加入对话草稿，发送后使用');
 }
 function downloadSkill(skill: Skill, v: SkillVersion) {
   if (v.file?.id) {
@@ -288,195 +273,671 @@ function downloadSkill(skill: Skill, v: SkillVersion) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function SkillPackageCheck({
+  file,
+  busy = false,
+  onRetry,
+}: {
+  file: SkillFile;
+  busy?: boolean;
+  onRetry?: () => void;
+}) {
+  const inspection = file.inspection;
+  const blocked = skillExecutionBlock(file);
+  return (
+    <div className="sh-package-check" aria-busy={busy}>
+      <div className="sh-package-summary">
+        <strong>包检查</strong>
+        <Badge tone={busy ? 'neutral' : blocked ? 'warning' : 'success'}>
+          {busy
+            ? '检查中'
+            : inspection
+              ? blocked
+                ? '仅存储'
+                : '检查通过'
+              : file.inspectionError
+                ? '检查失败'
+                : file.text
+                  ? '已读取文本'
+                  : '待检查'}
+        </Badge>
+        {inspection && (
+          <span>
+            {inspection.files.length} 个文件 · {inspection.scripts.length}{' '}
+            个脚本
+          </span>
+        )}
+        {onRetry && (
+          <Button variant="ghost" disabled={busy} onClick={onRetry}>
+            重新检查
+          </Button>
+        )}
+      </div>
+      {blocked && (
+        <p className="sh-package-warning" role="status">
+          {blocked}
+        </p>
+      )}
+      {inspection?.warnings?.length ? (
+        <ul className="sh-package-warnings">
+          {inspection.warnings.map((warning, i) => (
+            <li key={i}>{warning}</li>
+          ))}
+        </ul>
+      ) : null}
+      {inspection && (
+        <details className="sh-package-files">
+          <summary>包内文件（{inspection.files.length}）</summary>
+          <ul>
+            {inspection.files.map((item) => (
+              <li key={item.path}>
+                <span>{item.path}</span>
+                <small>
+                  {item.size < 1024
+                    ? `${item.size} B`
+                    : `${(item.size / 1024).toFixed(1)} KB`}
+                </small>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function SkillEnvironment() {
+  const [environment, setEnvironment] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const load = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await api<
+        { environment?: Record<string, unknown> } & Record<string, unknown>
+      >('/skills/environment');
+      setEnvironment(result.environment || result);
+    } catch {
+      setError('无法读取运行环境，请重试。');
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <details
+      className="sh-environment"
+      onToggle={(event) => {
+        if (event.currentTarget.open && !environment && !loading && !error)
+          void load();
+      }}
+    >
+      <summary>运行环境</summary>
+      {loading && <p role="status">正在检查运行环境…</p>}
+      {error && (
+        <div className="sh-environment-error" role="alert">
+          <span>{error}</span>
+          <Button onClick={load}>重试</Button>
+        </div>
+      )}
+      {environment && (
+        <dl>
+          <div>
+            <dt>脚本执行</dt>
+            <dd>
+              {environment.available === true || environment.supported === true
+                ? '可用'
+                : environment.available === false ||
+                    environment.supported === false
+                  ? '不可用'
+                  : '以包检查结果为准'}
+            </dd>
+          </div>
+          {typeof environment.platform === 'string' && (
+            <div>
+              <dt>操作系统</dt>
+              <dd>
+                {(
+                  {
+                    darwin: 'macOS',
+                    linux: 'Linux',
+                    win32: 'Windows',
+                  } as Record<string, string>
+                )[environment.platform] || environment.platform}
+              </dd>
+            </div>
+          )}
+          {environment.interpreters &&
+          typeof environment.interpreters === 'object' ? (
+            <div>
+              <dt>可用语言</dt>
+              <dd>
+                {Object.entries(environment.interpreters)
+                  .filter(([, enabled]) => enabled === true)
+                  .map(
+                    ([key]) =>
+                      ({ python: 'Python', node: 'Node.js', shell: 'Shell' })[
+                        key
+                      ] || key,
+                  )
+                  .join('、') || '暂无'}
+              </dd>
+            </div>
+          ) : null}
+          {typeof environment.reason === 'string' && environment.reason && (
+            <div>
+              <dt>当前限制</dt>
+              <dd>{environment.reason}</dd>
+            </div>
+          )}
+          {typeof environment.network === 'string' && (
+            <div>
+              <dt>网络访问</dt>
+              <dd>
+                {environment.network === 'denied' ||
+                environment.network === 'disabled'
+                  ? '已限制'
+                  : environment.network}
+              </dd>
+            </div>
+          )}
+        </dl>
+      )}
+    </details>
+  );
+}
+
+const catalogSessionKey = 'caixiaozhi-skills-catalog';
+function initialCatalogRoute(): CatalogRoute {
+  if (location.hash === '#skills') {
+    try {
+      const saved = sessionStorage.getItem(catalogSessionKey);
+      if (saved)
+        return {
+          ...readCatalogRoute(saved),
+          view: 'catalog',
+          toolId: '',
+          action: 'tool',
+        };
+    } catch {
+      /* Session storage may be unavailable in a private browser. */
+    }
+  }
+  return readCatalogRoute(location.hash);
+}
+
 export function SkillsPage() {
-  const w = useWorkspace(),
-    [hub, setHub] = useHub();
-  const [view, setView] = useState<'catalog' | 'mine' | 'team' | 'tools'>(() =>
-      new URLSearchParams(location.hash.split('?')[1] || '').get('tab') ===
-      'tools'
-        ? 'tools'
-        : 'catalog',
-    ),
-    [search, setSearch] = useState(''),
-    [category, setCategory] = useState('全部分类'),
-    [favorites, setFavorites] = useState(false);
-  const switchView = (next: 'catalog' | 'mine' | 'team' | 'tools') => {
-    setView(next);
-    history.replaceState(
-      null,
-      '',
-      `${location.pathname}${location.search}#skills${next === 'tools' ? '?tab=tools' : ''}`,
-    );
+  const w = useWorkspace();
+  const [hub, setHub] = useHub();
+  const tools = useToolCatalog();
+  const [route, setRoute] = useState(initialCatalogRoute);
+  const root = useRef<HTMLDivElement>(null);
+  const restoringScroll = useRef(true);
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  const working =
+    !!route.toolId || ['upload', 'requests'].includes(route.action);
+  const listRoute = { ...route, toolId: '', action: 'tool' };
+  const scrollKey = (state: CatalogRoute) =>
+    `skills-scroll:${writeCatalogRoute({ ...state, toolId: '', action: 'tool' })}`;
+  const scroller = () => {
+    let node = root.current?.parentElement;
+    while (node) {
+      if (/(auto|scroll)/.test(getComputedStyle(node).overflowY)) return node;
+      node = node.parentElement;
+    }
+    return document.scrollingElement as HTMLElement | null;
+  };
+  const saveScroll = () => {
+    if (
+      restoringScroll.current ||
+      routeRef.current.toolId ||
+      ['upload', 'requests'].includes(routeRef.current.action)
+    )
+      return;
+    try {
+      sessionStorage.setItem(
+        scrollKey(routeRef.current),
+        String(scroller()?.scrollTop || 0),
+      );
+    } catch {
+      /* Optional restoration. */
+    }
+  };
+  const navigate = (patch: Partial<CatalogRoute>, replace = false) => {
+    saveScroll();
+    const next = { ...route, ...patch };
+    setRoute(next);
+    const hash = writeCatalogRoute(next);
+    if (replace)
+      history.replaceState(
+        history.state,
+        '',
+        `${location.pathname}${location.search}${hash}`,
+      );
+    else location.hash = hash;
+    if (!next.toolId && !['upload', 'requests'].includes(next.action)) {
+      try {
+        sessionStorage.setItem(catalogSessionKey, hash);
+      } catch {
+        /* URL remains the source of truth. */
+      }
+    }
   };
   useEffect(() => {
     const onHash = () => {
       if (location.hash.split('?')[0] === '#skills')
-        setView(
-          new URLSearchParams(location.hash.split('?')[1] || '').get('tab') ===
-            'tools'
-            ? 'tools'
-            : 'catalog',
-        );
+        setRoute(readCatalogRoute(location.hash));
     };
     window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
+    window.addEventListener('scroll', saveScroll, true);
+    if (location.hash === '#skills') {
+      const hash = writeCatalogRoute(routeRef.current);
+      history.replaceState(
+        history.state,
+        '',
+        `${location.pathname}${location.search}${hash}`,
+      );
+    }
+    return () => {
+      window.removeEventListener('hashchange', onHash);
+      window.removeEventListener('scroll', saveScroll, true);
+    };
   }, []);
-  const skills = hub.skills.filter(
-    (s) =>
-      (view !== 'catalog' ||
-        s.versions.some((v) => v.status === 'published')) &&
-      (view !== 'mine' || s.owner === '我') &&
-      (!favorites || s.favorite) &&
-      (category === '全部分类' || s.category === category) &&
-      `${s.title} ${s.description} ${s.tags.join(' ')}`.includes(search),
-  );
-  const favorite = (id: string) =>
-    setHub((p) => ({
-      ...p,
-      skills: p.skills.map((s) =>
-        s.id === id ? { ...s, favorite: !s.favorite } : s,
-      ),
-    }));
+  const currentScrollKey = scrollKey(route);
+  useEffect(() => {
+    restoringScroll.current = true;
+    if (working) {
+      scroller()?.scrollTo({ top: 0 });
+      return;
+    }
+    if (tools.loading) return;
+    let releaseFrame = 0;
+    const frame = requestAnimationFrame(() => {
+      try {
+        scroller()?.scrollTo({
+          top: Number(sessionStorage.getItem(currentScrollKey) || 0),
+        });
+      } catch {
+        /* Optional restoration. */
+      }
+      releaseFrame = requestAnimationFrame(() => {
+        restoringScroll.current = false;
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      cancelAnimationFrame(releaseFrame);
+    };
+  }, [working, currentScrollKey, tools.loading]);
+
+  const items: CatalogItem[] = [
+    ...hub.skills.map(skillCatalogItem),
+    ...tools.items.map((item) => ({ ...item, type: 'tool' as const })),
+  ];
+  const visibleItems = filterCatalog(items, route);
+  const categoryOptions = [
+    '全部分类',
+    ...new Set(
+      filterCatalog(items, {
+        ...route,
+        search: '',
+        type: 'all',
+        category: '全部分类',
+        favorites: false,
+      }).map((item) => item.category),
+    ),
+  ];
+  const openDetail = (item: CatalogItem) => {
+    saveScroll();
+    if (!item.canView && route.view === 'manage') {
+      manage(item);
+      return;
+    }
+    w.openPanel(
+      item.type === 'skill'
+        ? { kind: 'skill', id: item.id, title: item.name }
+        : { kind: 'skill', title: item.name, data: { toolId: item.id } },
+    );
+  };
+  const toggleFavorite = async (item: CatalogItem) => {
+    if (item.type === 'tool') {
+      try {
+        await tools.toggleFavorite(item.id);
+      } catch {
+        w.notify('收藏保存失败，请重试');
+      }
+    } else
+      setHub((current) => ({
+        ...current,
+        skills: current.skills.map((skill) =>
+          skill.id === item.id
+            ? { ...skill, favorite: !skill.favorite }
+            : skill,
+        ),
+      }));
+  };
+  const openTool = (item: CatalogItem, action = 'tool') =>
+    navigate({ toolId: item.id, action });
+  const manage = (item: CatalogItem) => {
+    if (item.type === 'tool')
+      openTool(item, route.management === 'review' ? 'review' : 'manage');
+    else
+      w.openPanel({
+        kind: 'governance',
+        id: item.id,
+        title: `${item.name} · ${route.management === 'review' ? '审核发布' : '版本管理'}`,
+        data: { mode: route.management === 'review' ? 'review' : 'manage' },
+      });
+  };
+  const useItem = (item: CatalogItem) => {
+    if (!item.canUse) {
+      openDetail(item);
+      return;
+    }
+    if (item.type === 'tool') {
+      openTool(item);
+      return;
+    }
+    const skill = hub.skills.find((entry) => entry.id === item.id);
+    if (skill) {
+      saveScroll();
+      selectSkillInConversation(w, skill);
+    }
+  };
+  const clearFilters = () =>
+    navigate(
+      { search: '', type: 'all', category: '全部分类', favorites: false },
+      true,
+    );
+  const labelForStatus = (value: string) =>
+    ({
+      draft: '草稿',
+      review: '审核中',
+      pending: '待审核',
+      returned: '已退回',
+      rejected: '已退回',
+      published: '已发布',
+      disabled: '已停用',
+      archived: '已停用',
+    })[value] || value;
+
   return (
-    <div
-      className={`as-page sh-page${view === 'tools' ? ' sh-tools-view' : ''}`}
-    >
-      <div className="as-page-tabs">
-        <div className="as-tabs">
-          <button
-            className={view === 'catalog' ? 'active' : ''}
-            onClick={() => switchView('catalog')}
-          >
-            技能目录
-          </button>
-          <button
-            className={view === 'tools' ? 'active' : ''}
-            onClick={() => switchView('tools')}
-          >
-            小工具
-          </button>
-          <button
-            className={view === 'mine' ? 'active' : ''}
-            onClick={() => switchView('mine')}
-          >
-            我的技能
-          </button>
-          <button
-            className={view === 'team' ? 'active' : ''}
-            onClick={() => switchView('team')}
-          >
-            团队资产
-          </button>
-        </div>
-        <div className="as-actions">
-          {view === 'team' && (
-            <Button
-              icon="shield"
-              variant="ghost"
-              onClick={() =>
-                w.openPanel({ kind: 'governance', title: '技能治理' })
-              }
-            >
-              审核与治理
-            </Button>
-          )}
-          {view !== 'tools' && (
-            <Button
-              variant="primary"
-              icon="plus"
-              onClick={() =>
-                w.openPanel({
-                  kind: 'governance',
-                  title: '添加技能',
-                  data: { mode: 'upload' },
-                })
-              }
-            >
-              添加技能
-            </Button>
-          )}
-        </div>
-      </div>
-      {view === 'tools' ? (
-        <ToolCenterEmbed onOpenSkills={() => switchView('catalog')} />
+    <div className="skills-catalog" ref={root} data-view={route.view}>
+      {working ? (
+        <ToolCenterEmbed
+          route={
+            route.toolId
+              ? `${route.action}/${encodeURIComponent(route.toolId)}`
+              : route.action
+          }
+          onBack={() => navigate(listRoute)}
+        />
       ) : (
         <>
-          <div className="sh-filterbar">
-            <label className="sh-search">
+          <div className="sc-toolbar">
+            {route.view === 'manage' ? (
+              <>
+                <Button
+                  variant="ghost"
+                  icon="back"
+                  onClick={() => navigate({ view: 'catalog' })}
+                >
+                  返回目录
+                </Button>
+                <h2>管理</h2>
+                <div className="sc-toolbar-actions">
+                  {tools.identity?.role === 'admin' && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => navigate({ action: 'requests' })}
+                    >
+                      访问申请
+                    </Button>
+                  )}
+                  {tools.canUpload && (
+                    <Button
+                      icon="upload"
+                      onClick={() => navigate({ action: 'upload' })}
+                    >
+                      上传工具
+                    </Button>
+                  )}
+                  <Button
+                    variant="primary"
+                    icon="upload"
+                    onClick={() =>
+                      w.openPanel({
+                        kind: 'governance',
+                        title: '上传技能',
+                        data: { mode: 'upload' },
+                      })
+                    }
+                  >
+                    上传技能
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="sc-count">{visibleItems.length} 项</span>
+                <Button
+                  icon="settings"
+                  onClick={() => navigate({ view: 'manage', favorites: false })}
+                >
+                  管理
+                </Button>
+              </>
+            )}
+          </div>
+          {route.view === 'manage' && (
+            <div
+              className="sc-management-tabs"
+              role="tablist"
+              aria-label="管理职责"
+            >
+              <button
+                role="tab"
+                aria-selected={route.management === 'mine'}
+                onClick={() => navigate({ management: 'mine' })}
+              >
+                我创建的
+              </button>
+              <button
+                role="tab"
+                aria-selected={route.management === 'review'}
+                onClick={() => navigate({ management: 'review' })}
+              >
+                审核发布
+              </button>
+              {route.management === 'review' && (
+                <Badge tone="neutral">演示权限</Badge>
+              )}
+            </div>
+          )}
+          <div className="sc-filters">
+            <label className="sc-search">
               <Icon name="search" size={17} />
               <input
-                aria-label="搜索技能"
-                placeholder="搜索技能名称或用途"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                type="search"
+                aria-label="搜索技能与工具"
+                placeholder="搜索名称或用途"
+                value={route.search}
+                onChange={(event) =>
+                  navigate({ search: event.target.value }, true)
+                }
               />
             </label>
+            <div className="sc-type-filter" role="group" aria-label="能力类型">
+              {(
+                [
+                  ['all', '全部'],
+                  ['skill', '技能'],
+                  ['tool', '工具'],
+                ] as const
+              ).map(([type, label]) => (
+                <button
+                  key={type}
+                  aria-pressed={route.type === type}
+                  onClick={() => navigate({ type }, true)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <select
-              aria-label="技能分类"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              aria-label="业务分类"
+              value={route.category}
+              onChange={(event) =>
+                navigate({ category: event.target.value }, true)
+              }
             >
-              {categories.map((c) => (
-                <option key={c}>{c}</option>
+              {categoryOptions.map((category) => (
+                <option key={category}>{category}</option>
               ))}
             </select>
-            <button
-              className={`sh-favorite-filter ${favorites ? 'active' : ''}`}
-              aria-pressed={favorites}
-              onClick={() => setFavorites(!favorites)}
-            >
-              <Icon name="star" size={16} />
-              仅看收藏
-            </button>
+            {route.view === 'catalog' && (
+              <button
+                className="sc-favorites"
+                aria-pressed={route.favorites}
+                onClick={() => navigate({ favorites: !route.favorites }, true)}
+              >
+                <Icon name="star" size={16} />
+                仅看收藏
+              </button>
+            )}
           </div>
-          {view === 'team' ? (
-            <div className="sh-assets-table">
-              <table className="as-table">
+          {tools.loading && (
+            <div className="sc-feedback" role="status">
+              工具目录加载中…
+            </div>
+          )}
+          {tools.error && (
+            <div className="sc-feedback sc-error" role="alert">
+              <span>工具目录加载失败</span>
+              <Button onClick={() => void tools.refresh()}>重试</Button>
+            </div>
+          )}
+          {route.view === 'catalog' ? (
+            <div className="sc-grid">
+              {visibleItems.map((item) => (
+                <article className="sc-card" key={`${item.type}:${item.id}`}>
+                  <div className="sc-card-heading">
+                    <span className="sc-icon">
+                      <Icon name={item.icon} size={21} />
+                    </span>
+                    <button
+                      className="sc-card-name"
+                      onClick={() => openDetail(item)}
+                    >
+                      {item.name}
+                    </button>
+                    <button
+                      className="sc-star"
+                      aria-label={`${item.favorite ? '取消收藏' : '收藏'}${item.name}`}
+                      aria-pressed={item.favorite}
+                      onClick={() => void toggleFavorite(item)}
+                    >
+                      <Icon name="star" size={17} />
+                    </button>
+                  </div>
+                  <div className="sc-card-labels">
+                    <span>{item.type === 'skill' ? '技能' : '工具'}</span>
+                    <span>{item.category}</span>
+                  </div>
+                  <p className="sc-description">{item.description}</p>
+                  <div className="sc-meta">
+                    <span>{item.owner}</span>
+                    <span>v{item.version}</span>
+                  </div>
+                  <div className="sc-card-footer">
+                    <span
+                      className={`sc-availability ${item.canUse ? 'available' : ''}`}
+                      title={item.unavailableReason}
+                    >
+                      {item.canUse
+                        ? '可使用'
+                        : item.type === 'skill'
+                          ? item.availabilityState === 'reference'
+                            ? '仅供查阅'
+                            : item.availabilityState === 'denied'
+                              ? '无使用权限'
+                              : '暂不可用'
+                          : '无使用权限'}
+                    </span>
+                    <Button variant="ghost" onClick={() => useItem(item)}>
+                      {item.canUse
+                        ? item.type === 'skill'
+                          ? '在对话中使用'
+                          : '打开工具'
+                        : '查看详情'}
+                      <Icon name="arrow" size={14} />
+                    </Button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div
+              className="sc-table-wrap"
+              tabIndex={0}
+              role="region"
+              aria-label="资产管理表格"
+            >
+              <table className="sc-table">
                 <thead>
                   <tr>
-                    <th>技能</th>
-                    <th>维护者</th>
-                    <th>最新版本</th>
-                    <th>状态</th>
-                    <th />
+                    <th>名称</th>
+                    <th>类型</th>
+                    <th>现行版本</th>
+                    <th>待处理版本</th>
+                    <th>发布状态</th>
+                    <th>更新时间</th>
+                    <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {skills.map((s) => (
-                    <tr key={s.id}>
+                  {visibleItems.map((item) => (
+                    <tr key={`${item.type}:${item.id}`}>
                       <td>
                         <button
-                          className="sh-table-title"
-                          onClick={() =>
-                            w.openPanel({
-                              kind: 'skill',
-                              id: s.id,
-                              title: s.title,
-                            })
-                          }
+                          className="sc-table-name"
+                          onClick={() => openDetail(item)}
                         >
-                          {s.title}
-                          <small>{s.category}</small>
+                          {item.name}
                         </button>
+                        <small>{item.owner}</small>
                       </td>
-                      <td>{s.owner}</td>
-                      <td>v{s.versions[0]!.version}</td>
+                      <td>{item.type === 'skill' ? '技能' : '工具'}</td>
                       <td>
-                        <VersionBadge version={s.versions[0]!} />
+                        {item.status === 'published' ? `v${item.version}` : '—'}
                       </td>
                       <td>
-                        <Button
-                          variant="ghost"
-                          onClick={() =>
-                            w.openPanel({
-                              kind: 'governance',
-                              id: s.id,
-                              title: s.title + ' · 治理',
-                              data: { mode: 'review' },
-                            })
-                          }
+                        {item.latestStatus !== 'published'
+                          ? `v${item.latestVersion}`
+                          : '—'}
+                      </td>
+                      <td>
+                        <span
+                          className={`sc-status sc-status-${item.latestStatus}`}
                         >
-                          管理
+                          {labelForStatus(item.latestStatus)}
+                        </span>
+                      </td>
+                      <td className="sc-updated">
+                        {formatCatalogUpdatedAt(item.updatedAt)}
+                      </td>
+                      <td>
+                        <Button variant="ghost" onClick={() => manage(item)}>
+                          {route.management === 'review'
+                            ? item.latestStatus === 'review' ||
+                              item.latestStatus === 'pending'
+                              ? '审核'
+                              : '查看'
+                            : '管理'}
                         </Button>
                       </td>
                     </tr>
@@ -484,77 +945,18 @@ export function SkillsPage() {
                 </tbody>
               </table>
             </div>
-          ) : (
-            <div className="sh-grid">
-              {skills.map((s) => {
-                const v = currentVersion(s);
-                return (
-                  <article className="sh-card" key={s.id}>
-                    <div className="sh-card-top">
-                      <span
-                        className={`sh-skill-icon ${s.category === '知识问答' ? 'purple' : s.category === '单据处理' ? 'teal' : ''}`}
-                      >
-                        <Icon name={s.icon} size={22} />
-                      </span>
-                      <button
-                        className={`sh-star ${s.favorite ? 'selected' : ''}`}
-                        aria-label={`${s.favorite ? '取消收藏' : '收藏'}${s.title}`}
-                        aria-pressed={s.favorite}
-                        onClick={() => favorite(s.id)}
-                      >
-                        <Icon name="star" size={17} />
-                      </button>
-                    </div>
-                    <button
-                      className="sh-card-title"
-                      onClick={() =>
-                        w.openPanel({ kind: 'skill', id: s.id, title: s.title })
-                      }
-                    >
-                      {s.title}
-                      <Icon name="chevron" size={16} />
-                    </button>
-                    <p>{s.description}</p>
-                    <div className="sh-tags">
-                      {s.tags.map((t) => (
-                        <span key={t}>{t}</span>
-                      ))}
-                    </div>
-                    <div className="sh-card-meta">
-                      <span>{s.owner}</span>
-                      <span>v{v.version}</span>
-                    </div>
-                    <div className="sh-card-bottom">
-                      <VersionBadge version={v} />
-                      <Button
-                        variant="ghost"
-                        onClick={() =>
-                          w.openPanel({
-                            kind: 'skill',
-                            id: s.id,
-                            title: s.title,
-                          })
-                        }
-                      >
-                        {available(s) ? '查看与选择' : '查看详情'}
-                        <Icon name="arrow" size={14} />
-                      </Button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
           )}
-          {skills.length === 0 && (
-            <Empty title="没有符合条件的技能">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setSearch('');
-                  setCategory('全部分类');
-                  setFavorites(false);
-                }}
-              >
+          {!visibleItems.length && !tools.loading && (
+            <Empty
+              title={
+                route.view === 'manage'
+                  ? route.management === 'review'
+                    ? '暂无可审核的资产'
+                    : '暂无符合条件的资产'
+                  : '未找到符合条件的技能或工具'
+              }
+            >
+              <Button variant="ghost" onClick={clearFilters}>
                 清除筛选
               </Button>
             </Empty>
@@ -724,7 +1126,7 @@ export function SkillPickerPanel() {
               onClick={() => {
                 if (!version || !skill.view || !available(skill, version))
                   return;
-                w.attach({
+                w.selectSkill({
                   kind: 'skill',
                   id: skill.id,
                   title: skill.title,
@@ -752,30 +1154,26 @@ export function SkillPickerPanel() {
 }
 
 export function SkillPanel({ panel }: { panel: PanelSpec }) {
+  if (panel.data?.toolId)
+    return <ToolDetailPanel id={String(panel.data.toolId)} />;
+  return <SkillContent panel={panel} />;
+}
+
+function SkillContent({ panel }: { panel: PanelSpec }) {
   const w = useWorkspace(),
     [hub, setHub] = useHub();
-  const skill =
-    hub.skills.find((s) => s.id === (panel.id || panel.data?.skillId)) ||
-    hub.skills[0]!;
+  const skill = hub.skills.find(
+    (s) => s.id === (panel.id || panel.data?.skillId),
+  );
   const [tab, setTab] = useState('overview'),
     [selectedVersion, setSelectedVersion] = useState(
       String(panel.data?.version || ''),
     );
   const version =
-    skill.versions.find((v) => v.version === selectedVersion) ||
-    currentVersion(skill);
-  const pick = () => {
-    if (!available(skill, version)) return;
-    w.attach({
-      kind: 'skill',
-      id: skill.id,
-      title: skill.title,
-      version: version.version,
-    });
-    w.closePanel();
-    w.navigate('chat');
-    w.notify('已加入当前对话，发送后使用');
-  };
+    skill?.versions.find((v) => v.version === selectedVersion) ||
+    (skill ? currentVersion(skill) : undefined);
+  if (!skill?.view || !version) return <Empty title="技能不可查看" />;
+  const pick = () => selectSkillInConversation(w, skill, version);
   return (
     <div className="sh-detail">
       <div className="sh-detail-intro">
@@ -818,6 +1216,14 @@ export function SkillPanel({ panel }: { panel: PanelSpec }) {
         </select>
         <VersionBadge version={version} />
       </div>
+      <p
+        className="sc-detail-availability"
+        data-available={available(skill, version)}
+      >
+        {available(skill, version)
+          ? '可在对话中使用'
+          : skillUnavailableReason(skill, version)}
+      </p>
       <div className="as-tabs">
         <button
           className={tab === 'overview' ? 'active' : ''}
@@ -939,22 +1345,19 @@ export function SkillPanel({ panel }: { panel: PanelSpec }) {
               w.openPanel({
                 kind: 'governance',
                 id: skill.id,
-                title: skill.title + ' · 治理',
-                data: { mode: 'review', version: version.version },
+                title: skill.title + ' · 版本管理',
+                data: { mode: 'manage', version: version.version },
               })
             }
           >
             管理版本
           </Button>
         )}
-        <Button
-          variant="primary"
-          icon="plus"
-          disabled={!available(skill, version)}
-          onClick={pick}
-        >
-          选择技能
-        </Button>
+        {available(skill, version) && (
+          <Button variant="primary" icon="plus" onClick={pick}>
+            在对话中使用
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -963,9 +1366,10 @@ export function SkillPanel({ panel }: { panel: PanelSpec }) {
 export function GovernancePanel({ panel }: { panel: PanelSpec }) {
   const w = useWorkspace(),
     [hub, setHub] = useHub();
+  const reviewAccess = panel.data?.mode === 'review' && !panel.data?.readonly;
   const [mode, setMode] = useState(
       String(
-        panel.id && hub.skillDrafts?.[panel.id]
+        !reviewAccess && panel.id && hub.skillDrafts?.[panel.id]
           ? 'revision'
           : panel.data?.mode || 'list',
       ),
@@ -977,7 +1381,9 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
     [section, setSection] = useState<'business' | 'technical'>('business'),
     [security, setSecurity] = useState<Conclusion>('pending'),
     [compatibility, setCompatibility] = useState<Conclusion>('pending'),
-    [uploading, setUploading] = useState(false);
+    [uploading, setUploading] = useState(false),
+    [uploadPhase, setUploadPhase] = useState<'upload' | 'inspect'>('upload'),
+    [checkingVersion, setCheckingVersion] = useState(false);
   const draftKey = skillId || 'new',
     form = hub.skillDrafts?.[draftKey] || emptySkillDraft,
     { name, category, version, description, file } = form;
@@ -1007,6 +1413,8 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
     selected =
       skill?.versions.find((v) => v.version === versionId) ||
       skill?.versions[0];
+  const canMaintain = !!skill?.view && skill.owner === '我' && !reviewAccess;
+  const executionBlock = skillExecutionBlock(selected?.file);
   const mutate = (update: (s: Skill, v: SkillVersion) => SkillVersion) => {
     if (!skill || !selected) return;
     setHub((p) => ({
@@ -1027,6 +1435,73 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
     setSkillId('');
     setError('');
   };
+  const inspectDraftFile = async (stored: SkillFile) => {
+    setUploadPhase('inspect');
+    const { inspection } = await api<{ inspection: SkillInspection }>(
+      '/skills/inspect',
+      { fileId: stored.id },
+    );
+    setHub((p) => ({
+      ...p,
+      skillDrafts: {
+        ...p.skillDrafts,
+        [draftKey]: inspectedSkillDraft(
+          p.skillDrafts?.[draftKey] || emptySkillDraft,
+          stored,
+          inspection,
+        ),
+      },
+    }));
+    await w.flush();
+  };
+  const retryDraftCheck = async () => {
+    if (!file?.id) return;
+    setUploading(true);
+    setError('');
+    try {
+      await inspectDraftFile(file);
+    } catch {
+      setFile({ ...file, inspection: undefined, inspectionError: '检查失败' });
+      setError('包检查失败，原文件已保留。请重新检查或作为资料存储。');
+    } finally {
+      setUploading(false);
+    }
+  };
+  const retryVersionCheck = async () => {
+    if (!selected?.file?.id || (!canMaintain && !reviewAccess)) return;
+    setCheckingVersion(true);
+    setError('');
+    try {
+      const { inspection } = await api<{ inspection: SkillInspection }>(
+        '/skills/inspect',
+        { fileId: selected.file.id },
+      );
+      const checkedFile: SkillFile = {
+        ...selected.file,
+        text: inspection.instructions,
+        inspection,
+        inspectionError: undefined,
+      };
+      const nextCompatibility: Conclusion = skillExecutionBlock(checkedFile)
+        ? 'fail'
+        : 'pending';
+      mutate((_s, v) => ({
+        ...v,
+        file: checkedFile,
+        instructions: inspection.instructions,
+        compatibility: nextCompatibility,
+        technical: 'pending',
+        mode: 'storage',
+        events: [...v.events, stamp() + ' · 重新检查技能包'],
+      }));
+      setCompatibility(nextCompatibility);
+      await w.flush();
+    } catch {
+      setError('包检查失败，请稍后重试。');
+    } finally {
+      setCheckingVersion(false);
+    }
+  };
   const open = (s: Skill, v = s.versions[0]!) => {
     setSkillId(s.id);
     setVersionId(v.version);
@@ -1034,10 +1509,10 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
     setNote('');
     setError('');
     setSecurity(v.security);
-    setCompatibility(v.compatibility);
+    setCompatibility(skillExecutionBlock(v.file) ? 'fail' : v.compatibility);
   };
   const startRevision = () => {
-    if (!skill) return;
+    if (!skill || !canMaintain) return;
     if (!hub.skillDrafts?.[skill.id])
       setHub((p) => ({
         ...p,
@@ -1056,6 +1531,7 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
     setError('');
   };
   const saveAsset = async () => {
+    if (reviewAccess || (mode === 'revision' && !canMaintain)) return;
     const title = name.trim();
     if (!title || !description.trim()) {
       setError('请填写技能名称和用途。');
@@ -1088,7 +1564,7 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
       status: 'draft',
       business: 'pending',
       security: 'pending',
-      compatibility: 'pending',
+      compatibility: skillExecutionBlock(file) ? 'fail' : 'pending',
       technical: 'pending',
       mode: 'storage',
       note: '待提交审核。',
@@ -1131,7 +1607,7 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
     setNote('');
     setError('');
     setSecurity('pending');
-    setCompatibility('pending');
+    setCompatibility(skillExecutionBlock(file) ? 'fail' : 'pending');
     try {
       await w.flush();
       w.notify('技能文件及资产信息已保存，待申请审核');
@@ -1140,7 +1616,7 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
     }
   };
   const submit = async () => {
-    if (!selected || selected.status !== 'draft') return;
+    if (!canMaintain || !selected || selected.status !== 'draft') return;
     mutate((_s, v) => ({
       ...v,
       status: 'review',
@@ -1156,7 +1632,13 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
     }
   };
   const review = async (pass: boolean) => {
-    if (!selected || selected.status !== 'review') return;
+    if (
+      !reviewAccess ||
+      !selected ||
+      selected.status !== 'review' ||
+      checkingVersion
+    )
+      return;
     if (!note.trim()) {
       setError('请填写审核意见。');
       return;
@@ -1173,10 +1655,9 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
       section === 'technical' &&
       pass &&
       compatibility === 'pass' &&
-      selected.file &&
-      !(selected.instructions || selected.file.text)?.trim()
+      executionBlock
     ) {
-      setError('未读取到技能指令文本，此文件只能作为资料存储。');
+      setError(executionBlock);
       return;
     }
     mutate((_s, v) =>
@@ -1216,6 +1697,8 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
   };
   const publish = async () => {
     if (
+      !reviewAccess ||
+      checkingVersion ||
       !skill ||
       !selected ||
       selected.status !== 'review' ||
@@ -1224,7 +1707,7 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
       selected.security !== 'pass'
     )
       return;
-    const canRun = selected.compatibility === 'pass';
+    const canRun = selected.compatibility === 'pass' && !executionBlock;
     setHub((p) => ({
       ...p,
       skills: p.skills.map((s) =>
@@ -1256,9 +1739,12 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
       setError(error instanceof Error ? error.message : '发布保存失败');
     }
   };
+  if (skill && !skill.view) return <Empty title="技能不可查看" />;
+  if (!reviewAccess && skill && !canMaintain)
+    return <Empty title="当前账号没有管理权限" />;
   if (mode === 'upload' || mode === 'revision')
     return (
-      <div className="sh-governance">
+      <div className="sh-governance" data-mode={mode}>
         <div className="as-detail-heading">
           <Badge>
             {mode === 'revision' ? '创建新版本' : '新增资产'}
@@ -1266,6 +1752,7 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
           </Badge>
           <Button
             variant="ghost"
+            disabled={uploading}
             onClick={() => {
               setMode(skill ? 'review' : 'list');
               setError('');
@@ -1299,7 +1786,7 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
             <input
               aria-label="版本号"
               value={version}
-              placeholder="例如 1.3.0"
+              placeholder="1.0.0"
               onChange={(e) => setVersion(e.target.value)}
             />
           </Field>
@@ -1323,17 +1810,29 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
               event.currentTarget.value = '';
               if (!selectedFile) return;
               setUploading(true);
+              setUploadPhase('upload');
               setError('');
+              let uploaded: SkillFile | undefined;
               try {
                 await w.flush();
                 const { file: stored } = await uploadFile(selectedFile);
+                uploaded = stored;
                 await w.refresh();
                 setFile(stored);
                 await w.flush();
+                await inspectDraftFile(stored);
               } catch (error) {
-                setError(
-                  error instanceof Error ? error.message : '技能文件上传失败',
-                );
+                if (uploaded) {
+                  setFile({ ...uploaded, inspectionError: '检查失败' });
+                  setError(
+                    '包检查失败，原文件已保留。请重新检查或作为资料存储。',
+                  );
+                } else
+                  setError(
+                    error instanceof Error
+                      ? error.message
+                      : '技能文件上传失败，请重试。',
+                  );
               } finally {
                 setUploading(false);
               }
@@ -1352,14 +1851,21 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
             </div>
           </div>
         )}
-        <p className="as-footnote">
+        {file && (
+          <SkillPackageCheck
+            file={file}
+            busy={uploading}
+            onRetry={retryDraftCheck}
+          />
+        )}
+        <p className="as-footnote" role="status">
           {uploading
-            ? '文件上传中…'
-            : file?.text
-              ? '已读取技能指令文本，审核发布后可在对话中调用。'
-              : file
-                ? '已保存原文件；未提取到指令文本，仅支持资料存储。'
-                : '支持 Markdown、TXT、JSON、YAML；压缩包仅作为资料存储。'}
+            ? uploadPhase === 'upload'
+              ? '文件上传中…'
+              : '正在检查技能包与依赖…'
+            : !file
+              ? '支持 Markdown、TXT、JSON、YAML 和含 SKILL.md 的 ZIP，最大 10 MB。'
+              : '原文件已保存。'}
         </p>
         {error && (
           <p className="field-error" role="alert">
@@ -1378,45 +1884,58 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
       <div className="sh-governance">
         <div className="as-detail-heading">
           <span>
-            {hub.skills.length}项资产 ·{' '}
-            {hub.skills.reduce(
-              (n, s) =>
-                n + s.versions.filter((v) => v.status === 'review').length,
-              0,
-            )}
+            {
+              hub.skills.filter(
+                (s) => s.view && (reviewAccess || s.owner === '我'),
+              ).length
+            }
+            项资产 ·{' '}
+            {hub.skills
+              .filter((s) => s.view && (reviewAccess || s.owner === '我'))
+              .reduce(
+                (n, s) =>
+                  n + s.versions.filter((v) => v.status === 'review').length,
+                0,
+              )}
             个版本待审
           </span>
-          <Button
-            variant="primary"
-            icon="plus"
-            onClick={() => {
-              resetForm();
-              setMode('upload');
-            }}
-          >
-            添加技能
-          </Button>
+          {!reviewAccess && (
+            <Button
+              variant="primary"
+              icon="upload"
+              onClick={() => {
+                resetForm();
+                setMode('upload');
+              }}
+            >
+              上传技能
+            </Button>
+          )}
         </div>
         <div className="sh-governance-list">
-          {hub.skills.map((s) => (
-            <button key={s.id} onClick={() => open(s)}>
-              <span className="sh-skill-icon">
-                <Icon name={s.icon} />
-              </span>
-              <span>
-                <strong>{s.title}</strong>
-                <small>
-                  {s.owner} · v{s.versions[0]!.version}
-                </small>
-              </span>
-              <VersionBadge version={s.versions[0]!} />
-              <Icon name="chevron" size={16} />
-            </button>
-          ))}
+          {hub.skills
+            .filter((s) => s.view && (reviewAccess || s.owner === '我'))
+            .map((s) => (
+              <button key={s.id} onClick={() => open(s)}>
+                <span className="sh-skill-icon">
+                  <Icon name={s.icon} />
+                </span>
+                <span>
+                  <strong>{s.title}</strong>
+                  <small>
+                    {s.owner} · v{s.versions[0]!.version}
+                  </small>
+                </span>
+                <VersionBadge version={s.versions[0]!} />
+                <Icon name="chevron" size={16} />
+              </button>
+            ))}
         </div>
       </div>
     );
   const canPublish =
+    reviewAccess &&
+    !checkingVersion &&
     selected.status === 'review' &&
     selected.business === 'pass' &&
     selected.technical === 'pass' &&
@@ -1424,17 +1943,30 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
   return (
     <div className="sh-governance">
       <div className="as-detail-heading">
-        <Button variant="ghost" icon="back" onClick={() => setMode('list')}>
-          全部资产
+        <Button
+          variant="ghost"
+          icon="back"
+          disabled={checkingVersion}
+          onClick={() => setMode('list')}
+        >
+          {reviewAccess ? '审核资产' : '我的资产'}
         </Button>
-        <Button icon="plus" onClick={startRevision}>
-          创建新版本
-        </Button>
+        {reviewAccess && <Badge tone="neutral">演示审核权限</Badge>}
+        {canMaintain && (
+          <Button
+            icon="plus"
+            disabled={checkingVersion}
+            onClick={startRevision}
+          >
+            创建新版本
+          </Button>
+        )}
       </div>
       <div className="sh-review-title">
         <h3>{skill.title}</h3>
         <select
           aria-label="治理版本"
+          disabled={checkingVersion}
           value={selected.version}
           onChange={(e) => {
             const v = skill.versions.find((x) => x.version === e.target.value)!;
@@ -1454,9 +1986,15 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
           <Icon name="folder" size={18} />
           <strong>资产入库</strong>
         </div>
-        <div className={selected.status !== 'draft' ? 'complete' : ''}>
+        <div className={reviewStage(selected)}>
           <Icon name="shield" size={18} />
-          <strong>双重审核</strong>
+          <strong>
+            {reviewStage(selected) === 'active'
+              ? '审核中'
+              : reviewStage(selected) === 'returned'
+                ? '审核退回'
+                : '双重审核'}
+          </strong>
         </div>
         <div className={selected.status === 'published' ? 'complete' : ''}>
           <Icon name="check" size={18} />
@@ -1501,9 +2039,26 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
           <span>{conclusion(selected.compatibility)}</span>
         </div>
       </div>
-      {selected.status === 'draft' && (
+      {selected.file && (
+        <SkillPackageCheck
+          file={selected.file}
+          busy={checkingVersion}
+          onRetry={
+            (canMaintain || reviewAccess) &&
+            (selected.status === 'draft' || selected.status === 'review')
+              ? retryVersionCheck
+              : undefined
+          }
+        />
+      )}
+      {selected.status !== 'review' && error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
+      {canMaintain && selected.status === 'draft' && (
         <div className="as-panel-footer">
-          <Button variant="primary" onClick={submit}>
+          <Button variant="primary" disabled={checkingVersion} onClick={submit}>
             申请审核
           </Button>
         </div>
@@ -1514,13 +2069,18 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
           <div>
             <strong>此版本已退回并锁定</strong>
             <p>{selected.note}</p>
-            <Button variant="ghost" onClick={startRevision}>
-              创建新版本后重新申请
-            </Button>
+            {canMaintain && (
+              <Button variant="ghost" onClick={startRevision}>
+                创建新版本后重新申请
+              </Button>
+            )}
           </div>
         </div>
       )}
-      {selected.status === 'review' && (
+      {!reviewAccess && selected.status === 'review' && (
+        <p className="sc-detail-availability">待业务与技术审核</p>
+      )}
+      {reviewAccess && selected.status === 'review' && (
         <>
           <div className="as-tabs">
             <button
@@ -1537,7 +2097,9 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
               onClick={() => {
                 setSection('technical');
                 setSecurity(selected.security);
-                setCompatibility(selected.compatibility);
+                setCompatibility(
+                  executionBlock ? 'fail' : selected.compatibility,
+                );
                 setError('');
               }}
             >
@@ -1566,12 +2128,18 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
                   }
                 >
                   <option value="pending">待核验</option>
-                  <option value="pass">兼容</option>
+                  <option
+                    value="pass"
+                    disabled={!!executionBlock || checkingVersion}
+                  >
+                    兼容
+                  </option>
                   <option value="fail">不兼容，仅存储</option>
                 </select>
               </Field>
             </div>
           )}
+          {section === 'technical' && <SkillEnvironment />}
           <Field label="审核意见">
             <textarea
               aria-label="审核意见"
@@ -1606,7 +2174,10 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
               variant="primary"
               disabled={
                 section === 'technical' &&
-                (security !== 'pass' || compatibility === 'pending')
+                (security !== 'pass' ||
+                  compatibility === 'pending' ||
+                  checkingVersion ||
+                  (compatibility === 'pass' && !!executionBlock))
               }
               onClick={() => review(true)}
             >
@@ -1620,7 +2191,7 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
                 业务与技术审核已通过
               </span>
               <Button variant="primary" onClick={publish}>
-                {selected.compatibility === 'pass'
+                {selected.compatibility === 'pass' && !executionBlock
                   ? '上架可调用版本'
                   : '以仅存储方式上架'}
               </Button>

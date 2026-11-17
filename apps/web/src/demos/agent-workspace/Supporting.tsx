@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { SkillsGuide } from './SkillsGuide';
 import {
   useWorkspace,
   useSlice,
@@ -12,7 +13,7 @@ export const apps: { id: PageId; label: string; icon: string }[] = [
   { id: 'documents', label: '单据进展', icon: 'clock' },
   { id: 'analysis', label: '数据分析', icon: 'chart' },
   { id: 'rules', label: '规则中心', icon: 'shield' },
-  { id: 'skills', label: '技能·工具', icon: 'spark' },
+  { id: 'skills', label: '技能工具', icon: 'spark' },
   { id: 'knowledge', label: '制度知识', icon: 'book' },
   { id: 'files', label: '材料与文件', icon: 'folder' },
 ];
@@ -45,7 +46,7 @@ export const policies = [
     clauses: [
       {
         title: '第五条 · 报销资料',
-        text: '申请人需对费用真实性与归属负责。票据识别信息需要本人核对，重复票据不得重复报销。查验结果不明确的票据应补充核验。',
+        text: '申请人需对费用真实性与归属负责。票据识别信息需要本人核对，重复票据不得重复报销。费用信息不完整的材料应补充后核对。',
       },
       {
         title: '第九条 · 审批与支付',
@@ -462,7 +463,8 @@ export function NotificationsPanel() {
     </>
   );
 }
-export function HelpPanel() {
+export function HelpPanel({ skillsContext = false, onClose, toolPanel }: { skillsContext?: boolean; onClose?: () => void; toolPanel?: { kind: string | null; toolId?: string } } = {}) {
+  if (skillsContext || location.hash.split('?')[0] === '#skills') return <SkillsGuide onClose={onClose} toolPanel={toolPanel} />;
   return (
     <>
       <section className="help-section">
@@ -515,8 +517,9 @@ export function HelpPanel() {
         <h3>文件与技能</h3>
         <p>
           上传的文件原件保存在本机。可读取的文本、PDF、Word
-          等内容可加入对话进行问答、翻译或合同核对；图片未接入
-          OCR，无法读取时需手工补充。技能文本经过审核并发布后才可调用，上传代码不会执行。
+          等内容可加入对话进行问答或合同核对。选择“附件翻译”后，可打开翻译窗口，上传票据图片或
+          PDF
+          并翻译成中文；点击译文可定位原图文字，点击原图标注可查看对应译文。模糊文字和金额请对照原件核对。上传本身不会运行代码；已审核发布且环境可用的技能，可在任务隔离环境执行脚本。
         </p>
       </section>
       <section className="help-section">
@@ -528,7 +531,7 @@ export function HelpPanel() {
       <section className="help-section">
         <h3>会话与应用</h3>
         <p>
-          从侧栏打开技能·工具、规则中心和智能提单，其他应用收纳在「全部应用」。从「最近会话」继续处理已有事项，或打开「全部对话」搜索历史。
+          从侧栏打开技能工具、规则中心和数据分析，智能提单等入口收纳在「全部工具」。从「最近会话」继续处理已有事项，或打开「全部对话」搜索历史。
         </p>
       </section>
       <section className="help-section">
@@ -611,7 +614,7 @@ export function PreferencesPanel({
         <dl className="data-grid">
           <div>
             <dt>姓名</dt>
-            <dd>林悦</dd>
+            <dd>吴侠</dd>
           </div>
           <div>
             <dt>部门</dt>

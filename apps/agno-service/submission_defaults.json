@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "profileSource": "员工档案（本地示例）",
+  "currentEmployeeId": "local-linyue",
+  "employees": [
+    {"id": "local-linyue", "name": "林悦", "department": "财务部", "paymentCompany": "华川科技", "baseCity": "杭州", "synthetic": true}
+  ],
+  "routeSource": "线路参考数据（本地示例，非实时）",
+  "routes": [
+    {"from": "杭州", "to": "上海", "distanceKm": 200, "railHours": 1.5, "railAvailable": true, "flightAvailable": false},
+    {"from": "杭州", "to": "南京", "distanceKm": 280, "railHours": 2.0, "railAvailable": true, "flightAvailable": false},
+    {"from": "上海", "to": "南京", "distanceKm": 300, "railHours": 2.0, "railAvailable": true, "flightAvailable": false},
+    {"from": "杭州", "to": "苏州", "distanceKm": 210, "railHours": 2.0, "railAvailable": true, "flightAvailable": false},
+    {"from": "上海", "to": "苏州", "distanceKm": 100, "railHours": 0.6, "railAvailable": true, "flightAvailable": false},
+    {"from": "杭州", "to": "北京", "distanceKm": 1300, "railHours": 5.5, "flightHours": 2.5, "railAvailable": true, "flightAvailable": true},
+    {"from": "上海", "to": "北京", "distanceKm": 1300, "railHours": 5.0, "flightHours": 2.5, "railAvailable": true, "flightAvailable": true},
+    {"from": "广州", "to": "深圳", "distanceKm": 140, "railHours": 1.0, "railAvailable": true, "flightAvailable": false}
+  ],
+  "policy": {
+    "source": "交通与表单默认配置（本地示例）",
+    "railMaxKm": 800,
+    "railMaxHours": 4,
+    "railTransport": "火车-二等座",
+    "airTransport": "飞机-经济舱",
+    "travelType": "普通差旅",
+    "currency": "CNY",
+    "rental": "否",
+    "rentalCategoryIds": ["hotel"]
+  },
+  "rules": [
+    "仅差旅申请可根据匹配申请人的常驻地、相邻行程和本地线路参考补全行程；报销按实际发生内容填写。",
+    "用户明确填写或清空优先；系统补全随依赖变化重新计算，并保留字段来源。",
+    "明确返程日期未定（returnDatePending=true）时，生成一条日期待补的回程，从最后已知目的地返回实际首段起点；已有返程不重复生成，不猜返程日期。删除待补回程或取消待定状态后，不因无关回复重建。",
+    "已明确火车或飞机但未给席别时，分别建议二等座或经济舱；完整明确席别保持原值。",
+    "差旅申请中，本段出发日期有效且未明确到达日期或跨日时，到达日期默认与出发日期相同；不依赖线路、距离或交通方式。明确填写或人工清空保持原值。",
+    "员工和线路数据为本地参考，未接入企业权限、真实距离、班次和订票服务。"
+  ]
+}

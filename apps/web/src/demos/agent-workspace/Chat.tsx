@@ -15,7 +15,13 @@ import {
 } from './capability-model';
 import { ComposerSkillPicker } from './Skills';
 import { SubmissionCard } from './SubmissionCard';
-import { latestSubmissionCards } from './submission-conversation';
+import {
+  latestSubmissionCards,
+  visibleMessageCards,
+} from './submission-conversation';
+import { QuestionCard } from './QuestionCard';
+import { pendingQuestion, resumeQuestionMessage } from './question-model';
+import { RunProgress } from './RunProgress';
 
 export const logo = '/agent-assets/caixiaozhi.png';
 function XiaozhiMark({ className = '' }: { className?: string }) {
@@ -23,21 +29,6 @@ function XiaozhiMark({ className = '' }: { className?: string }) {
     <span className={`xiaozhi-mark ${className}`} aria-hidden="true">
       <img src={logo} alt="" draggable={false} />
     </span>
-  );
-}
-
-function ThinkingStatus() {
-  const [paused, setPaused] = useState(document.hidden);
-  useEffect(() => {
-    const onVisibility = () => setPaused(document.hidden);
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, []);
-  return (
-    <div className="thinking-status" role="status" data-paused={paused}>
-      <XiaozhiMark className="thinking-mark" />
-      <span>财小智正在处理…</span>
-    </div>
   );
 }
 
@@ -231,6 +222,7 @@ export function Composer({
   capability: CapabilityId | null;
   onCapabilityChange: (value: CapabilityId | null) => void;
 }) {
+  const workspace = useWorkspace();
   const input = useRef<HTMLInputElement>(null),
     textarea = useRef<HTMLTextAreaElement>(null),
     skills = useRef<HTMLDivElement>(null),
@@ -414,6 +406,26 @@ export function Composer({
               onChange={onCapabilityChange}
             />
           )}
+          {capability === 'translation' && (
+            <button
+              className="composer-tool"
+              onClick={() =>
+                workspace.openPanel({
+                  kind: 'translation',
+                  title: '附件翻译',
+                  id: materialRefs.find((ref) => ref.kind === 'file')?.id,
+                  data: {
+                    fileIds: materialRefs
+                      .filter((ref) => ref.kind === 'file')
+                      .map((ref) => ref.id),
+                  },
+                })
+              }
+            >
+              <Icon name="layout" size={15} />
+              <span>翻译窗口</span>
+            </button>
+          )}
         </div>
         <div className="inline-actions">
           <span className="composer-hint">Enter 发送</span>
@@ -477,7 +489,11 @@ export function Result({
       <div className="clarify-options">
         {(card.data?.options ?? ['费用报销', '差旅申请', '查单据进展']).map(
           (option: string) => (
-            <Button key={option} onClick={() => w.send(option)}>
+            <Button
+              key={option}
+              disabled={!latest}
+              onClick={() => w.send(option)}
+            >
               {option}
             </Button>
           ),
@@ -493,6 +509,7 @@ export function Result({
         rule: 'shield',
         rules: 'shield',
         report: 'chart',
+        tool: 'chart',
         skill: 'spark',
         knowledge: 'book',
         document: 'file',
@@ -534,26 +551,65 @@ export function ChatPage({
   task,
   composer,
   busy,
+  activity,
+  phase,
   onRename,
 }: {
   task: Task;
   composer: React.ReactNode;
   busy: boolean;
+  activity?: string;
+  phase?: string;
   onRename: () => void;
 }) {
   const w = useWorkspace(),
-    scroll = useRef<HTMLDivElement>(null);
+    scroll = useRef<HTMLDivElement>(null),
+    content = useRef<HTMLDivElement>(null),
+    followLatest = useRef(true);
+  const [showLatest, setShowLatest] = useState(false);
+  const scrollToLatest = () => {
+    followLatest.current = true;
+    setShowLatest(false);
+    if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
+  };
+
   useEffect(() => {
-    scroll.current?.scrollTo({
-      top: scroll.current.scrollHeight,
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        ? 'auto'
-        : 'smooth',
+    scrollToLatest();
+  }, [task.id]);
+
+  useEffect(() => {
+    if (followLatest.current && scroll.current)
+      scroll.current.scrollTop = scroll.current.scrollHeight;
+  }, [task.messages, busy, activity, phase]);
+
+  useEffect(() => {
+    if (!content.current || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (followLatest.current && scroll.current)
+        scroll.current.scrollTop = scroll.current.scrollHeight;
     });
-  }, [task.id, task.messages.length, busy]);
+    observer.observe(content.current);
+    if (scroll.current) observer.observe(scroll.current);
+    return () => observer.disconnect();
+  }, []);
+
   const last = task.messages.filter((m) => m.role === 'assistant').at(-1);
+  const isRunningMessage = (message: Task['messages'][number]) =>
+    busy &&
+    message.role === 'assistant' &&
+    Boolean(task.activeRunId) &&
+    (message.runId === task.activeRunId ||
+      message.id === task.activeRunId ||
+      message.id === `assistant-${task.activeRunId}`);
+  const hasRunningMessage = task.messages.some(isRunningMessage);
   const latestSubmissions = latestSubmissionCards(task);
-  const kind = last?.cards?.[0]?.kind;
+  const pending = pendingQuestion(task);
+  const canResume =
+    !busy &&
+    !pending &&
+    (/暂停|未完成|失败|中断|异常/.test(task.status) ||
+      ['failed', 'interrupted', 'cancelled'].includes(last?.runStatus ?? ''));
+  const kind = last ? visibleMessageCards(last)[0]?.card.kind : undefined;
   const suggestions =
     kind === 'analysis'
       ? ['只看销售部', '换成9月', '生成报告']
@@ -571,15 +627,19 @@ export function ChatPage({
       <div className="chat-titlebar">
         <h1>{task.title}</h1>
         <div className="inline-actions">
-          <Badge
-            tone={
-              task.status.includes('补充') || task.status.includes('核对')
-                ? 'amber'
-                : 'blue'
-            }
-          >
-            {busy ? '处理中' : task.status}
-          </Badge>
+          {!busy && (
+            <Badge
+              tone={
+                task.status.includes('补充') ||
+                task.status.includes('核对') ||
+                task.status === '待你回答'
+                  ? 'amber'
+                  : 'blue'
+              }
+            >
+              {task.status}
+            </Badge>
+          )}
           <button
             className="icon-btn"
             aria-label="重命名会话"
@@ -589,83 +649,167 @@ export function ChatPage({
           </button>
         </div>
       </div>
-      <div className="chat-thread" ref={scroll}>
-        {!task.messages.length && !busy && (
-          <div className="chat-empty-brand">
-            <XiaozhiMark className="empty-chat-mark" />
-            <p>从这里继续对话</p>
-          </div>
-        )}
-        {task.messages.map((message) => (
-          <article className={`message ${message.role}`} key={message.id}>
-            {message.role === 'user' ? (
-              <div className="user-bubble">{message.text}</div>
-            ) : (
-              <div>
-                <div className="assistant-name">
-                  <XiaozhiMark className="reply-mark" />
-                  <span>财小智</span>
-                </div>
-                <MessageText text={message.text} />
-                {message.cards && (
-                  <div className="message-cards">
-                    {message.cards.map((card, index) => (
-                      <Result
-                        card={card}
-                        latest={
-                          card.kind !== 'submission' ||
-                          latestSubmissions.has(`${message.id}:${index}`)
-                        }
-                        key={`${card.kind}-${index}`}
+      <div
+        className="chat-thread"
+        ref={scroll}
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          const nearBottom =
+            element.scrollHeight - element.scrollTop - element.clientHeight <
+            72;
+          followLatest.current = nearBottom;
+          setShowLatest(!nearBottom);
+        }}
+      >
+        <div className="chat-thread-content" ref={content}>
+          {!task.messages.length && !busy && (
+            <div className="chat-empty-brand">
+              <XiaozhiMark className="empty-chat-mark" />
+              <p>从这里继续对话</p>
+            </div>
+          )}
+          {task.messages.map((message) => {
+            const visibleCards = visibleMessageCards(message);
+            const messageRunning = isRunningMessage(message);
+            const latestStatus =
+              message.id === last?.id && !busy
+                ? pending
+                  ? 'awaiting_input'
+                  : task.status === '已暂停'
+                    ? 'paused'
+                    : /未完成|失败|中断|异常/.test(task.status)
+                      ? 'failed'
+                      : undefined
+                : undefined;
+            if (
+              message.role === 'assistant' &&
+              message.submissionPhase === 'collecting' &&
+              !message.text.trim() &&
+              !message.question &&
+              !visibleCards.length &&
+              !message.tools?.length &&
+              !messageRunning
+            )
+              return null;
+            return (
+              <article className={`message ${message.role}`} key={message.id}>
+                {message.role === 'user' ? (
+                  <div className="user-bubble">{message.text}</div>
+                ) : (
+                  <div>
+                    <div className="assistant-name">
+                      <XiaozhiMark className="reply-mark" />
+                      <span>财小智</span>
+                    </div>
+                    <RunProgress
+                      steps={message.tools}
+                      running={messageRunning}
+                      status={latestStatus ?? message.runStatus}
+                      activity={messageRunning ? activity : undefined}
+                      phase={messageRunning ? phase : undefined}
+                    />
+                    {message.text.trim() &&
+                      (!message.question ||
+                        message.text !== message.question.title) && (
+                        <MessageText text={message.text} />
+                      )}
+                    {message.question && (
+                      <QuestionCard
+                        question={message.question}
+                        active={pending?.id === message.question.id}
+                        busy={busy}
                       />
-                    ))}
+                    )}
+                    {visibleCards.length > 0 && (
+                      <div className="message-cards">
+                        {visibleCards.map(({ card, index }) => (
+                          <Result
+                            card={card}
+                            latest={
+                              card.kind === 'clarify'
+                                ? message.id === last?.id && !pending && !busy
+                                : card.kind !== 'submission' ||
+                                  latestSubmissions.has(
+                                    `${message.id}:${index}`,
+                                  )
+                            }
+                            key={`${card.kind}-${index}`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {message.text.trim() && (
+                      <div className="message-tools">
+                        <button
+                          className="icon-btn"
+                          title="复制回复"
+                          aria-label="复制回复"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(message.text).then(
+                              () => w.notify('已复制回复'),
+                              () => w.notify('复制失败，请选择文字复制'),
+                            );
+                          }}
+                        >
+                          <Icon name="copy" size={13} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
-                <div className="message-tools">
-                  <button
-                    className="icon-btn"
-                    title="复制回复"
-                    aria-label="复制回复"
-                    onClick={() => {
-                      navigator.clipboard?.writeText(message.text).then(
-                        () => w.notify('已复制回复'),
-                        () => w.notify('复制失败，请选择文字复制'),
-                      );
-                    }}
-                  >
-                    <Icon name="copy" size={13} />
-                  </button>
-                </div>
+              </article>
+            );
+          })}
+          {busy && !hasRunningMessage && (
+            <article className="message assistant">
+              <div className="assistant-name">
+                <XiaozhiMark className="reply-mark" />
+                <span>财小智</span>
               </div>
-            )}
-          </article>
-        ))}
-        {busy && <ThinkingStatus />}
-        {!busy && task.status === '已暂停' && (
-          <Button
-            variant="primary"
-            icon="refresh"
-            onClick={() =>
-              w.send(
-                task.messages.filter((m) => m.role === 'user').at(-1)?.text ??
-                  '继续处理当前事项',
-              )
-            }
-          >
-            继续处理
-          </Button>
-        )}
-        {!busy && suggestions.length > 0 && (
-          <div className="suggestions">
-            {suggestions.map((s) => (
-              <button onClick={() => w.send(s)} key={s}>
-                {s}
-                <Icon name="chevron" size={12} />
-              </button>
-            ))}
-          </div>
-        )}
+              <RunProgress running activity={activity} phase={phase} />
+            </article>
+          )}
+          {canResume && (
+            <div className="chat-resume-action">
+              <Button
+                variant="primary"
+                icon="refresh"
+                onClick={() =>
+                  w.send(
+                    task.status === '已暂停'
+                      ? resumeQuestionMessage(task)
+                      : '继续处理当前事项，保留已保存的草稿和成果，先核对当前办理状态，再继续尚未完成的步骤，不要重复提交已提交的单据。',
+                  )
+                }
+              >
+                继续处理
+              </Button>
+            </div>
+          )}
+          {!busy && !pending && !canResume && suggestions.length > 0 && (
+            <div className="suggestions">
+              {suggestions.map((s) => (
+                <button onClick={() => w.send(s)} key={s}>
+                  {s}
+                  <Icon name="chevron" size={12} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+      {showLatest && (
+        <div className="chat-latest">
+          <button
+            type="button"
+            className="chat-latest-button"
+            onClick={scrollToLatest}
+          >
+            <Icon name="down" size={13} />
+            回到最新
+          </button>
+        </div>
+      )}
       <div className="chat-compose">{composer}</div>
     </div>
   );
@@ -690,7 +834,7 @@ export function AttentionRows({
         const knownAudit = card?.kind === 'audit' && card.id === 'batch';
         const knownSubmission =
           card?.kind === 'submission' &&
-          (card.id === 'expense' || card.id === 'travel');
+          !!(card.id && w.state.data.submissions?.drafts?.[card.id]);
         const canOpenDetail = knownMaterial || knownAudit || knownSubmission;
         const summary =
           card && canOpenDetail
@@ -782,14 +926,12 @@ export function Home({
     capabilityExamples(capability),
   );
   useEffect(() => setExamples(capabilityExamples(capability)), [capability]);
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? '上午好' : hour < 18 ? '下午好' : '晚上好';
   return (
     <div className="workspace-home">
       <div className="home-intro">
         <div className="home-greeting">
           <XiaozhiMark className="home-brand-mark" />
-          <h1>{greeting}，林悦</h1>
+          <h1>吴侠，今天想完成什么财务工作？</h1>
         </div>
       </div>
       {composer}

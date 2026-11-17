@@ -14,6 +14,23 @@ import {
 } from './runtime-client';
 import './runtime.css';
 import {
+  rememberComposerDraft,
+  readComposerDraft,
+  forgetComposerDraft,
+} from './composer-draft';
+import {
+  createRunStream,
+  mergeRunMessages,
+  reduceRunEvent,
+  type RunStream,
+} from './run-progress-model';
+import { ContextHelp } from './ContextHelp';
+import {
+  readSkillDraftTarget,
+  saveSkillDraftTarget,
+  selectSkillDraft,
+} from './skill-selection';
+import {
   WorkspaceContext,
   type WorkspaceState,
   type WorkspaceAPI,
@@ -27,6 +44,14 @@ import { Icon, Button, Badge, Empty } from './ui';
 import { syncTaskStates } from './card-model';
 import { appendDraft, selectHomeTasks } from './task-model';
 import {
+  pendingQuestion,
+  questionState,
+  prepareQuestionAnswer,
+  continuedQuestionPanel,
+  continuationDraftId,
+  type QuestionAnswerInput,
+} from './question-model';
+import {
   conversationState,
   formatConversationTime,
   lastMessageTime,
@@ -35,7 +60,10 @@ import {
 import { getCapability, type CapabilityId } from './capability-model';
 import { SkillPickerPanel } from './Skills';
 import { ConversationHistory } from './ConversationHistory';
+import { TranslationPanel } from './TranslationPanel';
+import { SkillArtifactPanel } from './SkillArtifactPanel';
 import { Composer, Home, ChatPage, logo } from './Chat';
+import { QuestionComposer, clearQuestionResponse } from './QuestionComposer';
 import { RulesPage, RulesPanel, AuditPanel } from './RulesSubmission';
 import { SubmissionPage, SubmissionPanel } from './SubmissionWorkspace';
 import {
@@ -63,7 +91,7 @@ import {
   RenamePanel,
 } from './Supporting';
 
-const frequentApps: PageId[] = ['skills', 'rules', 'submission'];
+const frequentApps: PageId[] = ['skills', 'rules', 'analysis'];
 const uid = () => crypto.randomUUID();
 const initial: WorkspaceState = { data: {}, tasks: [], activeTask: null };
 function homeDraft(): {
@@ -87,7 +115,7 @@ const pageTitles: Record<PageId, string> = {
   submission: '智能提单',
   rules: '规则中心',
   analysis: '数据分析',
-  skills: '技能·工具',
+  skills: '技能工具',
   knowledge: '制度知识',
   files: '材料与文件',
 };
@@ -125,9 +153,7 @@ export default function App() {
       model: string;
       framework: string;
     } | null>(null),
-    [streams, setStreams] = useState<
-      Record<string, { runId: string; text: string; activity?: string }>
-    >({}),
+    [streams, setStreams] = useState<Record<string, RunStream>>({}),
     [page, setPage] = useState<PageId>(readPage),
     [mode, setModeState] = useState<Mode>(readMode),
     [panel, setPanel] = useState<PanelSpec | null>(() => {
@@ -162,21 +188,7 @@ export default function App() {
     tasks: savedState.tasks.map((task) => {
       const stream = streams[task.id];
       const failure = runFailures[task.id];
-      const messages =
-        stream?.text &&
-        !task.messages.some(
-          (message) => message.id === `assistant-${stream.runId}`,
-        )
-          ? [
-              ...task.messages,
-              {
-                id: `assistant-${stream.runId}`,
-                role: 'assistant' as const,
-                text: stream.text,
-                createdAt: Date.now(),
-              },
-            ]
-          : task.messages;
+      const messages = mergeRunMessages(task.messages, stream);
       return {
         ...task,
         status: busyIds.includes(task.id)
@@ -200,7 +212,11 @@ export default function App() {
   const stateRef = useRef(savedState),
     panelRef = useRef(panel),
     draftTaskId = useRef<string | null>(
-      page === 'home' ? null : state.activeTask,
+      page === 'skills'
+        ? readSkillDraftTarget()
+        : page === 'home'
+          ? null
+          : state.activeTask,
     ),
     dialog = useRef<HTMLDialogElement>(null),
     lastFocus = useRef<HTMLElement | null>(null),
@@ -210,6 +226,7 @@ export default function App() {
     starting = useRef(new Set<string>()),
     mounted = useRef(true),
     initialized = useRef(false),
+    restoredPanel = useRef(false),
     toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   stateRef.current = savedState;
   panelRef.current = panel;
@@ -243,13 +260,14 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
-    if (page === 'home') draftTaskId.current = null;
-    else if (chatVisible) draftTaskId.current = active.id;
+    if (page === 'home') setDraftTarget(null);
+    else if (chatVisible) setDraftTarget(active.id);
   }, [page, chatVisible, active?.id]);
   useEffect(() => {
     mounted.current = true;
     const unsubscribe = subscribeWorkspace((snapshot) => {
-      const next = initialized.current
+      const firstSnapshot = !initialized.current;
+      const next = !firstSnapshot
         ? {
             ...snapshot.state,
             activeTask:
@@ -260,13 +278,28 @@ export default function App() {
                 ? stateRef.current.activeTask
                 : null,
           }
-        : snapshot.state;
+        : {
+            ...snapshot.state,
+            tasks: snapshot.state.tasks.map((task) => {
+              const input = readComposerDraft(task.id);
+              return input === null ? task : { ...task, input };
+            }),
+          };
       initialized.current = true;
       stateRef.current = next;
       setSavedState(next);
       setReady(true);
+      if (firstSnapshot) saveWorkspace(workspacePatch(snapshot.state, next));
     });
-    const unsubscribeStatus = subscribeRuntimeStatus(setRuntimeStatus);
+    const unsubscribeStatus = subscribeRuntimeStatus((status) => {
+      setRuntimeStatus(status);
+      if (status.state === 'ready') {
+        for (const task of stateRef.current.tasks) {
+          if (readComposerDraft(task.id) === task.input)
+            forgetComposerDraft(task.id);
+        }
+      }
+    });
     void connectRuntime();
     return () => {
       mounted.current = false;
@@ -291,6 +324,20 @@ export default function App() {
   }, [homeInput, homeRefs, homeCapability]);
   useEffect(() => {
     if (!ready) return;
+    if (!restoredPanel.current) {
+      restoredPanel.current = true;
+      const task = savedState.tasks.find(
+        (item) => item.id === savedState.activeTask,
+      );
+      if (task) {
+        const next = continuedQuestionPanel(
+          panelRef.current,
+          continuationDraftId(task),
+          task,
+        );
+        if (next) setPanel(next);
+      }
+    }
     for (const task of savedState.tasks)
       if (task.activeRunId && !connections.current.has(task.id))
         connectRun(task.id, task.activeRunId);
@@ -374,8 +421,31 @@ export default function App() {
     await flushWorkspace();
     await readWorkspace();
   }
-  function connectRun(taskId: string, runId: string) {
+  function connectRun(taskId: string, runId: string, questionDraftId?: string) {
     if (connections.current.has(taskId)) return;
+    const resumedTask = stateRef.current.tasks.find(
+      (task) => task.id === taskId,
+    );
+    questionDraftId ??= resumedTask
+      ? continuationDraftId(resumedTask)
+      : undefined;
+    const reconcilePanel = () => {
+      const completed = stateRef.current.tasks.find(
+        (task) => task.id === taskId,
+      );
+      if (completed && stateRef.current.activeTask === taskId) {
+        const next = continuedQuestionPanel(
+          panelRef.current,
+          questionDraftId,
+          completed,
+        );
+        if (next) setPanel(next);
+      }
+    };
+    const refreshRun = async () => {
+      await refresh();
+      reconcilePanel();
+    };
     const source = new EventSource(
       `/api/local/runs/${encodeURIComponent(runId)}/events`,
     );
@@ -386,7 +456,14 @@ export default function App() {
       return next;
     });
     setBusyIds((old) => (old.includes(taskId) ? old : [...old, taskId]));
-    setStreams((old) => ({ ...old, [taskId]: { runId, text: '' } }));
+    const savedRun = resumedTask?.messages.find(
+      (message) =>
+        message.runId === runId || message.id === `assistant-${runId}`,
+    );
+    setStreams((old) => ({
+      ...old,
+      [taskId]: createRunStream(runId, savedRun?.tools),
+    }));
     const seen = new Set<string>();
     let terminal = false;
     const clear = () => {
@@ -414,47 +491,39 @@ export default function App() {
           notify('运行事件格式异常，请刷新会话。');
         }
       });
-    event('tool', (value) =>
-      setStreams((old) => ({
-        ...old,
-        [taskId]: {
-          ...old[taskId],
-          runId,
-          text: old[taskId]?.text ?? '',
-          activity:
-            value.status === 'completed'
-              ? ''
-              : String(value.label ?? '正在处理'),
-        },
-      })),
-    );
-    event('delta', (value) =>
-      setStreams((old) => ({
-        ...old,
-        [taskId]: {
-          runId,
-          text: (old[taskId]?.text ?? '') + String(value.text ?? ''),
-        },
-      })),
-    );
+    const progressEvent = (kind: string, value: unknown) =>
+      setStreams((old) => {
+        const current = old[taskId];
+        if (!current || current.runId !== runId) return old;
+        return { ...old, [taskId]: reduceRunEvent(current, kind, value) };
+      });
+    event('tool', (value) => progressEvent('tool', value));
+    event('status', (value) => progressEvent('status', value));
+    event('delta', (value) => progressEvent('delta', value));
     event('result', (value) => {
       terminal = true;
-      if (value.workspace?.state)
+      if (value.workspace?.state) {
         acceptWorkspace(value.workspace as WorkspaceSnapshot);
+        reconcilePanel();
+      }
     });
     event('error', (value) => {
       terminal = true;
+      progressEvent('error', value);
       notify(value.message || '处理失败，请重试。');
     });
     event('done', () => {
-      clear();
-      void refresh().catch((error) => notify(error.message));
+      terminal = true;
+      source.close();
+      void refreshRun()
+        .catch((error) => notify(error.message))
+        .finally(clear);
     });
     source.onerror = (error) => {
       if (error instanceof MessageEvent) return;
       if (terminal) {
         clear();
-        void refresh().catch(() => {});
+        void refreshRun().catch(() => {});
       } else {
         setRuntimeStatus({
           state: 'offline',
@@ -466,7 +535,7 @@ export default function App() {
           .then((run) => {
             if (run.status !== 'running') {
               clear();
-              void refresh().catch(() => {});
+              void refreshRun().catch(() => {});
             }
           })
           .catch((error) => {
@@ -488,6 +557,10 @@ export default function App() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), 3300);
   }
+  function setDraftTarget(id: string | null) {
+    draftTaskId.current = id;
+    saveSkillDraftTarget(id);
+  }
   function preserveHomeDraft() {
     if (
       page !== 'home' ||
@@ -500,7 +573,7 @@ export default function App() {
     draft.input = homeInput;
     draft.refs = homeRefs;
     draft.capability = homeCapability;
-    draftTaskId.current = draft.id;
+    setDraftTarget(draft.id);
     setState((current) => ({
       ...current,
       activeTask: draft.id,
@@ -511,12 +584,23 @@ export default function App() {
     setHomeCapability(null);
   }
   function navigate(next: PageId) {
-    if (next !== 'home' && next !== 'chat') preserveHomeDraft();
+    if (next !== 'home' && next !== 'chat' && next !== 'skills')
+      preserveHomeDraft();
+    if (next === 'skills') saveSkillDraftTarget(draftTaskId.current);
     setPage(next);
     setMobileOpen(false);
     if (location.hash !== `#${next}`) location.hash = next;
   }
   function openPanel(next: PanelSpec) {
+    if (next.kind === 'tool') {
+      preserveHomeDraft();
+      saveSkillDraftTarget(draftTaskId.current);
+      setPanel(null);
+      setPage('skills');
+      setMobileOpen(false);
+      location.hash = `skills?tab=tools&tool=expense-summary${next.id ? `&result=${encodeURIComponent(next.id)}` : ''}`;
+      return;
+    }
     if (!panelRef.current)
       lastFocus.current = document.activeElement as HTMLElement;
     setPanel(next);
@@ -530,18 +614,28 @@ export default function App() {
   function updateTask(id: string, fn: (task: Task) => Task) {
     setState((s) => ({
       ...s,
-      tasks: s.tasks.map((t) => (t.id === id ? fn(t) : t)),
+      tasks: s.tasks.map((t) => {
+        if (t.id !== id) return t;
+        const next = fn(t);
+        if (next.input !== t.input) rememberComposerDraft(id, next.input);
+        return next;
+      }),
     }));
   }
   function selectTask(id: string) {
     preserveHomeDraft();
-    draftTaskId.current = id;
+    setDraftTarget(id);
     setState((s) => ({ ...s, activeTask: id }));
     navigate('chat');
     if (mode === 'operations') {
       const t = stateRef.current.tasks.find((t) => t.id === id);
       const card = t?.messages.flatMap((m) => m.cards ?? []).at(-1);
-      if (card && card.kind !== 'documents' && card.kind !== 'clarify')
+      if (
+        card &&
+        card.kind !== 'documents' &&
+        card.kind !== 'clarify' &&
+        card.kind !== 'tool'
+      )
         setPanel({
           kind: card.kind,
           title: card.title,
@@ -552,13 +646,40 @@ export default function App() {
     } else closePanel();
   }
   function newTask() {
-    draftTaskId.current = null;
+    setDraftTarget(null);
     setState((s) => ({ ...s, activeTask: null }));
     setHomeInput('');
     setHomeRefs([]);
     setHomeCapability(null);
     setPanel(null);
     navigate('home');
+  }
+  function selectSkill(ref: ContextRef) {
+    if (ref.kind !== 'skill') return;
+    const targetId = draftTaskId.current;
+    const home = {
+      input: homeInput,
+      refs: homeRefs,
+      capability: homeCapability,
+    };
+    const selection = selectSkillDraft(stateRef.current, home, targetId, ref);
+    if (selection.page === 'chat') {
+      setState(
+        (current) => selectSkillDraft(current, home, targetId, ref).state,
+      );
+    } else {
+      setDraftTarget(null);
+      setHomeRefs(
+        (refs) =>
+          selectSkillDraft(stateRef.current, { ...home, refs }, null, ref).home
+            .refs,
+      );
+    }
+    closePanel();
+    navigate(selection.page);
+    requestAnimationFrame(() =>
+      document.getElementById('message-input')?.focus(),
+    );
   }
   function attach(ref: ContextRef) {
     if (page === 'home') {
@@ -583,7 +704,7 @@ export default function App() {
     const freshTask = makeTask();
     const targetId = draftTaskId.current ?? freshTask.id;
     // Reserve the draft before React batches consecutive reference additions.
-    draftTaskId.current = targetId;
+    setDraftTarget(targetId);
     setState((s) => {
       const existing = s.tasks.find((t) => t.id === targetId);
       const task = existing ?? { ...freshTask, id: targetId };
@@ -622,8 +743,15 @@ export default function App() {
     navigate('chat');
     notify(`已引用「${ref.title}」`);
   }
-  async function send(text: string, explicitRefs?: ContextRef[]) {
-    if (!text.trim() || !ready) return;
+  async function send(
+    text: string,
+    explicitRefs?: ContextRef[],
+    questionAnswer?: QuestionAnswerInput,
+  ) {
+    if (!text.trim() || !ready) {
+      if (questionAnswer) throw new Error('服务尚未就绪，请稍后重试。');
+      return;
+    }
     let task =
       page === 'chat'
         ? stateRef.current.tasks.find(
@@ -640,7 +768,10 @@ export default function App() {
       }));
     }
     const id = task.id;
-    if (starting.current.has(id) || connections.current.has(id)) return;
+    if (starting.current.has(id) || connections.current.has(id)) {
+      if (questionAnswer) throw new Error('当前会话正在处理，请稍后回答。');
+      return;
+    }
     starting.current.add(id);
     setRunFailures((old) => {
       const next = { ...old };
@@ -648,10 +779,11 @@ export default function App() {
       return next;
     });
     const baseRefs = explicitRefs ?? (page === 'chat' ? task.refs : homeRefs);
+    const answering = !!questionAnswer || !!pendingQuestion(task);
     const openSubmission =
       panelRef.current?.kind === 'submission' ? panelRef.current : null;
     const refs =
-      openSubmission && !explicitRefs
+      openSubmission && !explicitRefs && !answering
         ? [
             ...baseRefs.filter((ref) => ref.kind !== 'submission'),
             {
@@ -661,25 +793,28 @@ export default function App() {
             },
           ]
         : baseRefs;
-    const capability = explicitRefs?.some((ref) => ref.kind === 'document')
-      ? 'documents'
-      : explicitRefs?.some((ref) => ref.kind === 'knowledge')
-        ? 'knowledge'
-        : explicitRefs?.some((ref) => ref.kind === 'submission')
-          ? 'submission'
-          : task.capability;
+    const capability = answering
+      ? task.capability
+      : explicitRefs?.some((ref) => ref.kind === 'document')
+        ? 'documents'
+        : explicitRefs?.some((ref) => ref.kind === 'knowledge')
+          ? 'knowledge'
+          : explicitRefs?.some((ref) => ref.kind === 'submission')
+            ? 'submission'
+            : task.capability;
     updateTask(id, (current) => ({
       ...current,
       title: ['新任务', '新会话'].includes(current.title)
         ? text.slice(0, 24)
         : current.title,
-      input: '',
+      input: questionAnswer ? current.input : '',
       capability,
       refs,
       updated: '刚刚',
       messages:
-        current.messages.at(-1)?.role === 'user' &&
-        current.messages.at(-1)?.text === text
+        questionAnswer ||
+        (current.messages.at(-1)?.role === 'user' &&
+          current.messages.at(-1)?.text === text)
           ? current.messages
           : [
               ...current.messages,
@@ -690,32 +825,109 @@ export default function App() {
     setHomeRefs([]);
     setHomeCapability(null);
     navigate('chat');
+    if (
+      !answering &&
+      (capability === 'translation' ||
+        (!capability &&
+          /翻译|翻成中文/.test(text) &&
+          (refs.some((ref) => ref.kind === 'file') ||
+            /附件|票据|发票|账单|收据/.test(text))))
+    ) {
+      const files = refs.filter((ref) => ref.kind === 'file');
+      updateTask(id, (current) => ({
+        ...current,
+        type: 'translation',
+        status: '待我处理',
+        messages: [
+          ...current.messages,
+          {
+            id: uid(),
+            role: 'assistant',
+            text: files.length
+              ? '已打开中文翻译窗口，处理结果将在窗口内显示。'
+              : '请上传需要翻译的票据图片或 PDF。',
+            createdAt: Date.now(),
+            cards: [
+              {
+                kind: 'translation',
+                title: '附件翻译',
+                subtitle: files.length
+                  ? files.map((file) => file.title).join('、')
+                  : '上传票据',
+                id: files[0]?.id,
+                data: { fileIds: files.map((file) => file.id) },
+              },
+            ],
+          },
+        ],
+      }));
+      starting.current.delete(id);
+      openPanel({
+        kind: 'translation',
+        title: '附件翻译',
+        id: files[0]?.id,
+        data: {
+          autoStart: files.length > 0,
+          fileIds: files.map((file) => file.id),
+        },
+      });
+      return;
+    }
     setBusyIds((old) => [...old.filter((value) => value !== id), id]);
     try {
       await flushWorkspace();
-      const result = await runtimeApi<{ runId: string; taskId: string }>(
-        '/runs',
-        { taskId: id, message: text, refs, capability },
-      );
-      connectRun(result.taskId, result.runId);
+      const result = await runtimeApi<{
+        runId: string | null;
+        taskId: string;
+        workspace?: WorkspaceSnapshot;
+      }>('/runs', {
+        taskId: id,
+        message: text,
+        refs,
+        capability,
+        ...(questionAnswer ? { questionAnswer } : {}),
+      });
+      if (result.workspace) acceptWorkspace(result.workspace);
+      if (result.runId)
+        connectRun(
+          result.taskId,
+          result.runId,
+          answering ? pendingQuestion(task)?.draftId : undefined,
+        );
+      else setBusyIds((old) => old.filter((value) => value !== id));
       await readWorkspace();
     } catch (error) {
       // A lost POST response can still represent a running server task. Reconcile before retrying.
       const snapshot = await readWorkspace().catch(() => null);
       const current = snapshot?.state.tasks.find((task) => task.id === id);
-      if (current?.activeRunId) connectRun(id, current.activeRunId);
+      if (current?.activeRunId)
+        connectRun(
+          id,
+          current.activeRunId,
+          answering ? pendingQuestion(task)?.draftId : undefined,
+        );
       else if (!connections.current.has(id)) {
         setBusyIds((old) => old.filter((value) => value !== id));
         const receivedAnswer = current?.messages.at(-1)?.role === 'assistant';
         if (!receivedAnswer) {
           setRunFailures((old) => ({ ...old, [id]: (error as Error).message }));
-          updateTask(id, (value) => ({ ...value, input: text }));
+          if (!questionAnswer)
+            updateTask(id, (value) => ({ ...value, input: text }));
         }
       }
       notify((error as Error).message);
+      if (questionAnswer && !current?.activeRunId) throw error;
     } finally {
       starting.current.delete(id);
     }
+  }
+  async function answerQuestion(input: QuestionAnswerInput) {
+    const task = stateRef.current.tasks.find(
+      (item) => item.id === stateRef.current.activeTask,
+    );
+    if (!task || page !== 'chat') throw new Error('请返回原会话回答这个问题。');
+    const prepared = prepareQuestionAnswer(task, input, stateRef.current.data);
+    await send(prepared.message, task.refs, prepared.answer);
   }
   function message(text: string, cards?: ResultCard[]) {
     const id = stateRef.current.activeTask;
@@ -823,7 +1035,9 @@ export default function App() {
     closePanel,
     navigate,
     attach,
+    selectSkill,
     send,
+    answerQuestion,
     message,
     notify,
     setTaskStatus: (status) => {
@@ -853,50 +1067,83 @@ export default function App() {
       field?.setSelectionRange(field.value.length, field.value.length);
     });
   }
-  const composer = (
-    <Composer
-      capability={currentCapability}
-      onCapabilityChange={selectCapability}
-      value={currentInput}
-      onChange={(value) =>
-        chatVisible
-          ? updateTask(active.id, (t) => ({ ...t, input: value }))
-          : setHomeInput(value)
+  const pendingAnswer = chatVisible ? pendingQuestion(active) : undefined;
+  const answerQuestionAtInput =
+    pendingAnswer && questionState(pendingAnswer, state.data) === 'pending'
+      ? pendingAnswer
+      : undefined;
+  useEffect(() => {
+    if (!ready) return;
+    for (const task of state.tasks) {
+      for (const message of task.messages) {
+        if (message.question && message.question.status !== 'pending') {
+          // A locally edited draft can temporarily invalidate the question.
+          // Keep its answer until the server confirms the question has ended.
+          clearQuestionResponse(task.id, message.question.id);
+        }
       }
-      onSend={() => send(currentInput)}
-      refs={currentRefs}
-      onAdd={(ref) => {
-        const add = (refs: ContextRef[]) => [
-          ...refs.filter(
-            (item) => item.kind !== ref.kind || item.id !== ref.id,
-          ),
-          ref,
-        ];
-        if (chatVisible)
-          updateTask(active.id, (task) => ({ ...task, refs: add(task.refs) }));
-        else setHomeRefs(add);
-      }}
-      onRemove={(ref) =>
-        chatVisible
-          ? updateTask(active.id, (t) => ({
-              ...t,
-              refs: t.refs.filter(
-                (r) => r.id !== ref.id || r.kind !== ref.kind,
-              ),
-            }))
-          : setHomeRefs((refs) =>
-              refs.filter((r) => r.id !== ref.id || r.kind !== ref.kind),
-            )
-      }
-      busy={!!chatVisible && busyIds.includes(active.id)}
-      onStop={stop}
-      onUpload={upload}
-      compact={!!chatVisible}
-    />
-  );
+    }
+  }, [ready, state.tasks]);
+  const composer =
+    answerQuestionAtInput && chatVisible ? (
+      <QuestionComposer
+        key={`${active.id}:${answerQuestionAtInput.id}`}
+        taskId={active.id}
+        question={answerQuestionAtInput}
+        busy={busyIds.includes(active.id)}
+        onStop={stop}
+      />
+    ) : (
+      <Composer
+        capability={currentCapability}
+        onCapabilityChange={selectCapability}
+        value={currentInput}
+        onChange={(value) =>
+          chatVisible
+            ? updateTask(active.id, (t) => ({ ...t, input: value }))
+            : setHomeInput(value)
+        }
+        onSend={() => send(currentInput)}
+        refs={currentRefs}
+        onAdd={(ref) => {
+          const add = (refs: ContextRef[]) => [
+            ...refs.filter(
+              (item) => item.kind !== ref.kind || item.id !== ref.id,
+            ),
+            ref,
+          ];
+          if (chatVisible)
+            updateTask(active.id, (task) => ({
+              ...task,
+              refs: add(task.refs),
+            }));
+          else setHomeRefs(add);
+        }}
+        onRemove={(ref) =>
+          chatVisible
+            ? updateTask(active.id, (t) => ({
+                ...t,
+                refs: t.refs.filter(
+                  (r) => r.id !== ref.id || r.kind !== ref.kind,
+                ),
+              }))
+            : setHomeRefs((refs) =>
+                refs.filter((r) => r.id !== ref.id || r.kind !== ref.kind),
+              )
+        }
+        busy={!!chatVisible && busyIds.includes(active.id)}
+        onStop={stop}
+        onUpload={upload}
+        compact={!!chatVisible}
+      />
+    );
   const renderedPanel =
     ready && panel ? (
-      panel.kind === 'document' ? (
+      panel.kind === 'artifact' ? (
+        <SkillArtifactPanel panel={panel} />
+      ) : panel.kind === 'translation' ? (
+        <TranslationPanel panel={panel} />
+      ) : panel.kind === 'document' ? (
         <DocumentPanel panel={panel} />
       ) : panel.kind === 'materials' ? (
         <MaterialsPanel panel={panel} />
@@ -1005,12 +1252,12 @@ export default function App() {
                 className={`nav-item sidebar-all-apps ${panel?.kind === 'apps' || apps.some((app) => app.id === page && !frequentApps.includes(app.id)) ? 'active' : ''}`}
                 onClick={() => {
                   setMobileOpen(false);
-                  openPanel({ kind: 'apps', title: '全部应用' });
+                  openPanel({ kind: 'apps', title: '全部工具' });
                 }}
-                title="全部应用"
+                title="全部工具"
               >
                 <Icon name="grid" size={17} />
-                <span>全部应用</span>
+                <span>全部工具</span>
               </button>
             </nav>
             <div className="recent-navigation">
@@ -1083,13 +1330,12 @@ export default function App() {
                     ? '正在保存'
                     : health?.modelConfigured === false
                       ? '模型未配置'
-                      : (active && streams[active.id]?.activity) ||
-                        '本地服务已连接'}
+                      : '本地服务已连接'}
             </button>
             <div className="profile">
-              <span className="avatar">悦</span>
+              <span className="avatar">吴</span>
               <div>
-                <strong>林悦</strong>
+                <strong>吴侠</strong>
                 <small>华川科技 · 财务部</small>
               </div>
             </div>
@@ -1168,6 +1414,8 @@ export default function App() {
                     task={active}
                     composer={composer}
                     busy={busyIds.includes(active.id)}
+                    activity={streams[active.id]?.activity}
+                    phase={streams[active.id]?.phase}
                     onRename={() =>
                       openPanel({ kind: 'rename', title: '重命名会话' })
                     }
@@ -1237,16 +1485,18 @@ export default function App() {
             </div>
           )}
         </main>
-        <button
-          className="help-trigger"
-          onClick={() => openPanel({ kind: 'help', title: '使用指引' })}
-        >
-          <Icon name="help" size={14} />
-          使用指引
-        </button>
+        {(!panel || inlinePanel) && (
+          <ContextHelp
+            skillsContext={
+              page === 'skills' ||
+              panel?.kind === 'skill' ||
+              panel?.kind === 'governance'
+            }
+          />
+        )}
         <dialog
           ref={dialog}
-          className={`detail-dialog${panel?.kind === 'submission' ? ' submission-dialog' : ''}${panel?.kind === 'report' ? ' report-dialog' : ''}${panel?.kind === 'analysis' ? ' analysis-dialog' : ''}`}
+          className={`detail-dialog${panel?.kind === 'submission' ? ' submission-dialog' : ''}${panel?.kind === 'report' ? ' report-dialog' : ''}${panel?.kind === 'analysis' ? ' analysis-dialog' : ''}${panel?.kind === 'translation' ? ' translation-dialog' : ''}${panel?.kind === 'governance' ? ' governance-dialog' : ''}`}
           aria-labelledby="panel-title"
           onCancel={(e) => {
             e.preventDefault();
@@ -1272,6 +1522,15 @@ export default function App() {
               >
                 {renderedPanel}
               </div>
+              {panel && panel.kind !== 'help' && (
+                <ContextHelp
+                  skillsContext={
+                    page === 'skills' ||
+                    panel.kind === 'skill' ||
+                    panel.kind === 'governance'
+                  }
+                />
+              )}
             </>
           )}
         </dialog>

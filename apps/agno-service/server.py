@@ -4,31 +4,55 @@ import json
 import time
 import uuid
 import logging
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from importlib.metadata import version
 from pathlib import Path
+from urllib.parse import urlparse
 from fastapi import FastAPI, Request, UploadFile, File
-from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
+from fastapi.responses import JSONResponse, StreamingResponse, FileResponse, Response
 from pydantic import BaseModel, Field
 import config
 from store import Store, Conflict
 from business import Business, BusinessError
-from agent_runtime import Runtime, generate_rule
+from agent_runtime import Runtime, generate_rule, model
+from rule_service import SemanticRuleService, validate_semantic_rule
+from rule_catalog import demo_cases
 from file_service import save_file
 from scheduler import tick
+from translation_service import TranslationService, TranslationError
+from clarification_service import QuestionError, answer_question
+
+
+class QuestionAnswer(BaseModel):
+    questionId: str = Field(min_length=1, max_length=200)
+    optionIds: list[str] = Field(default_factory=list, max_length=6)
+    text: str = Field(default='', max_length=20000)
+    deferred: bool = False
 
 
 class RunRequest(BaseModel):
     taskId: str = Field(min_length=1, max_length=200)
-    message: str = Field(min_length=1, max_length=20000)
+    message: str = Field(default='', max_length=20000)
     refs: list[dict] = Field(default_factory=list, max_length=30)
     capability: str | None = None
+    questionAnswer: QuestionAnswer | None = None
 
 
-def create_app(store=None):
+class MaterialExtractRequest(BaseModel):
+    fileIds: list[str] = Field(min_length=1, max_length=10)
+
+
+class ExpenseSummaryRequest(BaseModel):
+    fileId: str = Field(min_length=1, max_length=200)
+
+
+def create_app(store=None, rule_service=None):
     store = store or Store(config.DATA_DIR / 'workspace.sqlite3')
-    business = Business(store)
+    semantic_rules = rule_service or SemanticRuleService(model)
+    business = Business(store, rule_service=semantic_rules)
     runtime = Runtime(store, business)
+    translations = TranslationService(store)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -36,7 +60,7 @@ def create_app(store=None):
         async def schedules():
             while True:
                 try:
-                    tick(store, business)
+                    await asyncio.to_thread(tick, store, business)
                 except Exception as error:
                     logging.getLogger(__name__).warning('预审调度失败 (%s)', type(error).__name__)
                 await asyncio.sleep(15)
@@ -53,6 +77,9 @@ def create_app(store=None):
     app = FastAPI(title='财小智本地 Agno', version='0.1.0', lifespan=lifespan, docs_url='/api/local/docs', openapi_url='/api/local/openapi.json')
     app.state.store = store
     app.state.runtime = runtime
+    app.state.translations = translations
+    from skill_routes import register_skill_routes
+    register_skill_routes(app, store, config.DATA_DIR)
 
     @app.middleware('http')
     async def local_boundary(request, call_next):
@@ -79,10 +106,19 @@ def create_app(store=None):
     async def invalid_input(request, error):
         return JSONResponse({'message': str(error)[:500]}, status_code=422)
 
+    @app.exception_handler(QuestionError)
+    async def invalid_answer(request, error):
+        return JSONResponse({'message': str(error), 'code': 'question_conflict' if error.status == 409 else 'invalid_answer',
+                             'workspace': store.snapshot()}, status_code=error.status)
+
+    @app.exception_handler(TranslationError)
+    async def translation_error(request, error):
+        return JSONResponse({'message': error.message}, status_code=error.status)
+
     @app.get('/api/local/health')
     async def health():
         store.snapshot()
-        return {'status': 'ready', 'framework': 'Agno', 'version': version('agno'), 'modelConfigured': bool(config.API_KEY), 'model': config.MODEL, 'dataSource': '本地模拟业务数据', 'activeRuns': len(runtime.tasks)}
+        return {'status': 'ready', 'framework': 'Agno', 'version': version('agno'), 'modelConfigured': bool(config.API_KEY), 'model': config.MODEL, 'thinkingEnabled': config.THINKING if urlparse(config.BASE_URL).hostname == 'api.deepseek.com' else None, 'dataSource': '本地模拟业务数据', 'activeRuns': len(runtime.tasks)}
 
     @app.get('/api/local/workspace')
     async def workspace():
@@ -101,30 +137,54 @@ def create_app(store=None):
 
     @app.post('/api/local/runs')
     async def create_run(payload: RunRequest):
-        if not payload.message.strip():
+        if not payload.message.strip() and payload.questionAnswer is None:
             raise ValueError('请输入消息内容。')
-        if not config.API_KEY:
+        deferred = bool(payload.questionAnswer and payload.questionAnswer.deferred)
+        if not deferred and not config.API_KEY:
             return JSONResponse({'message': '尚未配置模型，请配置本地 AGNO_API_KEY 后重启服务。'}, status_code=503)
-        if len(runtime.tasks) >= 4:
+        if not deferred and len(runtime.tasks) >= 4:
             return JSONResponse({'message': '正在处理其他任务，请稍后再试。'}, status_code=429)
-        run_id = 'run-' + uuid.uuid4().hex
+        run_id = None if deferred else 'run-' + uuid.uuid4().hex
+        request_data = payload.model_dump()
         with store.lock:
             current = next((t for t in store.get_state()['tasks'] if t['id'] == payload.taskId), None)
             if current and current.get('activeRunId'):
                 return JSONResponse({'message': '该会话已有进行中的任务。'}, status_code=409)
             def begin(state):
+                context, user_text = answer_question(state, payload.taskId, request_data.get('questionAnswer'), payload.message)
                 task = next((t for t in state['tasks'] if t['id'] == payload.taskId), None)
                 if task is None:
-                    task = {'id': payload.taskId, 'title': payload.message[:24], 'status': '处理中', 'type': 'chat', 'messages': [], 'input': '', 'refs': [], 'updated': '刚刚'}
+                    task = {'id': payload.taskId, 'title': user_text[:24], 'status': '处理中', 'type': 'chat', 'messages': [], 'input': '', 'refs': [], 'updated': '刚刚'}
                     state['tasks'].insert(0, task)
                 messages = task['messages']
-                if not messages or messages[-1].get('role') != 'user' or messages[-1].get('text') != payload.message:
-                    messages.append({'id': 'user-' + uuid.uuid4().hex, 'role': 'user', 'text': payload.message, 'createdAt': int(time.time()*1000)})
-                task.update(activeRunId=run_id, status='处理中', refs=payload.refs, capability=payload.capability, input='')
+                user_message = {'id': 'user-' + uuid.uuid4().hex, 'role': 'user', 'text': user_text, 'createdAt': int(time.time()*1000)}
+                if context:
+                    question = context['question']
+                    user_message['questionAnswer'] = {'questionId': question['id'], **question.get('answer', {}),
+                                                      'deferred': deferred, 'mode': context['mode']}
+                    request_data['questionContext'] = context
+                    # Ordinary text may already be present from the client's optimistic save.
+                    if messages and messages[-1].get('role') == 'user' and messages[-1].get('text') == user_text and not messages[-1].get('questionAnswer'):
+                        messages[-1]['questionAnswer'] = user_message['questionAnswer']
+                    else:
+                        messages.append(user_message)
+                elif not messages or messages[-1].get('role') != 'user' or messages[-1].get('text') != user_text:
+                    messages.append(user_message)
+                request_data['message'] = user_text
+                if context:
+                    request_data['refs'] = task.get('refs', [])
+                    request_data['capability'] = task.get('capability')
+                task.update(activeRunId=run_id, status='已暂停' if deferred else '处理中', refs=request_data['refs'],
+                            capability=request_data['capability'],
+                            input=task.get('input', '') if payload.questionAnswer is not None else '', updated='刚刚')
                 state['activeTask'] = task['id']
-            store.create_run(run_id, payload.taskId, payload.model_dump(), initialize=begin)
-        runtime.launch(run_id)
-        return {'runId': run_id, 'taskId': payload.taskId}
+            if deferred:
+                store.mutate(begin)
+            else:
+                store.create_run(run_id, payload.taskId, request_data, initialize=begin)
+        if run_id:
+            runtime.launch(run_id)
+        return {'runId': run_id, 'taskId': payload.taskId, 'workspace': store.snapshot()}
 
     @app.get('/api/local/runs/{run_id}')
     async def get_run(run_id: str):
@@ -183,6 +243,37 @@ def create_app(store=None):
     async def files():
         return {'files': store.list_files()}
 
+    @app.post('/api/local/materials/extract')
+    async def extract_uploaded_materials(payload: MaterialExtractRequest):
+        from material_service import extract_materials
+        try:
+            async with asyncio.timeout(180):
+                result = await extract_materials(store, payload.fileIds)
+        except TimeoutError:
+            return JSONResponse({'message': '材料提取超时，原件仍保留，请重试。'}, status_code=504)
+        return {**result, 'workspace': store.snapshot()}
+
+    @app.post('/api/local/tools/expense-summary')
+    async def summarize_expense_csv(payload: ExpenseSummaryRequest):
+        from expense_summary import summarize_csv
+        return {**summarize_csv(store, payload.fileId), 'workspace': store.snapshot()}
+
+    @app.get('/api/local/tools/results')
+    async def tool_results():
+        from expense_summary import list_results
+        return {'results': list_results(store)}
+
+    @app.get('/api/local/tools/results/{result_id}')
+    async def tool_result(result_id: str):
+        from expense_summary import get_result
+        return {'result': get_result(store, result_id)}
+
+    @app.get('/api/local/tools/results/{result_id}/download')
+    async def download_tool_result(result_id: str):
+        from expense_summary import export_result_csv
+        return Response(export_result_csv(store, result_id), media_type='text/csv; charset=utf-8',
+                        headers={'Content-Disposition': 'attachment; filename="expense-summary.csv"'})
+
     @app.get('/api/local/files/{file_id}/download')
     async def download(file_id: str):
         row = store.get_file(file_id)
@@ -193,15 +284,27 @@ def create_app(store=None):
             return JSONResponse({'message': '文件内容已不可用。'}, status_code=404)
         return FileResponse(path, filename=row['metadata']['name'], media_type='application/octet-stream')
 
+    @app.get('/api/local/files/{file_id}/translation')
+    async def get_translation(file_id: str):
+        return translations.get(file_id)
+
+    @app.post('/api/local/files/{file_id}/translation')
+    async def translate_file(file_id: str):
+        return await translations.translate(file_id)
+
+    @app.get('/api/local/files/{file_id}/pages/{page}')
+    async def translation_page(file_id: str, page: int):
+        return FileResponse(await translations.preview(file_id, page), media_type='image/png')
+
     @app.post('/api/local/business/validate')
     async def validate(payload: dict):
-        return business.validate_draft(payload.get('id', 'expense'))
+        return await asyncio.to_thread(business.validate_draft, payload.get('id', 'expense'))
 
     @app.post('/api/local/business/submit')
     async def submit(payload: dict):
         if not isinstance(payload.get('version'), int) or not payload.get('idempotencyKey'):
             raise ValueError('提交需要当前版本和幂等编号。')
-        return business.submit_draft(payload.get('id', 'expense'), payload['version'], payload['idempotencyKey'])
+        return await asyncio.to_thread(business.submit_draft, payload.get('id', 'expense'), payload['version'], payload['idempotencyKey'])
 
     @app.post('/api/local/business/new-draft')
     async def new_draft(payload: dict):
@@ -213,7 +316,33 @@ def create_app(store=None):
 
     @app.post('/api/local/business/preaudit')
     async def preaudit(payload: dict):
-        return business.preaudit(payload.get('system'), payload.get('ids'))
+        return await asyncio.to_thread(business.preaudit, payload.get('system'), payload.get('ids'))
+
+    @app.get('/api/local/rules/demo-cases')
+    async def rule_demo_cases():
+        return {'cases': demo_cases(), 'dataSource': '合成业务样例'}
+
+    @app.post('/api/local/rules/test')
+    async def rule_test(payload: dict):
+        case = next((item for item in demo_cases() if item['id'] == payload.get('caseId')), None)
+        if case is None:
+            raise ValueError('请选择有效的测试样例。')
+        rule = payload.get('rule')
+        if rule is None:
+            rule = next((item for item in store.get_state()['data'].get('srsRuleCenterV1', {}).get('rules', [])
+                         if item['id'] == payload.get('ruleId')), None)
+        if not isinstance(rule, dict) or not isinstance(rule.get('id'), str) or not rule.get('name'):
+            raise ValueError('请先生成有效规则再测试。')
+        if rule.get('system') != case['system']:
+            raise ValueError('样例与规则的业务系统不一致。')
+        if rule.get('metric') == 'semantic':
+            validate_semantic_rule(rule)
+        elif rule.get('metric') not in ('amount', 'meal', 'hotelNight', 'days', 'invoiceUnique', 'attachment'):
+            raise ValueError('规则检查类型无效。')
+        # 样例的预期结论只供核对；永远不送入模型，也不写入实际预审结果。
+        review = await asyncio.to_thread(business.evaluate_rules, case['document'], [rule])
+        return {'case': case, 'review': review, 'checkedAt': datetime.now(timezone.utc).isoformat(),
+                'model': review.get('model'), 'dataSource': '合成业务样例'}
 
     @app.post('/api/local/business/documents')
     async def documents(payload: dict):
@@ -250,7 +379,7 @@ def create_app(store=None):
         if not text or len(text) > 4000:
             raise ValueError('请填写4000字以内的检查需求。')
         try:
-            result = await generate_rule(text)
+            result = await semantic_rules.generate(text)
             base = payload.get('base')
             if base and base.get('origin') == 'personal':
                 result['rule'].update(id=base['id'], version=base.get('version', 1), revisions=base.get('revisions', []))

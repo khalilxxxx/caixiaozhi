@@ -2,16 +2,19 @@ import {
   affectedMaterialDrafts,
   amountCents,
   draftTotal,
+  getDraftType,
   importMaterialExpenses,
   migrateLegacyDrafts,
   type Attachment,
   type DraftId,
+  type DraftType,
+  type SubmissionDrafts,
   type MaterialExpenseImport,
   type SubmissionDraft,
 } from './submission-model.js';
 
 export const SUBMISSIONS_KEY = 'submissions';
-export const draftIds: DraftId[] = ['travel', 'expense', 'personal'];
+export const draftIds: DraftType[] = ['travel', 'expense', 'personal'];
 
 export interface SubmissionRequest<TCheck = unknown> {
   id: string;
@@ -31,14 +34,14 @@ export interface SubmissionRequest<TCheck = unknown> {
 }
 
 export interface SubmissionState<TCheck = unknown> {
-  drafts: Record<DraftId, SubmissionDraft>;
+  drafts: SubmissionDrafts;
   edits: Partial<Record<DraftId, SubmissionDraft>>;
   checks: Partial<Record<DraftId, TCheck>>;
   requests: SubmissionRequest<TCheck>[];
 }
 
 export function resolveDraftId(id?: string): DraftId {
-  return id === 'travel' || id === 'personal' ? id : 'expense';
+  return id || 'expense';
 }
 
 export function submissionDraftForText(text: string): DraftId {
@@ -49,7 +52,7 @@ export function submissionDraftForText(text: string): DraftId {
     : 'expense';
 }
 
-function withIdentityDefaults(drafts: Record<DraftId, SubmissionDraft>) {
+function withIdentityDefaults(drafts: SubmissionDrafts) {
   const next = { ...drafts };
   for (const id of draftIds) {
     const draft = drafts[id];
@@ -65,7 +68,7 @@ function withIdentityDefaults(drafts: Record<DraftId, SubmissionDraft>) {
 }
 
 function restoreFileMetadata(
-  drafts: Record<DraftId, SubmissionDraft>,
+  drafts: SubmissionDrafts,
   files: Attachment[],
 ) {
   for (const draft of Object.values(drafts)) {
@@ -103,7 +106,7 @@ export function readSubmissionState<TCheck = unknown>(
   const drafts = migrate(legacy);
   const requests: SubmissionRequest<TCheck>[] = (legacy?.requests ?? []).map(
     (request: any) => {
-      const draftId = resolveDraftId(request.draftId);
+      const draftId: DraftType = request.draftId === 'travel' || request.draftId === 'personal' ? request.draftId : 'expense';
       const migrated = migrate({ drafts: { [draftId]: request.snapshot } });
       return {
         id: request.id,
@@ -148,20 +151,33 @@ export function applyMaterialBatch<TCheck>(
   incoming: MaterialExpenseImport,
 ): SubmissionState<TCheck> {
   const affected = affectedMaterialDrafts(state.drafts, incoming);
-  if (affected.some((id) => state.drafts[id].status === 'awaiting_receipt'))
+  if (affected.some((id) => state.drafts[id]?.status !== 'draft'))
     return state;
   const drafts = importMaterialExpenses(state.drafts, incoming);
   if (drafts === state.drafts) return state;
-  const effectiveDrafts = { ...state.drafts, ...state.edits };
+  const effectiveDrafts = { ...state.drafts };
+  for (const [id, edit] of Object.entries(state.edits)) {
+    if (edit) effectiveDrafts[id] = edit;
+  }
   const mergedEdits = importMaterialExpenses(effectiveDrafts, incoming);
   const edits = { ...state.edits };
   for (const id of affected) {
     if (edits[id])
       edits[id] = {
-        ...mergedEdits[id],
-        version: drafts[id].version,
-        savedAt: drafts[id].savedAt,
+        ...mergedEdits[id]!,
+        version: drafts[id]!.version,
+        savedAt: drafts[id]!.savedAt,
       };
   }
   return { ...state, drafts, edits };
+}
+
+export function suggestMaterialDraftId(
+  drafts: SubmissionDrafts,
+  type: 'expense' | 'personal',
+  preferredId?: string,
+): string {
+  const candidates = Object.values(drafts).filter((draft) => draft.status === 'draft' && getDraftType(draft) === type);
+  if (preferredId && candidates.some((draft) => draft.id === preferredId)) return preferredId;
+  return candidates.length === 1 ? candidates[0]!.id : candidates.length ? '' : 'new';
 }

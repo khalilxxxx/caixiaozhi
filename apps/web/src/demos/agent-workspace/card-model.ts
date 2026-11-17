@@ -1,27 +1,50 @@
 import type { ResultCard, Task } from './workspace';
+import { resolveDraftId } from './submission-state';
 import { materialsInitial, materialBatchId } from './Documents';
+import {
+  materialExpenseError,
+  materialSelectionId,
+  selectMaterialScope,
+} from './material-import';
 import { getAuditSummary } from './RulesSubmission';
 import { getSubmissionSummary } from './SubmissionWorkspace';
 
-export function materialSummary(data: Record<string, any>): ResultCard {
-  const s = (data.materials ?? materialsInitial) as typeof materialsInitial;
+export function materialSummary(
+  data: Record<string, any>,
+  selection?: { fileIds?: string[]; batchId?: string },
+): ResultCard {
+  const all = (data.materials ?? materialsInitial) as typeof materialsInitial;
+  const s = selection ? selectMaterialScope(all, selection) : all;
   const items = s.items.filter((i) => !i.excluded),
-    pending = items.filter((i) => !i.confirmed).length;
-  const total = items.reduce((sum, i) => sum + i.amount, 0);
+    pending = items.filter(
+      (i) => !i.confirmed || !!materialExpenseError(i),
+    ).length;
+  const total = items.reduce((sum, i) => sum + (i.amount ?? 0), 0);
+  const batchId = selection?.fileIds
+    ? materialSelectionId(s.files)
+    : selection?.batchId;
   const status = pending
     ? `${pending}项待核对`
-    : s.importedRevision === s.revision
-      ? '已生成草稿'
-      : s.savedRevision === s.revision
-        ? '费用已保存'
-        : '待确认用途';
+    : !items.length
+      ? s.files.some((file) => file.status === 'failed')
+        ? '无法提取费用'
+        : s.files.length
+          ? '待提取费用'
+          : '暂无费用'
+      : s.importedRevision === s.revision &&
+          (!batchId || s.importedSelectionId === batchId)
+        ? '已生成草稿'
+        : s.savedRevision === s.revision &&
+            (!batchId || s.savedSelectionId === batchId)
+          ? '费用已保存'
+          : '待确认费用';
   return {
     kind: 'materials',
     id: materialBatchId,
     title: '材料与费用',
-    subtitle: `${items.length} 笔有效费用 · ¥${(total / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`,
+    subtitle: `${items.length} 笔费用 · ¥${(total / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`,
     status,
-    tone: pending ? 'amber' : 'green',
+    tone: pending || !items.length ? 'amber' : 'green',
     data: { revision: s.revision, pending },
   };
 }
@@ -29,12 +52,23 @@ export function currentCard(
   card: ResultCard,
   data: Record<string, any>,
 ): ResultCard {
-  if (card.kind === 'materials') return { ...card, ...materialSummary(data) };
+  if (card.kind === 'materials') {
+    const summary = materialSummary(data, {
+      fileIds: card.data?.fileIds,
+      batchId: card.id,
+    });
+    return {
+      ...card,
+      ...summary,
+      id: card.id,
+      data: { ...card.data, ...summary.data },
+    };
+  }
   if (card.kind === 'submission') {
     if (card.data?.requestId) return card;
     const latest = getSubmissionSummary(
       data,
-      card.id === 'travel' || card.id === 'personal' ? card.id : 'expense',
+      resolveDraftId(card.id),
     );
     return {
       ...card,
@@ -70,7 +104,8 @@ export function syncTaskStates(
   if (!['materials', 'rulesSubmission', 'submissions'].includes(changed))
     return tasks;
   return tasks.map((t) => {
-    if (t.status === '处理中' || t.status === '已暂停') return t;
+    if (t.status === '处理中' || t.status === '已暂停' ||
+        t.messages.some((message) => message.question?.status === 'pending')) return t;
     let status = t.status;
     if (t.type === 'materials') {
       const material = materialSummary(data),
@@ -95,7 +130,7 @@ export function syncTaskStates(
         .at(-1);
       const summary = getSubmissionSummary(
         data,
-        ref?.id === 'travel' || ref?.id === 'personal' ? ref.id : 'expense',
+        resolveDraftId(ref?.id),
       );
       status =
         summary.status === '本地已受理'

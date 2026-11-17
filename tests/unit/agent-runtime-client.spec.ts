@@ -33,6 +33,25 @@ beforeEach(() => vi.resetModules());
 afterEach(() => vi.unstubAllGlobals());
 
 describe('本地运行时并发保存', () => {
+  it('行程重排保留用户顺序及服务端新字段，不丢并发新增行', async () => {
+    const { rebaseWorkspaceValue } = await import('../../apps/web/src/demos/agent-workspace/runtime-client');
+    const before = [{ id: 'a', city: '杭州' }, { id: 'b', city: '上海' }];
+    const after = [before[1], { id: 'c', city: '南京' }, before[0]];
+    const remote = [{ ...before[0], source: '档案' }, { id: 'remote', city: '北京' }, before[1]];
+    const result = rebaseWorkspaceValue(before, after, remote);
+    expect(result.filter((item: { id: string }) => item.id !== 'remote').map((item: { id: string }) => item.id)).toEqual(['b', 'c', 'a']);
+    expect(result.find((item: { id: string }) => item.id === 'a').source).toBe('档案');
+    expect(result.find((item: { id: string }) => item.id === 'remote').city).toBe('北京');
+  });
+
+  it('仅改行程字段时不覆盖服务端并发排序', async () => {
+    const { rebaseWorkspaceValue } = await import('../../apps/web/src/demos/agent-workspace/runtime-client');
+    const before = [{ id: 'a', city: '杭州' }, { id: 'b', city: '上海' }];
+    const result = rebaseWorkspaceValue(before, [{ ...before[0], city: '南京' }, before[1]], [before[1], before[0]]);
+    expect(result.map((item: { id: string }) => item.id)).toEqual(['b', 'a']);
+    expect(result[1].city).toBe('南京');
+  });
+
   it('只重放用户更改的草稿字段，保留工具产生的版本、消息和其他单据', async () => {
     const { rebaseWorkspaceValue } =
       await import('../../apps/web/src/demos/agent-workspace/runtime-client');

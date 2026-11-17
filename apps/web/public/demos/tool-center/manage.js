@@ -1,6 +1,24 @@
 const MAX_FILE_SIZE = 200 * 1024;
-const uploadDrafts = new Map();
-export function clearManageDrafts(){uploadDrafts.clear();}
+const UPLOAD_DRAFT_PREFIX = 'caixiaozhi-tool-upload-draft-v1:';
+function uploadDraftStorageKey(key) { return UPLOAD_DRAFT_PREFIX + encodeURIComponent(key); }
+export function readUploadDraft(key, storage = sessionStorage) {
+  const raw = storage.getItem(uploadDraftStorageKey(key));
+  if (raw === null) return null;
+  let data;
+  try { data = JSON.parse(raw); } catch { throw new Error('上传草稿无法读取，已保留原始数据，请刷新后重试。'); }
+  if (!data || Array.isArray(data) || typeof data !== 'object' || Object.values(data).some(value => typeof value !== 'string' && typeof value !== 'boolean')) throw new Error('上传草稿格式异常，已保留原始数据，请刷新后重试。');
+  return data;
+}
+export function writeUploadDraft(key, draft, storage = sessionStorage) {
+  storage.setItem(uploadDraftStorageKey(key), JSON.stringify(draft));
+}
+export function removeUploadDraft(key, storage = sessionStorage) {
+  storage.removeItem(uploadDraftStorageKey(key));
+}
+export function clearManageDrafts(storage = sessionStorage) {
+  const keys = Array.from({length:storage.length}, (_,index) => storage.key(index)).filter(key => key?.startsWith(UPLOAD_DRAFT_PREFIX));
+  keys.forEach(key => storage.removeItem(key));
+}
 const PEOPLE = [
   { id: 'finance', name: '林晓', department: '财务共享中心' },
   { id: 'employee', name: '王晨', department: '业务运营部' },
@@ -15,7 +33,7 @@ const REVIEW_CHECKS = {
 const REVIEW_NAMES = { business: '业务审核', technical: '技术审核' };
 const STATUS_NAMES = { draft: '草稿', review: '审核中', rejected: '已驳回', published: '已发布', disabled: '已停用' };
 
-export const SAMPLE_HTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>金额分摊</title><style>body{font:14px/1.6 system-ui,sans-serif;color:#263752;padding:24px;max-width:600px;margin:auto}h1{font-size:22px}label{display:block;margin:16px 0 6px}input,button{font:inherit;padding:10px;border:1px solid #d5deeb;border-radius:7px}input{width:calc(100% - 22px)}button{margin-top:20px;background:#2965db;color:white;cursor:pointer}#result{margin-top:18px;white-space:pre-line}small{color:#5c6f87}</style></head><body><h1>金额分摊</h1><label for="amount">分摊金额（元）</label><input id="amount" inputmode="decimal" value="100.00"><label for="count">分摊份数</label><input id="count" type="number" min="1" max="10000" value="3"><button id="calculate">计算</button><div id="result" role="status"></div><script>document.getElementById('calculate').onclick=function(){const raw=document.getElementById('amount').value.trim();const n=Number(document.getElementById('count').value);const out=document.getElementById('result');if(!/^\\d+(\\.\\d{1,2})?$/.test(raw)||!Number.isInteger(n)||n<1||n>10000){out.textContent='请输入非负金额和 1 至 10000 的整数份数。';return;}const p=raw.split('.');const cents=Number(p[0])*100+Number((p[1]||'').padEnd(2,'0'));if(!Number.isSafeInteger(cents)||cents>100000000000){out.textContent='金额超出支持范围。';return;}const each=Math.floor(cents/n);const remainder=cents-each*n;out.textContent='每份基础金额：'+(each/100).toFixed(2)+' 元\\n前 '+remainder+' 份各增加 0.01 元\\n合计：'+(cents/100).toFixed(2)+' 元';};document.getElementById('calculate').click();<\/script></body></html>`;
+export const SAMPLE_HTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>金额分摊</title><style>body{font:14px/1.6 system-ui,sans-serif;color:#263752;padding:24px;max-width:600px;margin:auto}h1{font-size:22px}label{display:block;margin:16px 0 6px}input,button{font:inherit;padding:10px;border:1px solid #d5deeb;border-radius:7px}input{width:calc(100% - 22px)}button{margin-top:20px;background:#2965db;color:white;cursor:pointer}#result{margin-top:18px;white-space:pre-line}small{color:#5c6f87}</style></head><body><h1>金额分摊</h1><label for="amount">分摊金额（元）</label><input id="amount" inputmode="decimal" value="100.00"><label for="count">分摊份数</label><input id="count" type="number" min="1" max="10000" value="3"><button id="calculate">计算</button><div id="result" role="status"></div><script>document.getElementById('calculate').onclick=function(){const raw=document.getElementById('amount').value.trim();const n=Number(document.getElementById('count').value);const out=document.getElementById('result');if(!/^\\d+(\\.\\d{1,2})?$/.test(raw)||!Number.isInteger(n)||n<1||n>10000){out.textContent='请输入非负金额和 1 至 10000 的整数份数。';return;}const p=raw.split('.');const cents=Number(p[0])*100+Number((p[1]||'').padEnd(2,'0'));if(!Number.isSafeInteger(cents)||cents>100000000000){out.textContent='金额超出支持范围。';return;}const each=Math.floor(cents/n);const remainder=cents-each*n;out.textContent='每份基础金额：'+(each/100).toFixed(2)+' 元\\n前 '+remainder+' 份各增加 0.01 元\\n合计：'+(cents/100).toFixed(2)+' 元';};<\/script></body></html>`;
 
 function currentRevision(app) { return app.pendingRevision || app; }
 function isOwner(app, user) { return app.ownerId ? app.ownerId === user.id : app.owner === user.name; }
@@ -165,17 +183,22 @@ export function showUpload(ctx, editId = null) {
   if (prior?.status === 'review') { ctx.toast('该版本正在审核，请等待审核结果。'); return; }
   const isRevision = existing && prior.status !== 'draft';
   const draftKey = `${user.id}:${editId || 'new'}:${prior?.version || ''}:${prior?.status || ''}`;
-  const cached = uploadDrafts.get(draftKey);
+  let cached;
+  try { cached = readUploadDraft(draftKey); } catch(error) { ctx.toast(error.message || '上传草稿无法读取，已保留原始数据，请刷新后重试。'); return; }
   const base = { ...(prior || {}), ...(cached || {}) };
-  let code = base.code || '', filename = base.filename || '', loadingFile = false;
+  let code = base.code || '', filename = base.filename || '', sample = Boolean(base.sample), loadingFile = false;
   const esc = ctx.esc;
   const proposedVersion = cached?.version || (isRevision ? nextVersion(base.version) : (base.version || '1.0.0'));
-  ctx.openPanel(existing ? isRevision ? '提交修订版本' : '编辑工具' : '上传工具', `<form class="mg-form" novalidate><div data-mg-error class="notice mg-error" role="alert" tabindex="-1" hidden></div>${isRevision ? `<div class="notice">${existing.status === 'published' ? `当前发布版本 v${esc(existing.version)} 将继续可用，修订版审核通过后发布。` : `v${esc(base.version)} 已结束审核，请提交新版本。`}</div>` : ''}<div class="mg-filebox"><div class="mg-fileicon">${ctx.icon('upload')}</div><div><strong data-mg-filename>${esc(filename || '选择工具文件')}</strong><div class="mg-subline">HTML 文件，最大 200 KB</div></div><label class="btn secondary mg-file-button">选择文件<input type="file" accept=".html,.htm,text/html" data-mg-file aria-label="选择HTML文件"></label></div><div class="mg-filetools"><button class="mg-link" type="button" data-mg-sample>使用示例文件</button><button class="mg-link" type="button" data-mg-download-sample>下载示例文件</button></div><div class="form-grid mg-two"><label class="field mg-span-2">工具名称<input name="name" maxlength="40" required value="${esc(base.name || '')}" placeholder="例如：金额分摊"></label><label class="field">版本<input name="version" required maxlength="30" value="${esc(proposedVersion)}" placeholder="1.0.0"></label><label class="field">分类<select name="category">${['数据核对','表格处理','分析报告','办公效率'].map(value => `<option ${value === base.category ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label class="field mg-span-2">用途<textarea name="description" required maxlength="160" rows="3" placeholder="说明处理哪些数据、输出什么结果">${esc(base.description || '')}</textarea></label><label class="field">维护人<input name="maintainer" required maxlength="30" value="${esc(base.maintainer || user.name)}"></label><label class="field">可见范围<select name="visibility"><option value="finance" ${!['all','selected'].includes(base.visibility) ? 'selected' : ''}>财务共享中心</option><option value="all" ${base.visibility === 'all' ? 'selected' : ''}>全体成员</option>${base.visibility === 'selected' ? '<option value="selected" selected>沿用指定成员</option>' : ''}</select></label></div><fieldset class="mg-fieldset"><legend>运行方式</legend><label class="mg-radio"><input type="radio" checked disabled>浏览器内处理</label><p class="mg-helper">文件在当前浏览器处理；需要联网或业务接口的工具须另行接入。</p></fieldset><div class="mg-form-footer"><button type="button" class="btn secondary" data-mg-save>保存草稿</button><button type="submit" class="btn primary">提交审核</button></div></form>`, panel => {
+  ctx.openPanel(existing ? isRevision ? '提交修订版本' : '编辑工具' : '上传工具', `<form class="mg-form" novalidate><div data-mg-error class="notice mg-error" role="alert" tabindex="-1" hidden></div>${isRevision ? `<div class="notice">${existing.status === 'published' ? `当前发布版本 v${esc(existing.version)} 将继续可用，修订版审核通过后发布。` : `v${esc(base.version)} 已结束审核，请提交新版本。`}</div>` : ''}<div class="mg-filebox"><div class="mg-fileicon">${ctx.icon('upload')}</div><div><strong data-mg-filename>${esc(filename || '选择工具文件')}</strong><div class="mg-subline">HTML 文件，最大 200 KB</div></div><label class="btn secondary mg-file-button">选择文件<input type="file" accept=".html,.htm,text/html" data-mg-file aria-label="选择HTML文件"></label></div><div class="form-grid mg-two"><label class="field mg-span-2">工具名称<input name="name" maxlength="40" required value="${esc(base.name || '')}"></label><label class="field">版本<input name="version" required maxlength="30" value="${esc(proposedVersion)}" placeholder="1.0.0"></label><label class="field">分类<select name="category">${['数据核对','表格处理','分析报告','办公效率'].map(value => `<option ${value === base.category ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label class="field mg-span-2">用途<textarea name="description" required maxlength="160" rows="3" placeholder="说明处理哪些数据、输出什么结果">${esc(base.description || '')}</textarea></label><label class="field">维护人<input name="maintainer" required maxlength="30" value="${esc(base.maintainer || user.name)}"></label><label class="field">可见范围<select name="visibility"><option value="finance" ${!['all','selected'].includes(base.visibility) ? 'selected' : ''}>财务共享中心</option><option value="all" ${base.visibility === 'all' ? 'selected' : ''}>全体成员</option>${base.visibility === 'selected' ? '<option value="selected" selected>沿用指定成员</option>' : ''}</select></label></div><fieldset class="mg-fieldset"><legend>运行方式</legend><label class="mg-radio"><input type="radio" checked disabled>浏览器内处理</label><p class="mg-helper">外部资源访问受限。</p></fieldset><div class="mg-form-footer"><button type="button" class="btn secondary" data-mg-save>保存草稿</button><button type="submit" class="btn primary">提交审核</button></div></form>`, panel => {
     const form = panel.querySelector('form'), fileInput = panel.querySelector('[data-mg-file]');
-    const remember = () => uploadDrafts.set(draftKey, { ...Object.fromEntries(new FormData(form)), code, filename });
+    const remember = () => {
+      try { writeUploadDraft(draftKey, { ...Object.fromEntries(new FormData(form)), code, filename, sample }); }
+      catch { errorBox(panel, '草稿暂存失败，关闭页面前请保存草稿。'); }
+    };
     form.addEventListener('input', remember);
     form.addEventListener('change', remember);
-    const updateFileName = () => panel.querySelector('[data-mg-filename]').textContent = filename || '选择工具文件';
+    const updateFileName = () => panel.querySelector('[data-mg-filename]').textContent = filename ? `${filename}${sample ? ' · 示例文件' : ''}` : '选择工具文件';
+    updateFileName();
     fileInput.onchange = async () => {
       const file = fileInput.files?.[0]; if (!file) return;
       if (!/\.(html?|HTML?)$/i.test(file.name)) { errorBox(panel, '文件格式不支持，请选择 .html 或 .htm 文件。'); fileInput.value = ''; return; }
@@ -184,14 +207,13 @@ export function showUpload(ctx, editId = null) {
       try {
         const content = await file.text();
         if (!/<(?:!doctype|html|head|body|div|main|section|form|p|h[1-6])\b/i.test(content)) throw new Error('未识别到 HTML 内容，请检查文件。');
-        code = content; filename = file.name; updateFileName();
+        code = content; filename = file.name; sample = false; updateFileName();
         if (!form.elements.name.value) form.elements.name.value = file.name.replace(/\.html?$/i, '').slice(0,40);
         remember();
       } catch (error) { errorBox(panel, error.message || '读取文件失败，请重新选择。'); }
       finally { loadingFile = false; }
     };
-    panel.querySelector('[data-mg-sample]').onclick = () => { code = SAMPLE_HTML; filename = '金额分摊.html'; updateFileName(); if (!form.elements.name.value) form.elements.name.value = '金额分摊'; if (!form.elements.description.value) form.elements.description.value = '按份数分摊金额，将尾差分配至前若干份，输出可核对的分摊结果。'; errorBox(panel, ''); remember(); };
-    panel.querySelector('[data-mg-download-sample]').onclick = () => { download(SAMPLE_HTML, '金额分摊.html'); ctx.toast('示例文件已下载。'); };
+    panel.__uploadGuideAction = action => { if(action === 'download-upload-sample'){ download(SAMPLE_HTML, '金额分摊.html'); ctx.toast('示例文件已下载。'); return true; } if(action !== 'upload-sample' || loadingFile) return false; code = SAMPLE_HTML; filename = '金额分摊.html'; sample = true; updateFileName(); if (!form.elements.name.value) form.elements.name.value = '金额分摊'; if (!form.elements.description.value) form.elements.description.value = '按份数分摊金额，将尾差分配至前若干份，输出可核对的分摊结果。'; errorBox(panel, ''); remember(); return true; };
     function submit(status) {
       const liveUser = ctx.getCurrentUser();
       if (!['author', 'admin'].includes(liveUser.role) || (existing && !canEdit(existing, liveUser))) { errorBox(panel, '当前身份没有编辑权限。'); return; }
@@ -210,7 +232,7 @@ export function showUpload(ctx, editId = null) {
         const live = findApp(ctx, existing.id);
         if (currentRevision(live).status === 'review' || currentRevision(live).version !== prior.version) { errorBox(panel, '工具版本已变更，请关闭后重新打开。'); return; }
       }
-      const newData = { ...data, builtIn: false, kind: 'browser', icon: 'code', code, filename, status, owner: existing?.owner || liveUser.name, ownerId: existing?.ownerId || liveUser.id, department: existing?.department || liveUser.department, useScope: data.visibility === base.visibility ? (base.useScope || data.visibility) : data.visibility, userIds: data.visibility === 'selected' ? (base.userIds || []) : [], useUserIds: data.visibility === base.visibility ? (base.useUserIds || []) : [], reviews: { business:'pending',technical:'pending' }, reviewNotes: {}, reviewedBy:{},reviewedAt:{}, createdAt: base.createdAt || new Date().toISOString(), submittedAt: status === 'review' ? new Date().toISOString() : null };
+      const newData = { ...data, builtIn: false, kind: 'browser', icon: 'code', code, filename, sample, status, owner: existing?.owner || liveUser.name, ownerId: existing?.ownerId || liveUser.id, department: existing?.department || liveUser.department, useScope: data.visibility === base.visibility ? (base.useScope || data.visibility) : data.visibility, userIds: data.visibility === 'selected' ? (base.userIds || []) : [], useUserIds: data.visibility === base.visibility ? (base.useUserIds || []) : [], reviews: { business:'pending',technical:'pending' }, reviewNotes: {}, reviewedBy:{},reviewedAt:{}, createdAt: base.createdAt || new Date().toISOString(), submittedAt: status === 'review' ? new Date().toISOString() : null };
       let result;
       const history = [...(existing?.history || [])];
       if (prior?.status === 'rejected') { const archived = { ...prior, archivedAt: new Date().toISOString() }; delete archived.history; delete archived.pendingRevision; history.unshift(archived); }
@@ -218,19 +240,19 @@ export function showUpload(ctx, editId = null) {
       else result = { ...(existing || {}), ...newData, id: existing?.id || `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`, history: history.slice(0,5) };
       try { if (saveApp(ctx, result) === false) return; } catch (error) { errorBox(panel, '保存失败，浏览器存储空间可能不足。'); return; }
       record(ctx, result, status === 'review' ? '提交工具审核' : '保存工具草稿', `v${data.version}`);
-      uploadDrafts.delete(draftKey);
+      removeUploadDraft(draftKey);
       ctx.closePanel(); ctx.toast(status === 'review' ? '已提交业务与技术审核。' : '草稿已保存。'); ctx.navigate('#mine'); ctx.refresh();
     }
     form.onsubmit = event => { event.preventDefault(); submit('review'); };
     panel.querySelector('[data-mg-save]').onclick = () => submit('draft');
-  }, { mode: 'modal', wide: true });
+  }, { mode: 'modal', wide: true, kind:'upload', toolId:editId });
 }
 
 function reviewSummary(revision, esc) {
   return `<div class="mg-review-grid">${['business','technical'].map(track => `<section class="mg-review-summary"><div class="mg-review-title"><strong>${REVIEW_NAMES[track]}</strong><span class="badge mg-${esc(revision.reviews?.[track] || 'pending')}">${reviewLabel(revision.reviews?.[track])}</span></div><p>${esc(revision.reviewNotes?.[track] || (revision.reviews?.[track] === 'approved' ? '审核通过。' : '尚未填写审核意见。'))}</p><span class="mg-subline">${esc(revision.reviewedBy?.[track] || '待分配')} ${displayDate(revision.reviewedAt?.[track])}</span></section>`).join('')}</div>`;
 }
 
-function showReview(appId, ctx) {
+export function showReview(appId, ctx) {
   const app = findApp(ctx, appId); if (!app) return;
   const user = ctx.getCurrentUser(), revision = currentRevision(app), esc = ctx.esc;
   if (!['business','technical','admin'].includes(user.role)) { ctx.toast('当前身份没有审核权限。'); return; }

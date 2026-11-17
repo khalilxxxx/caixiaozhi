@@ -21,9 +21,31 @@ import {
 } from './RulesSubmission';
 import './rule-center.css';
 import { api } from './runtime-client';
+import { RuleSampleTest } from './RuleSampleTest';
 
 const systemNames = { expense: '费用报销', oa: 'OA办公' };
 const scopeNames = { review: '审单时', submit: '提单时', both: '提单、审单时' };
+const semanticExamples = [
+  {
+    id: 'entertainment-risk',
+    title: '业务招待高档消费',
+    text: '业务招待事由中包含高档消费时，例如高档酒、高档消费娱乐场所等等，需要提示风险。',
+  },
+  {
+    id: 'travel-purpose',
+    title: '差旅事由明确性',
+    text: '差旅申请的事由只有“出差”“办事”等笼统描述，无法明确业务对象和任务时，提单和审单时提醒本人。',
+  },
+  {
+    id: 'expense-purpose',
+    title: '费用用途一致性',
+    text: '费用明细的实际用途与本次报销事由明显不一致，且没有合理业务说明时，审单时提醒本人。',
+  },
+];
+const editableLogic = (rule?: DemoRule) =>
+  rule?.source === '场景示例'
+    ? rule.instruction || rule.logic
+    : (rule?.logic ?? '');
 const originName = (rule: DemoRule) =>
   rule.origin === 'builtin' ? '公司规则' : '个人规则';
 const timeNow = () =>
@@ -36,9 +58,9 @@ const timeNow = () =>
     hour12: false,
   });
 const freshDraft = (rule?: DemoRule): DemoRuleDraft => ({
-  text: rule?.logic ?? '',
+  text: editableLogic(rule),
   generated: rule ?? null,
-  generatedFrom: rule?.logic ?? '',
+  generatedFrom: editableLogic(rule),
   savedAt: '',
   baseVersion: rule?.version ?? null,
 });
@@ -46,7 +68,7 @@ const currentDraft = (draft: DemoRuleDraft) =>
   !!draft.generated && draft.text.trim() === draft.generatedFrom;
 const hasDraft = (draft: DemoRuleDraft | undefined, rule?: DemoRule) =>
   !!draft?.text.trim() &&
-  (!rule || !!draft.savedAt || draft.text !== rule.logic);
+  (!rule || !!draft.savedAt || draft.text !== editableLogic(rule));
 
 function useRuleCenter() {
   const w = useWorkspace();
@@ -158,7 +180,7 @@ function ParsedRule({ rule }: { rule: DemoRule }) {
         </div>
       </dl>
       <ReadonlySection title="判断标准">
-        <p>{workspaceRuleCondition(rule)}</p>
+        <p>{rule.instruction || workspaceRuleCondition(rule)}</p>
       </ReadonlySection>
       <ReadonlySection title="适用条件">
         <ul className="rc-conditions">
@@ -313,6 +335,38 @@ export function RuleCenterPage() {
           新增规则
         </Button>
       </div>
+      {w.state.data.ruleMigration?.decisions?.length > 0 && (
+        <details className="rc-migration-history">
+          <summary>规则整理记录</summary>
+          <ul>
+            {w.state.data.ruleMigration.decisions.map(
+              (
+                decision: {
+                  id: string;
+                  name: string;
+                  action: string;
+                  reason: string;
+                },
+                index: number,
+              ) => (
+                <li key={`${decision.id}-${decision.action}-${index}`}>
+                  <strong>{decision.name}</strong>
+                  <span>
+                    {decision.action === 'disabled'
+                      ? '已停用'
+                      : decision.action === 'added'
+                        ? '已新增'
+                        : decision.action === 'updated'
+                          ? '已更新'
+                          : '已保留'}
+                  </span>
+                  <p>{decision.reason}</p>
+                </li>
+              ),
+            )}
+          </ul>
+        </details>
+      )}
       {tab !== 'drafts' ? (
         <>
           <div className="rc-toolbar">
@@ -409,7 +463,9 @@ export function RuleCenterPage() {
                     <td>
                       <span className="rc-version">v{rule.version}</span>
                     </td>
-                    <td className="rc-updated">{businessTime(rule.updatedAt)}</td>
+                    <td className="rc-updated">
+                      {businessTime(rule.updatedAt)}
+                    </td>
                     <td>
                       <div className="rc-row-actions">
                         <button
@@ -542,9 +598,21 @@ function RuleEditor({ id }: { id: string }) {
   const [discard, setDiscard] = useState(false);
   const [generating, setGenerating] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
+  const generation = useRef(0);
+  useEffect(
+    () => () => {
+      generation.current += 1;
+    },
+    [id],
+  );
+  const invalidateGeneration = () => {
+    generation.current += 1;
+    setGenerating(false);
+  };
   const valid = currentDraft(draft);
   const changed = !base || draft.generated?.logic !== base.logic;
-  const patch = (change: Partial<DemoRuleDraft>) =>
+  const patch = (change: Partial<DemoRuleDraft>) => {
+    if ('text' in change) invalidateGeneration();
     update((previous) => ({
       ...previous,
       drafts: {
@@ -552,29 +620,60 @@ function RuleEditor({ id }: { id: string }) {
         [id]: { ...(previous.drafts[id] ?? freshDraft(base)), ...change },
       },
     }));
-  const leave = () => update((previous) => ({ ...previous, editingId: null }));
+  };
+  const leave = () => {
+    invalidateGeneration();
+    update((previous) => ({ ...previous, editingId: null }));
+  };
   const generate = async () => {
     if (generating || !draft.text.trim()) return;
+    const requestId = ++generation.current;
     setGenerating(true);
     setError('');
     const text = draft.text.trim();
+    const baseVersion = base?.version ?? null;
     try {
       await w.flush();
+      if (generation.current !== requestId) return;
       const result = await api<{ rule: DemoRule }>('/generate/rule', {
         text,
         base,
       });
+      if (generation.current !== requestId) return;
       if (!result.rule) throw new Error('未获得有效规则，请补充业务逻辑后重试');
-      patch({
-        generated: result.rule,
-        generatedFrom: text,
-        baseVersion: base?.version ?? null,
+      update((previous) => {
+        const current = previous.drafts[id];
+        const currentBase = previous.rules.find((rule) => rule.id === id);
+        if (
+          generation.current !== requestId ||
+          previous.editingId !== id ||
+          !current ||
+          current.text.trim() !== text ||
+          current.baseVersion !== draft.baseVersion ||
+          (currentBase?.version ?? null) !== baseVersion
+        )
+          return previous;
+        return {
+          ...previous,
+          drafts: {
+            ...previous.drafts,
+            [id]: {
+              ...current,
+              generated: result.rule,
+              generatedFrom: text,
+              baseVersion,
+            },
+          },
+        };
       });
       await w.flush();
     } catch (error) {
-      setError(error instanceof Error ? error.message : '规则生成失败，请重试');
+      if (generation.current === requestId)
+        setError(
+          error instanceof Error ? error.message : '规则生成失败，请重试',
+        );
     } finally {
-      setGenerating(false);
+      if (generation.current === requestId) setGenerating(false);
     }
   };
   const save = async () => {
@@ -678,7 +777,7 @@ function RuleEditor({ id }: { id: string }) {
           </header>
           {examples && (
             <div className="rc-example-list">
-              {RULE_EXAMPLES.map((example) => (
+              {[...semanticExamples, ...RULE_EXAMPLES].map((example) => (
                 <button
                   type="button"
                   key={example.id}
@@ -771,6 +870,11 @@ function RuleEditor({ id }: { id: string }) {
           {draft.generated ? (
             <div className="rc-generated-body">
               <ParsedRule rule={draft.generated} />
+              <RuleSampleTest
+                key={draft.generated.id}
+                rule={draft.generated}
+                disabled={!valid || generating}
+              />
             </div>
           ) : (
             <div className="rc-preview-empty">
@@ -824,6 +928,7 @@ function RuleEditor({ id }: { id: string }) {
           danger
           onCancel={() => setDiscard(false)}
           onConfirm={() => {
+            invalidateGeneration();
             update((previous) => {
               const remaining = { ...previous.drafts };
               delete remaining[id];
@@ -946,8 +1051,19 @@ export function RuleCenterPanel({ panel }: { panel: PanelSpec }) {
         {tab === 'logic' && (
           <>
             <ReadonlySection title="业务逻辑">
-              <p className="rc-logic-copy">{rule.logic}</p>
+              <p className="rc-logic-copy">
+                {rule.source === '场景示例'
+                  ? rule.instruction || rule.logic
+                  : rule.logic}
+              </p>
             </ReadonlySection>
+            {rule.metric === 'semantic' &&
+              rule.source !== '场景示例' &&
+              rule.instruction && (
+                <ReadonlySection title="判断标准">
+                  <p>{rule.instruction}</p>
+                </ReadonlySection>
+              )}
             <dl className="rc-meta-grid">
               <div>
                 <dt>业务系统</dt>
@@ -972,6 +1088,7 @@ export function RuleCenterPanel({ panel }: { panel: PanelSpec }) {
             <ReadonlySection title="信息缺失时">
               <p>{rule.missing}</p>
             </ReadonlySection>
+            <RuleSampleTest key={`${rule.id}:${rule.version}`} rule={rule} />
           </>
         )}
         {tab === 'applicability' && (

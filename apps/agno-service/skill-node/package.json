@@ -1,0 +1,10 @@
+{
+  "name": "caixiaozhi-skill-node-runtime",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Approved local Node libraries for skill execution",
+  "dependencies": {
+    "pptxgenjs": "4.0.1",
+    "exceljs": "4.4.0"
+  }
+}

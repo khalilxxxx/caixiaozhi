@@ -1,0 +1,139 @@
+.context-help-dialog {
+  position: fixed;
+  inset: 24px 24px 24px auto;
+  margin: 0;
+  width: min(480px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  height: calc(100dvh - 48px);
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  border: 1px solid var(--enterprise-line, #e6e5e3);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--enterprise-ink, #29292d);
+  overflow: hidden;
+  font-size: 14px;
+}
+.context-help-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.context-help-dialog::backdrop {
+  background: rgb(30 30 34 / 12%);
+}
+.context-help-dialog > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--enterprise-line, #e6e5e3);
+}
+.context-help-dialog > header h2 {
+  font-size: 18px;
+  margin: 0;
+  font-weight: 600;
+}
+.context-help-dialog > header button {
+  color: #525257;
+  min-width: 32px;
+  min-height: 32px;
+}
+.context-help-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px;
+  scrollbar-width: thin;
+  scrollbar-color: #bcbcb8 transparent;
+}
+.context-help-body .help-section {
+  margin: 0 0 28px;
+}
+.context-help-body .help-section:last-child {
+  margin-bottom: 0;
+}
+.context-help-body h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #29292d;
+}
+.context-help-body p,
+.context-help-body li {
+  font-size: 13px;
+  line-height: 1.85;
+  color: #525257;
+}
+.context-help-body p {
+  margin: 12px 0 0;
+}
+.context-help-body ol,
+.context-help-body ul {
+  margin: 0;
+  padding-left: 20px;
+}
+.context-help-body li + li {
+  margin-top: 7px;
+}
+.context-help-body a {
+  color: #a72b32;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.guide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.guide-field {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  color: #525257;
+  margin-top: 16px;
+}
+.guide-field select {
+  width: 100%;
+  min-height: 38px;
+  font-size: 13px;
+  padding: 8px;
+  border: 1px solid #d9d9d5;
+  border-radius: 6px;
+  background: #fff;
+  color: #29292d;
+}
+.context-help-body .guide-error {
+  color: #a33237;
+}
+.context-help-dialog :focus-visible {
+  outline: 2px solid #8c8782;
+  outline-offset: 3px;
+}
+.context-help-dialog ::selection {
+  background: #f7d7ce;
+  color: #29292d;
+}
+.detail-dialog > .help-trigger {
+  position: absolute;
+  bottom: 8px;
+  right: 16px;
+}
+.detail-dialog:has(> .help-trigger) > .panel-body {
+  padding-bottom: 52px;
+}
+@media (max-width: 600px) {
+  .context-help-dialog {
+    inset: 12px;
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    height: calc(100dvh - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+  .context-help-dialog > header {
+    padding: 16px 18px;
+  }
+  .context-help-body {
+    padding: 20px 18px;
+  }
+}

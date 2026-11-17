@@ -410,6 +410,9 @@
   object-fit: contain;
   user-select: none;
 }
+.agent-first .workspace-home {
+  grid-template-rows: minmax(min-content, 0.9fr) auto minmax(min-content, 1.1fr);
+}
 .agent-first .home-greeting {
   flex-direction: column;
   gap: 10px;

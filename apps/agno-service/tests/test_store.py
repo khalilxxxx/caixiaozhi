@@ -120,9 +120,9 @@ def test_top_level_invoice_cannot_be_reused_after_new_draft(tmp_path):
     first=business.update_draft('personal',patch)['draft']
     assert business.validate_draft('personal')['canSubmit']
     business.submit_draft('personal',first['version'],'first')
-    business.new_draft('personal')
-    business.update_draft('personal',patch)
-    assert not business.validate_draft('personal')['canSubmit']
+    next_id = business.new_draft('personal')['draft']['id']
+    business.update_draft(next_id,patch)
+    assert not business.validate_draft(next_id)['canSubmit']
 
 
 def test_subsidy_is_included_in_rules_receipt_and_document(tmp_path):

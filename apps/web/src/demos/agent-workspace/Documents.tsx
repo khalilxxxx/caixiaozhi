@@ -11,11 +11,22 @@ import { Badge, Button, Empty, Field, Icon, Money, Section } from './ui';
 import {
   buildMaterialExpenseBatch,
   materialBatchId,
+  materialExpenseError,
+  materialSelectionId,
+  selectMaterialScope,
   type MaterialExpense,
   type MaterialFile,
 } from './material-import.js';
 import './documents.css';
-import { api, uploadFile } from './runtime-client';
+import { getDraftType, type MaterialExpenseImport, type SubmissionDraft } from './submission-model';
+import { readSubmissionState, suggestMaterialDraftId } from './submission-state';
+import {
+  acceptWorkspace,
+  api,
+  readWorkspace,
+  uploadFile,
+  type WorkspaceSnapshot,
+} from './runtime-client';
 
 export { buildMaterialExpenseBatch, materialBatchId };
 export type { MaterialExpense, MaterialFile };
@@ -570,6 +581,8 @@ interface MaterialsState {
   savedRevision?: number;
   importedRevision?: number;
   acknowledged: boolean;
+  savedSelectionId?: string;
+  importedSelectionId?: string;
 }
 const sampleFiles: MaterialFile[] = [
   ['rail', '高铁电子客票.pdf', 'recognized'],
@@ -673,12 +686,12 @@ const formatSize = (size: number) =>
     ? `${(size / 1024 / 1024).toFixed(1)} MB`
     : `${Math.max(1, Math.round(size / 1024))} KB`;
 const fileStatus: Record<MaterialFile['status'], string> = {
-  recognized: '已识别',
-  pending: '待核对',
+  recognized: '已提取',
+  pending: '待提取',
   duplicate: '重复已排除',
   failed: '无法读取',
 };
-function useMaterialUpload() {
+function useMaterialUpload(onUploaded?: (fileIds: string[]) => void) {
   const w = useWorkspace();
   const [uploading, setUploading] = useState(false);
   const upload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -686,17 +699,21 @@ function useMaterialUpload() {
     event.currentTarget.value = '';
     if (!selected.length || uploading) return;
     setUploading(true);
+    const fileIds: string[] = [];
     let uploaded = 0;
     try {
       await w.flush();
       for (const file of selected) {
-        await uploadFile(file);
+        const result = await uploadFile(file);
+        fileIds.push(result.file.id);
         uploaded += 1;
       }
       await w.refresh();
-      w.notify(`已保存 ${uploaded} 份材料`);
+      onUploaded?.(fileIds);
+      w.notify(`已保存 ${uploaded} 份材料，可提取费用`);
     } catch (error) {
       await w.refresh().catch(() => undefined);
+      if (fileIds.length) onUploaded?.(fileIds);
       w.notify(
         `${uploaded ? `已保存 ${uploaded} 份；` : ''}${error instanceof Error ? error.message : '文件上传失败，请重试'}`,
       );
@@ -706,9 +723,15 @@ function useMaterialUpload() {
   };
   return { upload, uploading };
 }
-function UploadButton({ label = '添加材料' }: { label?: string }) {
+function UploadButton({
+  label = '添加材料',
+  onUploaded,
+}: {
+  label?: string;
+  onUploaded?: (fileIds: string[]) => void;
+}) {
   const input = useRef<HTMLInputElement>(null),
-    { upload, uploading } = useMaterialUpload();
+    { upload, uploading } = useMaterialUpload(onUploaded);
   return (
     <>
       <input
@@ -731,16 +754,74 @@ function UploadButton({ label = '添加材料' }: { label?: string }) {
   );
 }
 
+function useMaterialExtraction() {
+  const w = useWorkspace();
+  const [extracting, setExtracting] = useState(false);
+  const [notice, setNotice] = useState('');
+  const extract = async (fileIds: string[]) => {
+    if (!fileIds.length || extracting) return;
+    if (fileIds.length > 10) {
+      setNotice('每次最多提取 10 份材料。');
+      return;
+    }
+    setExtracting(true);
+    setNotice('');
+    try {
+      await w.flush();
+      const result = await api<{
+        workspace?: WorkspaceSnapshot;
+        items: MaterialExpense[];
+        files: MaterialFile[];
+      }>('/materials/extract', { fileIds });
+      if (result.workspace) acceptWorkspace(result.workspace);
+      else await readWorkspace();
+      const failures = result.files.filter(
+        (file) =>
+          file.extractionStatus === 'failed' ||
+          file.extractionStatus === 'unreadable' ||
+          file.status === 'failed',
+      );
+      setNotice(
+        result.items.length
+          ? `已提取 ${result.items.length} 笔费用，请逐项核对${failures.length ? `；${failures.length} 份材料无法提取` : ''}。`
+          : (failures[0]?.extractionError ??
+              failures[0]?.error ??
+              '未提取到费用，请检查原件或在单据中手工填写。'),
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '提取失败，请重试。');
+    } finally {
+      setExtracting(false);
+    }
+  };
+  return { extracting, notice, extract };
+}
+
 export function FilesPage() {
   const w = useWorkspace(),
     [s] = useSlice('materials', materialsInitial),
     [query, setQuery] = useState(''),
-    [filter, setFilter] = useState('all');
+    [filter, setFilter] = useState('all'),
+    [selected, setSelected] = useState<string[]>([]);
+  const extraction = useMaterialExtraction();
   const files = s.files.filter(
-    (f) =>
-      (filter === 'all' || f.status === filter) &&
-      f.name.toLowerCase().includes(query.toLowerCase()),
+    (file) =>
+      (filter === 'all' || file.status === filter) &&
+      file.name.toLowerCase().includes(query.toLowerCase()),
   );
+  const selectedFiles = s.files.filter((file) => selected.includes(file.id));
+  const openSelected = (fileIds: string[]) =>
+    w.openPanel({
+      kind: 'materials',
+      id: materialSelectionId(
+        s.files.filter((file) => fileIds.includes(file.id)),
+      ),
+      title: '材料与费用',
+      data: {
+        fileIds,
+        ...(fileIds.length === 1 ? { fileId: fileIds[0] } : {}),
+      },
+    });
   return (
     <div className="dw-page">
       <div className="dw-toolbar">
@@ -750,29 +831,38 @@ export function FilesPage() {
             aria-label="搜索材料"
             placeholder="搜索文件名称"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <UploadButton />
+        <UploadButton onUploaded={setSelected} />
+        <Button
+          disabled={!selectedFiles.length || extraction.extracting}
+          onClick={() =>
+            extraction.extract(selectedFiles.map((file) => file.id))
+          }
+        >
+          {extraction.extracting ? '提取中…' : '提取费用'}
+        </Button>
         <Button
           variant="primary"
           icon="wallet"
-          onClick={() =>
-            w.openPanel({
-              kind: 'materials',
-              id: materialBatchId,
-              title: '材料与费用',
-            })
-          }
+          disabled={!selectedFiles.length || extraction.extracting}
+          onClick={() => openSelected(selectedFiles.map((file) => file.id))}
         >
-          整理费用
+          核对费用
         </Button>
       </div>
+      {extraction.notice && (
+        <div className="dw-inline-notice" role="status">
+          {extraction.notice}
+        </div>
+      )}
       <div className="dw-filter-row">
         <div className="dw-filters">
           {[
             ['all', '全部材料'],
-            ['pending', '待核对'],
+            ['pending', '待提取'],
+            ['recognized', '已提取'],
             ['failed', '无法读取'],
             ['duplicate', '已排除'],
           ].map(([id, label]) => (
@@ -786,44 +876,53 @@ export function FilesPage() {
             </button>
           ))}
         </div>
-        <span>{files.length} 份材料</span>
+        <span>
+          {files.length} 份材料
+          {selectedFiles.length ? ` · 已选 ${selectedFiles.length} 份` : ''}
+        </span>
       </div>
       <div className="dw-file-list">
         {files.map((file) => (
-          <button
-            key={file.id}
-            className="dw-file-row"
-            onClick={() =>
-              w.openPanel({
-                kind: 'materials',
-                id: materialBatchId,
-                title: '材料与费用',
-                data: { fileId: file.id },
-              })
-            }
-          >
-            <span className="dw-file-icon">
-              <Icon name="file" size={20} />
-            </span>
-            <span className="dw-file-name">
-              <strong>{file.name}</strong>
-              <small>
-                {formatSize(file.size)} · {businessTime(file.addedAt)}
-              </small>
-            </span>
-            <Badge
-              tone={
-                file.status === 'failed'
-                  ? 'warning'
-                  : file.status === 'recognized'
-                    ? 'success'
-                    : 'neutral'
+          <div className="dw-file-select-row" key={file.id}>
+            <input
+              type="checkbox"
+              aria-label={`选择${file.name}`}
+              checked={selected.includes(file.id)}
+              onChange={(event) =>
+                setSelected((previous) =>
+                  event.target.checked
+                    ? [...previous, file.id]
+                    : previous.filter((id) => id !== file.id),
+                )
               }
+            />
+            <button
+              className="dw-file-row"
+              onClick={() => openSelected([file.id])}
             >
-              {fileStatus[file.status]}
-            </Badge>
-            <Icon name="chevron" size={15} />
-          </button>
+              <span className="dw-file-icon">
+                <Icon name="file" size={20} />
+              </span>
+              <span className="dw-file-name">
+                <strong>{file.name}</strong>
+                <small>
+                  {formatSize(file.size)} · {businessTime(file.addedAt)}
+                </small>
+              </span>
+              <Badge
+                tone={
+                  file.status === 'failed'
+                    ? 'warning'
+                    : file.status === 'recognized'
+                      ? 'success'
+                      : 'neutral'
+                }
+              >
+                {fileStatus[file.status]}
+              </Badge>
+              <Icon name="chevron" size={15} />
+            </button>
+          </div>
         ))}
       </div>
       {!files.length && <Empty title="没有符合条件的材料" />}
@@ -841,25 +940,72 @@ function ExpenseEditor({
   onCancel: () => void;
 }) {
   const [edit, setEdit] = useState(item),
+    [amount, setAmount] = useState(
+      item.amount === null ? '' : (item.amount / 100).toFixed(2),
+    ),
     [error, setError] = useState('');
   const save = () => {
-    if (!edit.date || !edit.purpose.trim()) {
-      setError('请填写费用日期与实际用途。');
+    const parts = amount.trim().match(/^(\d+)(?:\.(\d{1,2}))?$/);
+    const amountCents = parts
+      ? Number(parts[1]) * 100 + Number((parts[2] ?? '').padEnd(2, '0'))
+      : null;
+    const next = { ...edit, amount: amountCents };
+    const invalid = materialExpenseError(next);
+    if (invalid) {
+      setError(invalid);
       return;
     }
-    if (edit.category === '住宿' && (!edit.end || edit.end <= edit.date)) {
-      setError('离店日期应晚于入住日期。');
-      return;
-    }
-    if (edit.issue === 'oa' && !edit.oaId) {
-      setError('请选择本次接待对应的 OA 申请。');
-      return;
-    }
-    onSave({ ...edit, confirmed: true, issue: undefined });
+    onSave({ ...next, confirmed: true, issue: undefined, issues: [] });
   };
   return (
     <div className="dw-expense-editor">
       <div className="dw-form-grid">
+        <Field label="费用名称">
+          <input
+            value={edit.name}
+            onChange={(event) =>
+              setEdit((previous) => ({ ...previous, name: event.target.value }))
+            }
+          />
+        </Field>
+        <Field label="金额（元）">
+          <input
+            inputMode="decimal"
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+          />
+        </Field>
+        <Field label="费用类别">
+          <select
+            value={edit.category ?? ''}
+            onChange={(event) =>
+              setEdit((previous) => ({
+                ...previous,
+                category: event.target.value as MaterialExpense['category'],
+              }))
+            }
+          >
+            <option value="">请选择类别</option>
+            {['交通', '住宿', '餐饮', '办公'].map((category) => (
+              <option key={category}>{category}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="费用归属">
+          <select
+            value={edit.group ?? ''}
+            onChange={(event) =>
+              setEdit((previous) => ({
+                ...previous,
+                group: event.target.value as MaterialExpense['group'],
+              }))
+            }
+          >
+            <option value="">请选择归属</option>
+            <option value="travel">差旅费用</option>
+            <option value="daily">个人费用</option>
+          </select>
+        </Field>
         <Field label={edit.category === '住宿' ? '入住日期' : '费用日期'}>
           <input
             type="date"
@@ -876,22 +1022,7 @@ function ExpenseEditor({
               onChange={(e) => setEdit((p) => ({ ...p, end: e.target.value }))}
             />
           </Field>
-        ) : (
-          <Field label="费用分组">
-            <select
-              value={edit.group}
-              onChange={(e) =>
-                setEdit((p) => ({
-                  ...p,
-                  group: e.target.value as MaterialExpense['group'],
-                }))
-              }
-            >
-              <option value="travel">差旅费用</option>
-              <option value="daily">个人费用</option>
-            </select>
-          </Field>
-        )}
+        ) : null}
       </div>
       {edit.issue === 'date' && (
         <p className="dw-field-note">
@@ -900,21 +1031,12 @@ function ExpenseEditor({
       )}
       {(edit.issue === 'oa' || edit.oaId) && (
         <Field label="关联 OA 申请">
-          <select
+          <input
             value={edit.oaId ?? ''}
-            onChange={(e) => setEdit((p) => ({ ...p, oaId: e.target.value }))}
-          >
-            <option value="">请选择对应申请</option>
-            <option value="OA-2026-0609">
-              OA-2026-0609 · 项目交流 · 11月10日
-            </option>
-            <option value="OA-2026-0612">
-              OA-2026-0612 · 客户接待 · 11月11日
-            </option>
-            <option value="OA-2026-0614">
-              OA-2026-0614 · 合作伙伴交流 · 11月11日
-            </option>
-          </select>
+            onChange={(event) =>
+              setEdit((previous) => ({ ...previous, oaId: event.target.value }))
+            }
+          />
         </Field>
       )}
       <Field label="实际用途">
@@ -941,47 +1063,100 @@ function ExpenseEditor({
 
 export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
   const w = useWorkspace(),
-    [s, set] = useSlice('materials', materialsInitial);
+    [all, set] = useSlice('materials', materialsInitial);
+  const s = selectMaterialScope(all, {
+    fileIds: panel.data?.fileIds,
+    fileId: panel.data?.fileId,
+    batchId: panel.id,
+  });
+  const batchId =
+    panel.data?.fileIds || panel.data?.fileId
+      ? materialSelectionId(s.files)
+      : (panel.id ?? materialSelectionId(s.files));
+  const submissions = readSubmissionState(w.state.data);
+  const currentTask = w.state.tasks.find((task) => task.id === w.state.activeTask);
+  const contextIds = [
+    panel.data?.draftId,
+    ...(currentTask?.refs.filter((ref) => ref.kind === 'submission').map((ref) => ref.id).reverse() ?? []),
+    ...(currentTask?.messages.flatMap((message) => message.cards ?? []).filter((card) => card.kind === 'submission').map((card) => card.id).reverse() ?? []),
+  ];
+  const initialDraftSelections = () => Object.fromEntries(
+    (['expense', 'personal'] as const).map((type) => {
+      const preferred = contextIds.find((id) => id && submissions.drafts[id]?.status === 'draft' && getDraftType(submissions.drafts[id]!) === type);
+      const previous = w.state.data.expenseDraft?.materialBatchId === batchId
+        ? w.state.data.expenseDraft?.targetDraftIds?.[type] : undefined;
+      return [type, suggestMaterialDraftId(submissions.drafts, type, preferred ?? previous)];
+    }),
+  ) as Record<'expense' | 'personal', string>;
+  const [draftSelections, setDraftSelections] = useState(initialDraftSelections);
+  const [generating, setGenerating] = useState(false);
+  useEffect(() => setDraftSelections(initialDraftSelections()), [batchId, panel.data?.draftId]);
+  const extraction = useMaterialExtraction();
   const initialItem =
     s.items.find((i) => i.sourceFileId === panel.data?.fileId)?.id ?? null;
   const [open, setOpen] = useState<string | null>(initialItem),
     [tab, setTab] = useState<'review' | 'groups'>('review'),
     [filter, setFilter] = useState<'all' | 'needs'>('all'),
-    [notice, setNotice] = useState(''),
-    [retrying, setRetrying] = useState(false);
+    [notice, setNotice] = useState('');
+  const [acknowledged, setAcknowledged] = useState(false);
+  useEffect(() => {
+    setAcknowledged(false);
+    setNotice('');
+  }, [batchId, all.revision]);
   useEffect(() => {
     setOpen(
       s.items.find((i) => i.sourceFileId === panel.data?.fileId)?.id ?? null,
     );
-  }, [panel.data?.fileId]);
+  }, [panel.data?.fileId, panel.data?.fileIds]);
   const eligible = s.items.filter((i) => !i.excluded),
-    pending = eligible.filter((i) => !i.confirmed),
-    total = eligible.reduce((sum, i) => sum + i.amount, 0),
+    pending = eligible.filter((i) => !i.confirmed || !!materialExpenseError(i)),
+    total = eligible.reduce((sum, i) => sum + (i.amount ?? 0), 0),
     confirmedTotal = eligible
-      .filter((i) => i.confirmed)
-      .reduce((sum, i) => sum + i.amount, 0);
+      .filter((i) => i.confirmed && !materialExpenseError(i))
+      .reduce((sum, i) => sum + (i.amount ?? 0), 0);
+  const draftTypes = [...new Set(eligible.map((item) => item.group === 'daily' ? 'personal' as const : 'expense' as const))];
+  const targetsReady = draftTypes.every((type) => {
+    const id = draftSelections[type];
+    const draft = submissions.drafts[id];
+    return id === 'new' || !!draft && draft.status === 'draft' && getDraftType(draft) === type;
+  });
   const failed = s.files.filter((f) => f.status === 'failed'),
     unknown = s.files.filter((f) => f.status === 'pending'),
     duplicates = s.files.filter((f) => f.status === 'duplicate');
-  const canUse = eligible.length > 0 && pending.length === 0 && s.acknowledged;
+  const canUse =
+    eligible.length > 0 &&
+    pending.length === 0 &&
+    acknowledged &&
+    eligible.every((item) => !materialExpenseError(item));
   const mutateItem = (item: MaterialExpense) =>
     set((p) => ({
       ...p,
-      items: p.items.map((i) => (i.id === item.id ? item : i)),
+      items: p.items.map((i) =>
+        i.id === item.id
+          ? {
+              ...item,
+              confirmed: item.confirmed && !materialExpenseError(item),
+            }
+          : i,
+      ),
       revision: p.revision + 1,
       acknowledged: false,
     }));
   const saveExpenses = async () => {
     if (!canUse) return;
-    const batch = buildMaterialExpenseBatch(s);
+    const batch = buildMaterialExpenseBatch(s, batchId);
     w.updateData(
       'expenseLibrary',
       (previous: Record<string, any> | undefined) => ({
         ...previous,
-        [materialBatchId]: { ...batch, savedAt: new Date().toISOString() },
+        [batchId]: { ...batch, savedAt: new Date().toISOString() },
       }),
     );
-    set((p) => ({ ...p, savedRevision: p.revision }));
+    set((p) => ({
+      ...p,
+      savedRevision: p.revision,
+      savedSelectionId: batchId,
+    }));
     try {
       await w.flush();
       setNotice(
@@ -991,46 +1166,55 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
       setNotice(error instanceof Error ? error.message : '费用保存失败');
     }
   };
-  const generate = () => {
-    if (!canUse) return;
-    const batch = buildMaterialExpenseBatch(s);
+  const generate = async () => {
+    if (!canUse || !targetsReady || generating) return;
+    setGenerating(true);
+    setNotice('');
+    try {
+    await w.flush();
+    const targetDraftIds: NonNullable<MaterialExpenseImport['targetDraftIds']> = {};
+    for (const type of draftTypes) {
+      const selected = draftSelections[type];
+      if (selected === 'new') {
+        const result = await api<{ draft: SubmissionDraft }>('/business/new-draft', { id: type });
+        targetDraftIds[type] = result.draft.id;
+        setDraftSelections((previous) => ({ ...previous, [type]: result.draft.id }));
+      } else targetDraftIds[type] = selected;
+    }
+    await w.refresh();
+    const batch = buildMaterialExpenseBatch(s, batchId);
     const personal = batch.items[0]?.group === 'daily';
     w.updateData('expenseDraft', {
       ...batch,
-      id: `${materialBatchId}-r${s.revision}`,
+      id: `${batchId}-r${s.revision}`,
       taskId: w.state.activeTask,
       status: 'draft',
+      targetDraftIds,
     });
-    set((p) => ({ ...p, importedRevision: p.revision }));
+    set((p) => ({
+      ...p,
+      importedRevision: s.revision,
+      importedSelectionId: batchId,
+    }));
     w.openPanel({
       kind: 'submission',
-      id: personal ? 'personal' : 'expense',
+      id: targetDraftIds[personal ? 'personal' : 'expense'],
       title: personal ? '个人费用报销' : '差旅报销',
-      data: { materialBatchId },
+      data: { materialBatchId: batchId },
     });
     if (new Set(batch.items.map((item) => item.group)).size > 1)
-      w.notify('已按差旅报销、个人费用报销生成草稿');
-  };
-  const retry = async () => {
-    setRetrying(true);
-    setNotice('');
-    try {
-      await w.flush();
-      await w.refresh();
-      setNotice(
-        '当前未接入图像 OCR。请补充可读取的文本文件，或在单据中手工填写费用。',
-      );
+      w.notify('费用将载入所选差旅报销和个人费用报销草稿');
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : '查询材料状态失败');
+      setNotice(error instanceof Error ? error.message : '草稿载入失败，请重试');
     } finally {
-      setRetrying(false);
+      setGenerating(false);
     }
   };
   return (
     <div className="dw-panel dw-materials">
       <div className="dw-material-heading">
         <span>
-          {s.files.length} 份材料 · {eligible.length} 笔有效费用
+          {s.files.length} 份材料 · {eligible.length} 笔费用
         </span>
         <Badge
           tone={
@@ -1041,11 +1225,44 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
         >
           {pending.length || unknown.length || failed.length
             ? `${pending.length + unknown.length + failed.length} 项待核对`
-            : '核对完成'}
+            : s.items.length
+              ? '核对完成'
+              : '暂无费用'}
         </Badge>
       </div>
+      <div className="dw-panel-actions">
+        <Button
+          disabled={!s.files.length || extraction.extracting}
+          onClick={() => extraction.extract(s.files.map((file) => file.id))}
+        >
+          {extraction.extracting ? '提取中…' : '提取费用'}
+        </Button>
+      </div>
+      {extraction.notice && (
+        <div className="dw-inline-notice" role="status">
+          {extraction.notice}
+        </div>
+      )}
       {panel.data?.fileId && (
         <div className="dw-panel-actions">
+          {s.files.some(
+            (file) =>
+              file.id === panel.data?.fileId &&
+              /\.(png|jpe?g|webp|pdf)$/i.test(file.name),
+          ) && (
+            <Button
+              icon="layout"
+              onClick={() =>
+                w.openPanel({
+                  kind: 'translation',
+                  title: '附件翻译',
+                  id: String(panel.data!.fileId),
+                })
+              }
+            >
+              翻译成中文
+            </Button>
+          )}
           {String(panel.data.fileId).startsWith('file-') && (
             <a
               className="button"
@@ -1074,7 +1291,7 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
         </div>
       )}
       <div className="dw-material-total">
-        <span>有效费用合计</span>
+        <span>费用合计</span>
         <Money value={total} />
         <small>
           已确认 <Money value={confirmedTotal} />
@@ -1115,9 +1332,20 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
               仅看待核对
             </label>
           </div>
+          {!s.items.length && (
+            <Empty title="尚无费用条目">
+              <p className="dw-field-note">
+                请提取所选材料，或在报销单中手工填写费用。
+              </p>
+            </Empty>
+          )}
           <div className="dw-expense-list">
             {s.items
-              .filter((i) => filter === 'all' || (!i.confirmed && !i.excluded))
+              .filter(
+                (i) =>
+                  filter === 'all' ||
+                  ((!i.confirmed || !!materialExpenseError(i)) && !i.excluded),
+              )
               .map((item) => (
                 <div
                   className={`dw-expense-item ${item.excluded ? 'is-excluded' : ''}`}
@@ -1128,7 +1356,9 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
                     onClick={() => setOpen(open === item.id ? null : item.id)}
                     aria-expanded={open === item.id}
                   >
-                    <span className="dw-expense-type">{item.category}</span>
+                    <span className="dw-expense-type">
+                      {item.category ?? '待分类'}
+                    </span>
                     <span className="dw-expense-name">
                       <strong>{item.name}</strong>
                       <small>
@@ -1144,7 +1374,11 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
                       </small>
                     </span>
                     <span className="dw-expense-number">
-                      <Money value={item.amount} />
+                      {item.amount === null ? (
+                        '金额待填写'
+                      ) : (
+                        <Money value={item.amount} />
+                      )}
                       <Badge
                         tone={
                           item.excluded
@@ -1176,6 +1410,15 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
                               ?.name
                           }
                         </span>
+                        {item.sourceFileId.startsWith('file-') && (
+                          <a
+                            href={`/api/local/files/${encodeURIComponent(item.sourceFileId)}/download`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            打开原件
+                          </a>
+                        )}
                         <button
                           onClick={() => {
                             mutateItem({ ...item, excluded: !item.excluded });
@@ -1185,6 +1428,35 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
                           {item.excluded ? '恢复使用' : '本次不使用'}
                         </button>
                       </div>
+                      {!item.excluded &&
+                        item.evidence &&
+                        Object.keys(item.evidence).length > 0 && (
+                          <details className="dw-material-evidence">
+                            <summary>提取依据</summary>
+                            <dl>
+                              {Object.entries(item.evidence).map(
+                                ([field, value]) => (
+                                  <div key={field}>
+                                    <dt>
+                                      {(
+                                        {
+                                          name: '费用名称',
+                                          amount: '金额',
+                                          category: '类别',
+                                          date: '日期',
+                                          end: '离店日期',
+                                          purpose: '事由',
+                                          group: '归属',
+                                        } as Record<string, string>
+                                      )[field] ?? field}
+                                    </dt>
+                                    <dd>{value}</dd>
+                                  </div>
+                                ),
+                              )}
+                            </dl>
+                          </details>
+                        )}
                       {!item.excluded && (
                         <ExpenseEditor
                           key={`${item.id}-${s.revision}`}
@@ -1218,7 +1490,9 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
                 key={group}
                 title={group === 'travel' ? '差旅费用' : '个人费用'}
                 action={
-                  <Money value={rows.reduce((sum, i) => sum + i.amount, 0)} />
+                  <Money
+                    value={rows.reduce((sum, i) => sum + (i.amount ?? 0), 0)}
+                  />
                 }
               >
                 {rows.length ? (
@@ -1228,10 +1502,14 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
                         <strong>{item.name}</strong>
                         <small>{item.confirmed ? '已确认' : '待核对'}</small>
                       </div>
-                      <Money value={item.amount} />
+                      {item.amount === null ? (
+                        '金额待填写'
+                      ) : (
+                        <Money value={item.amount} />
+                      )}
                       <select
                         aria-label={`${item.name}的费用分组`}
-                        value={item.group}
+                        value={item.group ?? ''}
                         onChange={(e) =>
                           mutateItem({
                             ...item,
@@ -1239,6 +1517,7 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
                           })
                         }
                       >
+                        <option value="">请选择归属</option>
                         <option value="travel">差旅费用</option>
                         <option value="daily">个人费用</option>
                       </select>
@@ -1269,10 +1548,27 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
             <Icon name="alert" size={17} />
             <div>
               <strong>{file.name}</strong>
-              <span>无法提取文本，未生成费用</span>
+              {file.id.startsWith('file-') && (
+                <a
+                  href={`/api/local/files/${encodeURIComponent(file.id)}/download`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  打开原件
+                </a>
+              )}
+              <span>
+                {file.extractionError ??
+                  file.error ??
+                  '无法提取文本，请补充可读取的文本材料，或在单据中手工填写。'}
+              </span>
             </div>
-            <Button variant="ghost" disabled={retrying} onClick={retry}>
-              {retrying ? '重试中' : '重试'}
+            <Button
+              variant="ghost"
+              disabled={extraction.extracting}
+              onClick={() => extraction.extract([file.id])}
+            >
+              {extraction.extracting ? '提取中' : '重新提取'}
             </Button>
           </div>
         ))}
@@ -1284,7 +1580,7 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
             <Icon name="file" size={17} />
             <div>
               <strong>{file.name}</strong>
-              <span>{formatSize(file.size)} · 已保存，费用信息待核对</span>
+              <span>{formatSize(file.size)} · 已保存，待提取费用</span>
             </div>
             <button
               className="dw-remove"
@@ -1306,16 +1602,24 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
           <p className="dw-field-note">无未计入材料</p>
         )}
         <div className="dw-upload-row">
-          <UploadButton label="补充材料" />
+          <UploadButton
+            label="补充材料"
+            onUploaded={(fileIds) =>
+              w.openPanel({
+                kind: 'materials',
+                id: 'uploaded-materials',
+                title: '材料与费用',
+                data: { fileIds },
+              })
+            }
+          />
         </div>
       </section>
       <label className="dw-ack">
         <input
           type="checkbox"
-          checked={s.acknowledged}
-          onChange={(e) =>
-            set((p) => ({ ...p, acknowledged: e.target.checked }))
-          }
+          checked={acknowledged}
+          onChange={(event) => setAcknowledged(event.target.checked)}
         />
         <span>
           已核对本次使用的 {eligible.length} 笔费用，以及未计入的材料。
@@ -1326,6 +1630,23 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
           还有 {pending.length} 项业务信息待核对。
         </p>
       )}
+      {draftTypes.map((type) => (
+        <Field key={type} label={type === 'personal' ? '个人费用报销草稿' : '差旅报销草稿'}>
+          <select
+            value={draftSelections[type]}
+            disabled={generating}
+            onChange={(event) => setDraftSelections((previous) => ({ ...previous, [type]: event.target.value }))}
+          >
+            <option value="">请选择要载入的草稿</option>
+            {Object.values(submissions.drafts).filter((draft) => draft.status === 'draft' && getDraftType(draft) === type).map((draft) => (
+              <option key={draft.id} value={draft.id}>
+                {draft.title}{draft.purpose ? ` · ${draft.purpose}` : ' · 事由待填写'}
+              </option>
+            ))}
+            <option value="new">新建{type === 'personal' ? '个人费用报销' : '差旅报销'}</option>
+          </select>
+        </Field>
+      ))}
       <div className="dw-panel-actions dw-material-actions">
         <Button
           variant="ghost"
@@ -1333,9 +1654,10 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
           onClick={() => {
             w.attach({
               kind: 'materials',
-              id: materialBatchId,
-              title: '上海客户拜访票据',
+              id: batchId,
+              title: '已选材料与费用',
               version: `r${s.revision}`,
+              fileIds: s.files.map((file) => file.id),
             });
             w.closePanel();
             w.navigate('chat');
@@ -1345,13 +1667,21 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
         </Button>
         <span className="dw-spacer" />
         <Button
-          disabled={!canUse || s.savedRevision === s.revision}
+          disabled={
+            !canUse ||
+            (s.savedRevision === s.revision && s.savedSelectionId === batchId)
+          }
           onClick={saveExpenses}
         >
-          {s.savedRevision === s.revision ? '费用已保存' : '只保存费用'}
+          {s.savedRevision === s.revision && s.savedSelectionId === batchId
+            ? '费用已保存'
+            : '只保存费用'}
         </Button>
-        <Button variant="primary" disabled={!canUse} onClick={generate}>
-          {s.importedRevision === s.revision ? '继续报销草稿' : '生成报销草稿'}
+        <Button variant="primary" disabled={!canUse || !targetsReady || generating} onClick={generate}>
+          {generating ? '正在载入…' : s.importedRevision === s.revision &&
+          s.importedSelectionId === batchId
+            ? '继续报销草稿'
+            : '生成报销草稿'}
         </Button>
       </div>
     </div>

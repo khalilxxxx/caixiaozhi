@@ -1,4 +1,4 @@
-"""Daily deterministic preaudit for the local app; no external messages are sent."""
+"""本地每日预审复用确定性及语义规则；不发送外部消息。"""
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import re

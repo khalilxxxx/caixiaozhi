@@ -25,19 +25,24 @@ export {
 
 export const RULES_SUBMISSION_KEY = 'rulesSubmission';
 type RuleOrigin = 'builtin' | 'personal';
+export type RuleMetric = Metric | 'semantic';
+export type RuleDocumentType = 'travel' | 'expense' | 'personal';
 export interface WorkspaceRule {
   id: string;
   name: string;
   system: SystemKey;
   origin: RuleOrigin;
   scope: Scope;
-  metric: Metric;
+  metric: RuleMetric;
   thresholdMinor?: number;
   thresholdDays?: number;
   effect: 'block' | 'warn';
   enabled: boolean;
   version: number;
   description: string;
+  instruction?: string;
+  requiredFields?: string[];
+  documentTypes?: RuleDocumentType[];
 }
 export interface ExpenseLine {
   id: string;
@@ -50,11 +55,12 @@ export interface ExpenseLine {
   start?: string;
   end?: string;
 }
-interface ReviewDoc {
+export interface ReviewDoc {
   id: string;
   title: string;
   system: SystemKey;
   kind: string;
+  documentType?: RuleDocumentType;
   person: string;
   department: string;
   amountCents?: number;
@@ -77,8 +83,19 @@ export interface RuleFinding {
   actual: string;
   expected: string;
   detail: string;
+  evidence?: { path: string; quote: string }[];
+}
+export interface RuleEvaluation {
+  ruleId: string;
+  state: 'MATCHED' | 'NOT_MATCHED' | 'INSUFFICIENT_EVIDENCE';
+  reason: string;
+  evidence: { path: string; quote: string }[];
 }
 export interface RuleReview {
+  engine?: string;
+  model?: string;
+  evaluatedAt?: string;
+  evaluations?: RuleEvaluation[];
   status: 'attention' | 'unknown' | 'clear';
   findings: RuleFinding[];
   passed: WorkspaceRule[];
@@ -90,7 +107,7 @@ interface RuleForm {
   name: string;
   system: SystemKey;
   scope: Scope;
-  metric: Metric;
+  metric: RuleMetric;
   threshold: string;
 }
 export interface RulesSubmissionState {
@@ -105,13 +122,23 @@ export interface RulesSubmissionState {
     lastRunDate?: string;
   };
   ruleForms: Record<string, RuleForm>;
+  reviewResults?: Record<
+    string,
+    {
+      documentVersion: number;
+      signature: string;
+      review: RuleReview;
+      checkedAt?: string;
+    }
+  >;
   auditFilter: 'all' | 'attention' | 'unknown' | 'clear';
 }
 const systemLabels: Record<SystemKey, string> = {
   expense: '费用报销',
   oa: 'OA办公',
 };
-const metricLabels: Record<Metric, string> = {
+const metricLabels: Record<RuleMetric, string> = {
+  semantic: '业务语义',
   amount: '单据金额',
   meal: '餐饮合计',
   hotelNight: '住宿单价',
@@ -134,7 +161,10 @@ const now = () =>
     minute: '2-digit',
     hour12: false,
   });
-const cloneRules = (rules: WorkspaceRule[]) => rules.map((r) => ({ ...r }));
+const cloneRules = (rules: WorkspaceRule[]) =>
+  rules
+    .filter((rule) => rule.metric !== 'validInvoice')
+    .map((rule) => ({ ...rule }));
 const normalizedRules: WorkspaceRule[] = initialRules.map(
   ({ threshold, ...rule }) => ({
     ...rule,
@@ -207,11 +237,13 @@ export function ruleSignature(
     rules
       .filter(
         (r) =>
+          r.metric !== 'validInvoice' &&
           r.enabled &&
           r.system === system &&
           (r.scope === scope || r.scope === 'both'),
       )
-      .sort((a, b) => a.id.localeCompare(b.id))
+      // Rule IDs are ASCII; compare code points to match Python sorted.
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
       .map((r) => ({
         id: r.id,
         name: r.name,
@@ -225,6 +257,9 @@ export function ruleSignature(
         enabled: r.enabled,
         version: r.version,
         description: r.description,
+        instruction: r.instruction,
+        requiredFields: r.requiredFields,
+        documentTypes: r.documentTypes,
       })),
   );
 }
@@ -237,14 +272,24 @@ export function evaluateWorkspaceRules(
     passed: WorkspaceRule[] = [],
     inapplicable: WorkspaceRule[] = [],
     applicable: WorkspaceRule[] = [];
+  const documentType =
+    doc.documentType ??
+    (doc.system === 'oa'
+      ? ['出差申请', '差旅申请'].includes(doc.kind)
+        ? 'travel'
+        : undefined
+      : 'expense');
   for (const rule of rules) {
     if (
+      rule.metric === 'validInvoice' ||
       !rule.enabled ||
       rule.system !== doc.system ||
       !(rule.scope === 'both' || rule.scope === scope)
     )
       continue;
     if (
+      (rule.documentTypes?.length &&
+        (!documentType || !rule.documentTypes.includes(documentType))) ||
       (rule.metric === 'hotelNight' && !doc.categories.includes('hotel')) ||
       (rule.metric === 'meal' && !doc.categories.includes('meal'))
     ) {
@@ -252,6 +297,17 @@ export function evaluateWorkspaceRules(
       continue;
     }
     applicable.push(rule);
+    if (rule.metric === 'semantic') {
+      findings.push({
+        rule,
+        state: 'unknown',
+        actual: '尚未执行语义检查',
+        expected: rule.instruction || rule.description,
+        detail: '尚无服务端语义检查结果，请重新检查。',
+        evidence: [],
+      });
+      continue;
+    }
     const value: number | boolean | null | undefined =
       rule.metric === 'amount'
         ? doc.amountCents
@@ -263,22 +319,14 @@ export function evaluateWorkspaceRules(
               ? doc.days
               : rule.metric === 'invoiceUnique'
                 ? doc.invoiceUnique
-                : rule.metric === 'validInvoice'
-                  ? doc.validInvoice
-                  : doc.attachment;
+                : doc.attachment;
     if (value === undefined || value === null) {
       findings.push({
         rule,
         state: 'unknown',
         actual: '尚未取得必要数据',
-        expected:
-          rule.metric === 'validInvoice'
-            ? '取得有效的发票查验结果'
-            : workspaceRuleCondition(rule),
-        detail:
-          rule.metric === 'validInvoice'
-            ? '发票查验结果未返回，暂不能形成有效性结论。'
-            : '当前缺少' + metricLabels[rule.metric] + '，请补全后重新检查。',
+        expected: workspaceRuleCondition(rule),
+        detail: '当前缺少' + metricLabels[rule.metric] + '，请补全后重新检查。',
       });
       continue;
     }
@@ -323,9 +371,7 @@ export function evaluateWorkspaceRules(
         actual:
           rule.metric === 'invoiceUnique'
             ? '发票尾号6739已关联其他单据'
-            : rule.metric === 'attachment'
-              ? '缺少必要凭证'
-              : '发票查验未通过',
+            : '缺少必要凭证',
         expected: rule.description,
         detail:
           rule.metric === 'invoiceUnique'
@@ -351,18 +397,51 @@ export function evaluateWorkspaceRules(
 function readData(data: Record<string, any>): RulesSubmissionState {
   return data[RULES_SUBMISSION_KEY] ?? INITIAL_RULES_SUBMISSION;
 }
+export function readAuditReview(doc: ReviewDoc, state: RulesSubmissionState) {
+  const saved = state.reviewResults?.[doc.id];
+  const signature = ruleSignature(state.rules, 'review', doc.system);
+  const current = Boolean(
+    saved &&
+    saved.documentVersion === doc.version &&
+    saved.signature === signature,
+  );
+  if (current && saved)
+    return {
+      review: saved.review,
+      stale: false,
+      checked: true,
+      checkedAt: saved.checkedAt,
+    };
+  const { applicable, inapplicable } = evaluateWorkspaceRules(doc, state.rules);
+  const review: RuleReview = {
+    status: 'unknown',
+    passed: [],
+    inapplicable,
+    applicable,
+    findings: applicable.map((rule) => ({
+      rule,
+      state: 'unknown',
+      actual: saved ? '检查依据已变化' : '尚未检查',
+      expected: workspaceRuleCondition(rule),
+      detail: saved
+        ? '单据或适用规则已更新，请重新审查。'
+        : '尚无服务端预审结果，请执行审查。',
+      evidence: [],
+    })),
+  };
+  return {
+    review,
+    stale: Boolean(saved),
+    checked: false,
+    checkedAt: saved?.checkedAt,
+  };
+}
 export function getAuditSummary(data: Record<string, any>): ResultCard {
   const s = readData(data),
     counts = { attention: 0, unknown: 0, clear: 0 };
   const records = (data.auditDocuments ?? []) as ReviewDoc[];
-  records.forEach(
-    (d) => counts[evaluateWorkspaceRules(d, s.reviewedRules).status]++,
-  );
-  const stale = (['expense', 'oa'] as const).some(
-    (system) =>
-      ruleSignature(s.rules, 'review', system) !==
-      ruleSignature(s.reviewedRules, 'review', system),
-  );
+  records.forEach((d) => counts[readAuditReview(d, s).review.status]++);
+  const stale = records.some((doc) => readAuditReview(doc, s).stale);
   return {
     kind: 'audit',
     id: 'batch',
@@ -398,6 +477,48 @@ const auditPanel = (id = 'batch'): PanelSpec => ({
       : AUDIT_DOCUMENTS.find((d) => d.id === id)?.title || '单据审查',
 });
 
+export function RuleEvaluationResults({ review }: { review: RuleReview }) {
+  if (!review.evaluations?.length) return null;
+  return (
+    <details className="rs-source">
+      <summary>语义检查明细 · {review.evaluations.length} 项</summary>
+      {review.evaluations.map((evaluation) => (
+        <section key={evaluation.ruleId}>
+          <strong>
+            {review.applicable.find((rule) => rule.id === evaluation.ruleId)
+              ?.name || evaluation.ruleId}
+          </strong>
+          <Badge
+            tone={
+              evaluation.state === 'MATCHED'
+                ? 'warning'
+                : evaluation.state === 'NOT_MATCHED'
+                  ? 'success'
+                  : 'neutral'
+            }
+          >
+            {evaluation.state === 'MATCHED'
+              ? '命中'
+              : evaluation.state === 'NOT_MATCHED'
+                ? '未命中'
+                : '待核实'}
+          </Badge>
+          <p>{evaluation.reason}</p>
+          {evaluation.evidence.length ? (
+            evaluation.evidence.map((evidence, index) => (
+              <p key={evidence.path + index}>
+                <code>{evidence.path}</code> · {evidence.quote}
+              </p>
+            ))
+          ) : (
+            <small>暂无可引用的原文证据</small>
+          )}
+        </section>
+      ))}
+    </details>
+  );
+}
+
 function ReviewFindings({
   review,
   onRule,
@@ -429,6 +550,18 @@ function ReviewFindings({
             </Badge>
           </div>
           <p>{f.detail}</p>
+          {f.evidence?.length ? (
+            <details className="rs-source">
+              <summary>执行证据</summary>
+              {f.evidence.map((e, index) => (
+                <p key={e.path + index}>
+                  <code>{e.path}</code> · {e.quote}
+                </p>
+              ))}
+            </details>
+          ) : f.rule.metric === 'semantic' ? (
+            <small>暂无可引用的原文证据</small>
+          ) : null}
           <div className="rs-compare">
             <div>
               <span>实际情况</span>
@@ -455,10 +588,25 @@ function ReviewFindings({
           </details>
         </section>
       ))}
-      {!review.findings.length && (
-        <div className="rs-clear">
-          <Icon name="check" size={18} />
-          <span>适用规则检查完成，未发现异常</span>
+      <RuleEvaluationResults review={review} />
+      {!review.findings.length &&
+        review.status === 'clear' &&
+        review.applicable.length > 0 && (
+          <div className="rs-clear">
+            <Icon name="check" size={18} />
+            <span>适用规则检查完成，未发现异常</span>
+          </div>
+        )}
+      {!review.findings.length && review.status === 'unknown' && (
+        <p>尚无当前版本的审查结果，请重新审查。</p>
+      )}
+      {!review.applicable.length && review.status === 'clear' && (
+        <p>当前单据无适用规则</p>
+      )}
+      {review.engine && (
+        <div className="rs-check-meta">
+          {review.engine}
+          {review.model ? ` · ${review.model}` : ''}
         </div>
       )}
       <details className="rs-passed">
@@ -483,7 +631,7 @@ function ReviewFindings({
           {review.inapplicable.map((r) => (
             <div key={r.id}>
               {r.name}
-              <span>无对应费用项</span>
+              <span>当前单据不适用</span>
             </div>
           ))}
         </details>
@@ -507,9 +655,7 @@ export function AuditPanel({ panel }: { panel: PanelSpec }) {
     setNoteEditing(false);
   }, [id]);
   const counts = { attention: 0, unknown: 0, clear: 0 };
-  records.forEach(
-    (d) => counts[evaluateWorkspaceRules(d, s.reviewedRules).status]++,
-  );
+  records.forEach((d) => counts[readAuditReview(d, s).review.status]++);
   const recheck = async (system?: SystemKey) => {
     if (checking) return;
     setChecking(true);
@@ -562,14 +708,10 @@ export function AuditPanel({ panel }: { panel: PanelSpec }) {
             .filter(
               (d) =>
                 s.auditFilter === 'all' ||
-                evaluateWorkspaceRules(d, s.reviewedRules).status ===
-                  s.auditFilter,
+                readAuditReview(d, s).review.status === s.auditFilter,
             )
             .map((d) => {
-              const review = evaluateWorkspaceRules(d, s.reviewedRules),
-                stale =
-                  ruleSignature(s.rules, 'review', d.system) !==
-                  ruleSignature(s.reviewedRules, 'review', d.system);
+              const { review, stale } = readAuditReview(d, s);
               return (
                 <button
                   key={d.id}
@@ -640,10 +782,7 @@ export function AuditPanel({ panel }: { panel: PanelSpec }) {
       </div>
     );
   if (!doc) return <Empty title="单据不存在" />;
-  const review = evaluateWorkspaceRules(doc, s.reviewedRules),
-    stale =
-      ruleSignature(s.rules, 'review', doc.system) !==
-      ruleSignature(s.reviewedRules, 'review', doc.system);
+  const { review, stale, checked, checkedAt } = readAuditReview(doc, s);
   return (
     <div className="rs-panel">
       <Button
@@ -683,7 +822,7 @@ export function AuditPanel({ panel }: { panel: PanelSpec }) {
       {stale && (
         <div className="rs-notice warning">
           <Icon name="alert" size={16} />
-          适用规则已更新，以下为上次检查结果。
+          单据或适用规则已更新，结果待更新。
         </div>
       )}
       {tab === 'review' ? (
@@ -701,7 +840,12 @@ export function AuditPanel({ panel }: { panel: PanelSpec }) {
               {statusLabels[review.status]}
             </Badge>
             <span>
-              {businessTime(s.reviewedAt[doc.system])} · {review.applicable.length}项规则
+              {checked
+                ? businessTime(
+                    checkedAt || review.evaluatedAt || s.reviewedAt[doc.system],
+                  )
+                : '尚未完成当前版本审查'}{' '}
+              · {review.applicable.length}项规则
             </span>
           </div>
           <ReviewFindings

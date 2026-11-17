@@ -44,8 +44,42 @@ describe('规则命中提示', () => {
       '达到个人提醒条件，不影响通用规则和正式审批。',
     );
     expect(
-      evaluateWorkspaceRules({ ...doc, mealCents: 150000 }, [blocking], 'submit')
-        .findings,
+      evaluateWorkspaceRules(
+        { ...doc, mealCents: 150000 },
+        [blocking],
+        'submit',
+      ).findings,
     ).toHaveLength(0);
+  });
+  it('旧有效性规则不会产生阻断、待查验或通过结论', () => {
+    const rule = {
+      ...readRuleCenter({}).rules[0]!,
+      metric: 'validInvoice' as const,
+      scope: 'both' as const,
+    };
+    const doc: Parameters<typeof evaluateWorkspaceRules>[0] = {
+      id: 'LEGACY',
+      title: '费用报销',
+      system: 'expense',
+      kind: '费用报销',
+      person: '林悦',
+      department: '财务部',
+      period: '',
+      attachment: true,
+      version: 1,
+      stage: '草稿',
+      categories: [],
+      validInvoice: null,
+    };
+    const review = evaluateWorkspaceRules(doc, [rule], 'submit');
+    expect(review).toMatchObject({
+      status: 'clear',
+      findings: [],
+      passed: [],
+      applicable: [],
+    });
+    expect(
+      evaluateWorkspaceRules({ ...doc, validInvoice: false }, [rule]).findings,
+    ).toEqual([]);
   });
 });

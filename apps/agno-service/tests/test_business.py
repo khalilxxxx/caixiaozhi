@@ -55,7 +55,8 @@ class BusinessTests(unittest.TestCase):
         draft = self.business.update_draft('travel', {'legs':[{'arrivalCity':'上海'}]})['draft']
         self.assertTrue(draft['legs'][0]['id'])
         self.assertEqual(draft['legs'][0]['departureDate'], '')
-        self.assertEqual(draft['legs'][0]['transport'], '')
+        self.assertEqual(draft['legs'][0]['transport'], '火车-二等座')
+        self.assertIn('legs.' + draft['legs'][0]['id'] + '.transport', draft['autoFill']['fields'])
         for patch in ({'purpose':123}, {'legs':['北京至上海']}, {'legs':[{'transport':[]} ]}, {'companions':[{'name':'张三'}]}, {'expenses':[{'amount':12}]}, {'files':['发票.pdf']}):
             with self.assertRaises(BusinessError):
                 self.business.update_draft('travel',patch)
@@ -97,21 +98,20 @@ class BusinessTests(unittest.TestCase):
         with self.assertRaises(BusinessError):
             self.business.submit_draft('personal', 1, 'submit-once')
     def test_new_same_type_draft_preserves_history_and_never_discards_filled_draft(self):
-        with self.assertRaises(BusinessError):
-            self.travel()
-            self.business.new_draft('travel')
-        saved = self.business.get_draft('travel')['draft']
-        first = self.business.submit_draft('travel', saved['version'], 'first-request')
+        saved = self.travel()
         replacement = self.business.new_draft('travel')['draft']
+        self.assertNotEqual(replacement['id'], saved['id'])
+        self.assertEqual(self.business.get_draft('travel')['draft'], saved)
         self.assertEqual(replacement['status'], 'draft')
         self.assertEqual(replacement['purpose'], '')
         self.assertEqual(replacement['legs'], [])
-        self.assertEqual(replacement['version'], saved['version'] + 1)
+        self.assertEqual(replacement['version'], 1)
+        first = self.business.submit_draft('travel', saved['version'], 'first-request')
         self.assertEqual(len(self.store.state['data']['submissions']['requests']), 1)
         self.assertEqual(self.business.get_receipt(first['request']['id'])['receipt']['status'], 'accepted')
         self.assertEqual(self.business.query_documents(first['document']['id'])['count'], 1)
-        next_draft = self.travel()
-        self.business.submit_draft('travel', next_draft['version'], 'second-request')
+        next_draft = self.business.update_draft(replacement['id'], {'purpose': '第二次拜访', 'legs': saved['legs']})['draft']
+        self.business.submit_draft(replacement['id'], next_draft['version'], 'second-request')
         self.assertEqual(len(self.store.state['data']['submissions']['requests']), 2)
 
     def test_invalid_money_and_unknown_currency_block_submission(self):

@@ -4,22 +4,29 @@ import { getSubmissionSummary, submissionLabels } from './SubmissionWorkspace';
 import { resolveDraftId, readSubmissionState } from './submission-state';
 import {
   draftCurrencyTotals,
+  getDraftType,
   draftPeriod,
   type SubmissionDraft,
 } from './submission-model';
 import './submission-card.css';
+import { activeSubmissionDefaults } from './submission-defaults';
 
 function periodLabel(draft: SubmissionDraft) {
   const period = draftPeriod(draft);
   if (!period.start) return '日期待补充';
   const short = (value: string) => value.replace(/-/g, '.');
+  if (
+    getDraftType(draft) === 'travel' &&
+    draft.legs.some((leg) => leg.isReturn && !leg.departureDate)
+  )
+    return `${short(period.start)} 出发 · 回程日期待补`;
   return period.start === period.end
     ? short(period.start)
     : `${short(period.start)} — ${short(period.end)}`;
 }
 
 function DraftPreview({ draft }: { draft: SubmissionDraft }) {
-  if (draft.id === 'travel') {
+  if (getDraftType(draft) === 'travel') {
     const cities = draft.legs.length
       ? [
           draft.legs[0]!.departureCity || '出发城市待补充',
@@ -48,7 +55,15 @@ function DraftPreview({ draft }: { draft: SubmissionDraft }) {
             <span>
               {[
                 ...new Set(
-                  draft.legs.map((leg) => leg.transport).filter(Boolean),
+                  draft.legs
+                    .map((leg) => {
+                      if (!leg.transport) return '';
+                      const suggested = activeSubmissionDefaults(draft).some(
+                        (entry) => entry.path === `legs.${leg.id}.transport`,
+                      );
+                      return `${leg.transport}${suggested ? '（建议）' : ''}`;
+                    })
+                    .filter(Boolean),
                 ),
               ].join(' / ') || '交通工具待补充'}
             </span>
@@ -130,7 +145,7 @@ export function SubmissionCard({
               w.openPanel({
                 kind: 'submission',
                 id: receiptRequest.draftId,
-                title: submissionLabels[receiptRequest.draftId],
+                title: submissionLabels[getDraftType(receiptRequest.snapshot)],
                 data: { requestId: receiptRequest.id },
               })
             }
@@ -149,7 +164,7 @@ export function SubmissionCard({
     w.openPanel({
       kind: 'submission',
       id,
-      title: submissionLabels[id],
+      title: submissionLabels[getDraftType(id)],
       data: view ? { view } : undefined,
     });
   if (!latest)
@@ -184,13 +199,19 @@ export function SubmissionCard({
     );
   const missing = Number(current.data?.missingCount ?? 0);
   return (
-    <section className="sc-card" aria-label={`${submissionLabels[id]}草稿卡片`}>
+    <section
+      className="sc-card"
+      aria-label={`${submissionLabels[getDraftType(id)]}草稿卡片`}
+    >
       <header>
         <span className="sc-icon">
-          <Icon name={id === 'travel' ? 'plane' : 'wallet'} size={19} />
+          <Icon
+            name={getDraftType(id) === 'travel' ? 'plane' : 'wallet'}
+            size={19}
+          />
         </span>
         <div>
-          <strong>{submissionLabels[id]}</strong>
+          <strong>{submissionLabels[getDraftType(id)]}</strong>
           <small>
             {snapshot?.paymentCompany || '付款公司待补充'} ·{' '}
             {snapshot?.applicant || '申请人待补充'}

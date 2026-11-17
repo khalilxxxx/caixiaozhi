@@ -1,0 +1,58 @@
+.sf-defaults {
+  color: #615b55;
+  font-size: 12px;
+  margin-block: 12px;
+}
+.sf-defaults summary {
+  cursor: pointer;
+  padding-block: 8px;
+  width: fit-content;
+}
+.sf-defaults summary > span {
+  margin-inline-start: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.sf-defaults summary:focus-visible {
+  outline: 2px solid #8c8782;
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+.sf-defaults dl {
+  margin: 4px 0 0;
+}
+.sf-defaults dl > div {
+  display: grid;
+  grid-template-columns: minmax(96px, 0.4fr) minmax(0, 1fr);
+  gap: 12px;
+  padding-block: 10px;
+  border-top: 1px solid #eeeae6;
+}
+.sf-defaults dt,
+.sf-defaults dd {
+  margin: 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.sf-defaults dd strong {
+  color: #302c28;
+  font-weight: 550;
+}
+.sf-defaults dd p {
+  margin: 2px 0;
+}
+.sf-defaults dd small {
+  color: #6b635d;
+  font-size: 11px;
+}
+.sf-route-transport > small {
+  display: block;
+  color: #7b5d39;
+  font-size: 11px;
+  margin-top: 3px;
+}
+@media (max-width: 560px) {
+  .sf-defaults dl > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+}

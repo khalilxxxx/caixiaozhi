@@ -1,4 +1,14 @@
-export type DraftId = 'travel' | 'expense' | 'personal';
+export type DraftType = 'travel' | 'expense' | 'personal';
+export type DraftId = string;
+
+export function getDraftType(
+  draft: string | { id: string; type?: DraftType },
+): DraftType {
+  const id = typeof draft === 'string' ? draft : (draft.type ?? draft.id);
+  if (id === 'travel' || id.startsWith('travel-')) return 'travel';
+  if (id === 'personal' || id.startsWith('personal-')) return 'personal';
+  return 'expense';
+}
 export type ExpenseTemplate =
   'T01' | 'T02' | 'T03' | 'T04' | 'T05' | 'T06' | 'T07' | 'T08' | 'T09' | 'T10';
 export type ActivityMode = 'required' | 'optional' | 'hidden';
@@ -17,6 +27,16 @@ export interface TravelLeg {
   departureDate: string;
   arrivalDate: string;
   transport: string;
+  isReturn?: boolean;
+  isOvernight?: boolean;
+}
+
+export interface SubmissionDefaultSource {
+  value: string;
+  label: string;
+  ruleId: string;
+  source: string;
+  basis: string;
 }
 
 export interface ActivityAssignment {
@@ -60,6 +80,7 @@ export interface ExpenseItem {
   files: Attachment[];
   attachments: Attachment[];
   generated: boolean;
+  manualFields?: Array<'currency' | 'rental'>;
   aiCheckOut?: string | null;
   sourceFileId?: string;
   group?: 'travel' | 'daily';
@@ -102,6 +123,7 @@ export interface ExpenseCategory {
 
 export interface SubmissionDraft {
   id: DraftId;
+  type?: DraftType;
   title: string;
   applicant: string;
   department: string;
@@ -109,6 +131,7 @@ export interface SubmissionDraft {
   travelType: string;
   purpose: string;
   legs: TravelLeg[];
+  returnDatePending?: boolean;
   activities: ActivityAssignment[];
   activityMode: ActivityMode;
   companions: string[];
@@ -124,7 +147,15 @@ export interface SubmissionDraft {
   invoiceUnique?: boolean;
   validInvoice?: boolean | null;
   legacyPeriod?: { start: string; end: string };
+  autoFill?: {
+    fields: Record<string, SubmissionDefaultSource>;
+    suppressed: string[];
+    returnLegId?: string;
+  };
 }
+
+export type SubmissionDrafts = Record<DraftType, SubmissionDraft> &
+  Record<DraftId, SubmissionDraft>;
 
 export interface ValidationIssue {
   path: string;
@@ -135,6 +166,7 @@ export interface MaterialExpenseImport {
   id?: string;
   revision: number;
   materialBatchId?: string;
+  targetDraftIds?: Partial<Record<'expense' | 'personal', DraftId>>;
   title?: string;
   materialIds?: string[];
   files?: Attachment[];
@@ -273,8 +305,10 @@ export function getExpenseCategory(id: string): ExpenseCategory | undefined {
 }
 
 export function getExpenseCategories(draftId: DraftId): ExpenseCategory[] {
-  if (draftId === 'travel') return [];
-  return expenseCategories.filter((item) => item.draftTypes.includes(draftId));
+  const type = getDraftType(draftId);
+  return expenseCategories.filter((item) =>
+    item.draftTypes.some((kind) => kind === type),
+  );
 }
 
 export function createBlankExpense(categoryId = ''): ExpenseItem {
@@ -310,9 +344,10 @@ export function createBlankExpense(categoryId = ''): ExpenseItem {
   };
 }
 
-export function createInitialDrafts(): Record<DraftId, SubmissionDraft> {
-  const makeDraft = (id: DraftId, title: string): SubmissionDraft => ({
+export function createInitialDrafts(): SubmissionDrafts {
+  const makeDraft = (id: DraftType, title: string): SubmissionDraft => ({
     id,
+    type: id,
     title,
     applicant: '',
     department: '',
@@ -484,10 +519,14 @@ export function draftPeriod(draft: SubmissionDraft): {
   end: string;
 } {
   const dates =
-    draft.id === 'personal'
+    getDraftType(draft) === 'personal'
       ? []
       : draft.legs.flatMap((item) => [item.departureDate, item.arrivalDate]);
-  if (draft.id !== 'personal' && !dates.some(validDate) && draft.legacyPeriod)
+  if (
+    getDraftType(draft) !== 'personal' &&
+    !dates.some(validDate) &&
+    draft.legacyPeriod
+  )
     dates.push(draft.legacyPeriod.start, draft.legacyPeriod.end);
   for (const expense of draft.expenses) {
     const definition = getExpenseCategory(expense.categoryId);
@@ -534,19 +573,19 @@ function validateLegs(
   submit: boolean,
   issues: ValidationIssue[],
 ): void {
-  if (draft.id === 'personal') return;
+  if (getDraftType(draft) === 'personal') return;
   const legs = draft.legs;
   if (submit && !legs.length)
     issues.push({ path: 'legs', message: '请补全差旅行程。' });
   legs.forEach((item, index) => {
     const path = `legs.${index}`;
-    const fields: Array<keyof Omit<TravelLeg, 'id'>> = [
+    const fields = [
       'departureCity',
       'arrivalCity',
       'departureDate',
       'arrivalDate',
       'transport',
-    ];
+    ] as const;
     for (const field of fields) {
       if (submit && !item[field].trim())
         issues.push({
@@ -620,9 +659,10 @@ function validateActivities(
   if (draft.activityMode === 'hidden') return;
   if (submit && draft.activityMode === 'required' && !draft.activities.length)
     issues.push({ path: 'activities', message: '请关联活动或派工。' });
-  const period = draft.id === 'personal'
-    ? { start: '', end: '' }
-    : draftPeriod({ ...draft, expenses: [] });
+  const period =
+    getDraftType(draft) === 'personal'
+      ? { start: '', end: '' }
+      : draftPeriod({ ...draft, expenses: [] });
   draft.activities.forEach((activity, index) => {
     for (const field of ['effectiveDate', 'expiryDate'] as const) {
       if (
@@ -667,8 +707,8 @@ function validateExpense(
   if (
     submit &&
     (!definition ||
-      draft.id === 'travel' ||
-      !definition.draftTypes.includes(draft.id))
+      getDraftType(draft) === 'travel' ||
+      !definition.draftTypes.some((kind) => kind === getDraftType(draft)))
   ) {
     issues.push({
       path: `${path}.categoryId`,
@@ -751,16 +791,16 @@ export function validateDraft(
       if (!draft[field].trim())
         issues.push({ path: field, message: `请填写${label}。` });
     }
-    if (draft.id === 'travel' && !draft.travelType.trim())
+    if (getDraftType(draft) === 'travel' && !draft.travelType.trim())
       issues.push({ path: 'travelType', message: '请选择差旅类型。' });
-    if (draft.id === 'expense' && !draft.applicationId.trim())
+    if (getDraftType(draft) === 'expense' && !draft.applicationId.trim())
       issues.push({ path: 'applicationId', message: '请关联差旅申请。' });
-    if (draft.id !== 'travel' && !draft.expenses.length)
+    if (getDraftType(draft) !== 'travel' && !draft.expenses.length)
       issues.push({ path: 'expenses', message: '请添加费用明细。' });
   }
   validateLegs(draft, submit, issues);
   validateActivities(draft, submit, issues);
-  if (draft.id !== 'travel')
+  if (getDraftType(draft) !== 'travel')
     draft.expenses.forEach((expense, index) =>
       validateExpense(expense, index, draft, submit, issues),
     );
@@ -880,66 +920,80 @@ function recordFromJson(text: string): Record<string, unknown> {
 }
 
 export function affectedMaterialDrafts(
-  drafts: Record<DraftId, SubmissionDraft>,
+  drafts: SubmissionDrafts,
   incoming: MaterialExpenseImport,
-): Array<'expense' | 'personal'> {
+): DraftId[] {
   const batchId = incoming.materialBatchId ?? incoming.id ?? 'materials';
   const targets = new Set(
     incoming.items
       .filter((item) => !item.excluded)
       .map((item) => (item.group === 'daily' ? 'personal' : 'expense')),
   );
-  return (['expense', 'personal'] as const).filter(
-    (id) =>
-      targets.has(id) ||
-      drafts[id].expenses.some(
-        (expense) =>
-          expense.sourceBatchId === batchId ||
-          (!expense.sourceBatchId &&
+  const mapping = incoming.targetDraftIds ?? {
+    expense: 'expense',
+    personal: 'personal',
+  };
+  if ([...targets].some((type) => !mapping[type])) return [];
+  const selected = (['expense', 'personal'] as const).flatMap((type) => {
+    const id = mapping[type];
+    return id ? [{ id, type, draft: drafts[id] }] : [];
+  });
+  if (
+    selected.some(({ draft, type }) => !draft || getDraftType(draft) !== type)
+  )
+    return [];
+  return selected
+    .filter(
+      ({ draft, type }) =>
+        targets.has(type) ||
+        draft!.expenses.some(
+          (expense) =>
+            expense.sourceBatchId === batchId ||
             incoming.items.some(
               (item) =>
                 item.id === expense.id &&
                 item.sourceFileId === expense.sourceFileId,
-            )),
-      ),
-  );
+            ),
+        ),
+    )
+    .map(({ id }) => id);
 }
 
 export function importMaterialExpenses(
-  drafts: Record<DraftId, SubmissionDraft>,
+  drafts: SubmissionDrafts,
   incoming: MaterialExpenseImport,
   explicitBatchId?: string,
-): Record<DraftId, SubmissionDraft> {
+): SubmissionDrafts {
   const batchId =
     explicitBatchId ?? incoming.materialBatchId ?? incoming.id ?? 'materials';
   const key = `${incoming.id ?? batchId}:${incoming.revision}`;
   const items = incoming.items.filter((item) => !item.excluded);
-  const targets = (['expense', 'personal'] as const).filter(
-    (id) =>
-      items.some(
-        (item) => (item.group === 'daily' ? 'personal' : 'expense') === id,
-      ) || drafts[id].expenses.some((item) => item.sourceBatchId === batchId),
-  );
-  if (targets.every((id) => drafts[id].sourceImportKey === key)) return drafts;
-  const previousItems = [
-    ...drafts.expense.expenses,
-    ...drafts.personal.expenses,
-  ];
+  const targets = affectedMaterialDrafts(drafts, {
+    ...incoming,
+    materialBatchId: batchId,
+  });
+  if (targets.every((id) => drafts[id]?.sourceImportKey === key)) return drafts;
+  if (targets.some((id) => drafts[id]?.status !== 'draft')) return drafts;
+  const previousItems = targets.flatMap((id) => drafts[id]!.expenses);
   const next = { ...drafts };
-  for (const id of ['expense', 'personal'] as const) {
-    const original = drafts[id];
-    const group = id === 'expense' ? 'travel' : 'daily';
+  for (const id of targets) {
+    const original = drafts[id]!;
+    const type = getDraftType(original);
+    const group = type === 'expense' ? 'travel' : 'daily';
     const imported = items
       .filter((item) => (item.group ?? 'travel') === group)
       .map((item) => {
         const value = importedExpense(item, incoming, batchId);
-        const current = previousItems.find(
-          (expense) =>
-            expense.id === item.id &&
-            (expense.sourceBatchId === batchId ||
-              (!expense.sourceBatchId &&
-                expense.sourceFileId === item.sourceFileId)),
-        );
+        const current =
+          previousItems.find(
+            (expense) =>
+              expense.id === item.id &&
+              expense.sourceFileId === item.sourceFileId,
+          ) ??
+          previousItems.find(
+            (expense) =>
+              expense.id === item.id && expense.sourceBatchId === batchId,
+          );
         return current
           ? mergeImportedExpense(current, value)
           : { ...value, sourceSnapshot: JSON.stringify(value) };
@@ -974,7 +1028,7 @@ export function importMaterialExpenses(
     next[id] = {
       ...original,
       title: incoming.title
-        ? `${incoming.title}${id === 'expense' ? '差旅报销' : '个人费用报销'}`
+        ? `${incoming.title}${type === 'expense' ? '差旅报销' : '个人费用报销'}`
         : original.title,
       purpose:
         original.purpose || imported.find((item) => item.reason)?.reason || '',
@@ -1116,9 +1170,7 @@ function legacyExpenses(
     }));
 }
 
-export function migrateLegacyDrafts(
-  input: unknown,
-): Record<DraftId, SubmissionDraft> {
+export function migrateLegacyDrafts(input: unknown): SubmissionDrafts {
   const root = asRecord(input);
   const state = asRecord(root.rulesSubmission ?? root);
   const sources = asRecord(state.drafts ?? state);
