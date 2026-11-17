@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>小智工作形象 · 首页预览</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #29292d; background: #fafaf9; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    .review-bar { height: 96px; padding: 12px 24px; display: flex; align-items: center; gap: 24px; background: #fff; border-bottom: 1px solid #dfdfdc; }
+    h1 { margin: 0; font-size: 17px; font-weight: 600; white-space: nowrap; }
+    .review-title p { margin: 3px 0 0; color: #6f6f74; font-size: 12px; }
+    .choices { display: flex; gap: 8px; }
+    button, select { font: inherit; color: inherit; }
+    .choice { display: flex; align-items: center; gap: 10px; padding: 4px 16px 4px 8px; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; }
+    .choice img { width: 52px; height: 52px; object-fit: contain; }
+    .choice strong { display: block; font-size: 13px; font-weight: 600; }
+    .choice span { text-align: left; }
+    .choice small { color: #606065; font-size: 11px; }
+    .choice:hover { background: #f5f5f3; }
+    .choice[aria-pressed="true"] { background: #f2f2ef; border-color: #d5d5d0; }
+    .controls { margin-left: auto; display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+    .controls label { display: flex; align-items: center; gap: 7px; color: #525257; font-size: 12px; }
+    select, .motion-toggle { height: 34px; padding: 0 10px; background: #fff; border: 1px solid #d8d8d4; border-radius: 7px; }
+    .motion-toggle { cursor: pointer; min-width: 84px; }
+    .motion-toggle:hover { background: #f5f5f3; }
+    :is(button, select):focus-visible { outline: 2px solid #8c8782; outline-offset: 3px; }
+    iframe { display: block; width: 100%; height: calc(100dvh - 96px); border: 0; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    @media (max-width: 1180px) { .review-bar { gap: 12px; padding-inline: 16px; } .choice { padding-right: 10px; gap: 5px; } .choice img { width: 44px; height: 44px; } .review-title p { display: none; } .controls { gap: 8px; } }
+  </style>
+</head>
+<body>
+  <header class="review-bar">
+    <div class="review-title"><h1>小智工作形象</h1><p>首页效果预览</p></div>
+    <div class="choices" role="group" aria-label="选择形象">
+      <button class="choice" data-variant="a" aria-pressed="true"><img src="a-ready.png" alt="" /><span><strong>A · 准备办理</strong><small>偶尔眨眼，轻轻记录</small></span></button>
+      <button class="choice" data-variant="b" aria-pressed="false"><img src="b-focused.png" alt="" /><span><strong>B · 专注办公</strong><small>轻微起伏，安静陪伴</small></span></button>
+      <button class="choice" data-variant="c" aria-pressed="false"><img src="c-review.png" alt="" /><span><strong>C · 核对票据</strong><small>轻微侧倾，查看材料</small></span></button>
+    </div>
+    <div class="controls">
+      <label>尺寸<select id="size" aria-label="形象尺寸"><option value="96">96 px</option><option value="112" selected>112 px</option><option value="128">128 px</option></select></label>
+      <button class="motion-toggle" id="motion" aria-pressed="true">暂停动效</button>
+    </div>
+    <span class="sr-only" id="status" role="status"></span>
+  </header>
+  <iframe title="财小智首页形象预览" src="/agent.html#home"></iframe>
+  <script>
+    const variants = { a: 'a-ready.png', b: 'b-focused.png', c: 'c-review.png' };
+    const frame = document.querySelector('iframe');
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+    let selected = 'a';
+    let motion = !reduced.matches;
+    let currentMark;
+    let visibility;
+    let changes;
+    const previewCss = `
+      .agent-first .home-brand-mark { width: var(--preview-mascot-size, 112px); height: var(--preview-mascot-size, 112px); transform-origin: 50% 85%; animation-timing-function: ease-in-out; animation-iteration-count: infinite; }
+      .agent-first .home-brand-mark img { width: 100%; height: 100%; object-fit: contain; }
+      .home-brand-mark[data-variant="a"] { animation: none; }
+      .home-brand-mark[data-variant="b"] { animation-name: working-breath; animation-duration: 10s; }
+      .home-brand-mark[data-variant="c"] { animation-name: review-tilt; animation-duration: 11s; }
+      @keyframes working-breath { 0%, 8%, 36%, 100% { transform: translateY(0); } 22% { transform: translateY(-1.5px); } }
+      @keyframes review-tilt { 0%, 10%, 32%, 100% { transform: rotate(0); } 20% { transform: rotate(.85deg); } }
+      html[data-preview-paused="true"] .home-brand-mark, .home-brand-mark[data-offscreen="true"] { animation-play-state: paused; }
+      html[data-preview-paused="true"] .home-mascot-art image { animation: none; }
+      @media (prefers-reduced-motion: reduce) { .agent-first .home-brand-mark { animation: none; } }
+    `;
+    function apply() {
+      const doc = frame.contentDocument;
+      if (!doc || !doc.body) return;
+      if (!doc.getElementById('mascot-preview-style')) {
+        const style = doc.createElement('style'); style.id = 'mascot-preview-style'; style.textContent = previewCss; doc.head.append(style);
+      }
+      doc.documentElement.style.setProperty('--preview-mascot-size', document.getElementById('size').value + 'px');
+      doc.documentElement.dataset.previewPaused = String(!motion || document.hidden);
+      const mark = doc.querySelector('.home-brand-mark');
+      if (!mark) return;
+      mark.dataset.variant = selected;
+      const source = new URL(variants[selected], location.href).href;
+      let img = mark.querySelector('.preview-variant-image');
+      if (!img) {
+        img = doc.createElement('img'); img.className = 'preview-variant-image'; img.alt = ''; mark.append(img);
+      }
+      if (img.src !== source) img.src = source;
+      img.style.display = selected === 'a' ? 'none' : 'block';
+      const art = mark.querySelector('.home-mascot-art');
+      if (art) art.style.display = selected === 'a' ? '' : 'none';
+      if (currentMark !== mark) {
+        visibility?.disconnect(); currentMark = mark;
+        visibility = new frame.contentWindow.IntersectionObserver(([entry]) => { mark.dataset.offscreen = String(!entry.isIntersecting); });
+        visibility.observe(mark);
+      }
+    }
+    function updateControls() {
+      const button = document.getElementById('motion');
+      button.textContent = motion ? '暂停动效' : '开启动效';
+      button.setAttribute('aria-pressed', String(motion));
+      for (const choice of document.querySelectorAll('.choice')) choice.setAttribute('aria-pressed', String(choice.dataset.variant === selected));
+      apply();
+    }
+    frame.addEventListener('load', () => {
+      changes?.disconnect(); visibility?.disconnect(); currentMark = null;
+      apply();
+      changes = new MutationObserver(apply);
+      changes.observe(frame.contentDocument.body, {childList: true, subtree: true});
+    });
+    document.querySelectorAll('.choice').forEach(button => button.addEventListener('click', () => {
+      selected = button.dataset.variant; updateControls();
+      document.getElementById('status').textContent = '已预览' + button.querySelector('strong').textContent;
+    }));
+    document.getElementById('size').addEventListener('change', apply);
+    document.getElementById('motion').addEventListener('click', () => { motion = !motion; updateControls(); });
+    reduced.addEventListener('change', () => { motion = !reduced.matches; updateControls(); });
+    document.addEventListener('visibilitychange', apply);
+    updateControls();
+  </script>
+</body>
+</html>

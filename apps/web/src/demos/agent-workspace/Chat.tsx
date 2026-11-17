@@ -1,5 +1,5 @@
 import { MessageText } from './MessageText';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { ContextRef, ResultCard, Task } from './workspace';
 import { useWorkspace } from './workspace';
 import { Badge, Icon, Button } from './ui';
@@ -28,6 +28,73 @@ function XiaozhiMark({ className = '' }: { className?: string }) {
   return (
     <span className={`xiaozhi-mark ${className}`} aria-hidden="true">
       <img src={logo} alt="" draggable={false} />
+    </span>
+  );
+}
+
+function HomeMascot() {
+  const id = useId().replace(/:/g, '');
+  const mark = useRef<HTMLSpanElement>(null);
+  const [paused, setPaused] = useState(() => document.hidden);
+  const [framesReady, setFramesReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(['blink', 'write'].map((frame) => {
+      const image = new Image();
+      image.src = `/agent-assets/xiaozhi-ready-${frame}.png`;
+      return image.decode();
+    })).then(() => {
+      if (!cancelled) setFramesReady(true);
+    }).catch(() => {
+      // Keep the original still image if an optional animation frame is unavailable.
+    });
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    const element = mark.current;
+    if (!element) return;
+    let visible = true;
+    const update = () => setPaused(document.hidden || !visible);
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry) return;
+      visible = entry.isIntersecting;
+      update();
+    });
+    observer.observe(element);
+    document.addEventListener('visibilitychange', update);
+    update();
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('visibilitychange', update);
+    };
+  }, []);
+  return (
+    <span
+      ref={mark}
+      className="xiaozhi-mark home-brand-mark"
+      data-paused={paused}
+      data-ready={framesReady}
+      aria-hidden="true"
+    >
+      <svg className="home-mascot-art" viewBox="0 0 1280 1280" focusable="false">
+        <defs>
+          <clipPath id={`${id}-body`}>
+            <path d="M0 0H1280V1280H0Z M270 820H555V1120H270Z" clipRule="evenodd" />
+          </clipPath>
+          <clipPath id={`${id}-hand`}>
+            <rect x="270" y="820" width="285" height="300" />
+          </clipPath>
+          <clipPath id={`${id}-eyes`}>
+            <rect x="345" y="510" width="370" height="175" rx="28" />
+          </clipPath>
+        </defs>
+        <image href="/agent-assets/xiaozhi-ready.png" width="1280" height="1280" clipPath={`url(#${id}-body)`} />
+        <g clipPath={`url(#${id}-hand)`}>
+          <image className="home-mascot-hand-rest" href="/agent-assets/xiaozhi-ready.png" width="1280" height="1280" />
+          <image className="home-mascot-hand-write" href="/agent-assets/xiaozhi-ready-write.png" width="1280" height="1280" />
+        </g>
+        <image className="home-mascot-blink" href="/agent-assets/xiaozhi-ready-blink.png" width="1280" height="1280" clipPath={`url(#${id}-eyes)`} />
+      </svg>
     </span>
   );
 }
@@ -930,7 +997,7 @@ export function Home({
     <div className="workspace-home">
       <div className="home-intro">
         <div className="home-greeting">
-          <XiaozhiMark className="home-brand-mark" />
+          <HomeMascot />
           <h1>吴侠，今天想完成什么财务工作？</h1>
         </div>
       </div>

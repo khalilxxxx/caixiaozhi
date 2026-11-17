@@ -394,7 +394,7 @@
   outline-offset: 3px;
 }
 
-/* The existing blue-and-white mascot is used unchanged at three quiet scales. */
+/* Keep the original identity in conversations; use the ready-to-work pose at home. */
 .xiaozhi-mark {
   display: inline-flex;
   align-items: center;
@@ -418,8 +418,44 @@
   gap: 10px;
 }
 .agent-first .home-brand-mark {
-  width: 64px;
-  height: 64px;
+  width: 112px;
+  height: 112px;
+}
+.agent-first .home-mascot-art {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+.home-mascot-blink,
+.home-mascot-hand-write {
+  opacity: 0;
+}
+.home-mascot-hand-rest {
+  opacity: 1;
+  animation: xiaozhi-hand-rest 12s ease-in-out infinite;
+}
+.home-mascot-hand-write {
+  animation: xiaozhi-hand-write 12s ease-in-out infinite;
+}
+.home-mascot-blink {
+  animation: xiaozhi-blink 6.8s linear infinite;
+}
+@keyframes xiaozhi-blink {
+  0%, 24%, 27%, 100% { opacity: 0; }
+  25%, 26% { opacity: 1; }
+}
+@keyframes xiaozhi-hand-write {
+  0%, 30%, 34%, 38%, 100% { opacity: 0; }
+  32%, 36% { opacity: 1; }
+}
+@keyframes xiaozhi-hand-rest {
+  0%, 30%, 34%, 38%, 100% { opacity: 1; }
+  32%, 36% { opacity: 0; }
+}
+.agent-first .home-brand-mark:is([data-paused='true'], [data-ready='false']) .home-mascot-art image,
+.agent-first .workspace-home:focus-within .home-mascot-art image {
+  animation: none;
 }
 .agent-first .home-greeting h1 {
   font-size: 26px;
@@ -483,6 +519,9 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .agent-first .home-mascot-art image {
+    animation: none;
+  }
   .thinking-mark img {
     animation: none;
     transform: none;
