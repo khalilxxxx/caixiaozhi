@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import type { CapabilityId, ExpertTeamId } from './capability-model';
+import type { BusinessBoardScope } from './business-board-model';
 import type { ToolStep } from './run-progress-model';
 import type { WorkDocument } from './work-document-model';
 import type {
@@ -33,6 +34,7 @@ export interface ContextRef {
   title: string;
   version?: string;
   fileIds?: string[];
+  scope?: BusinessBoardScope;
 }
 export interface ResultCard {
   kind: string;
@@ -87,7 +89,7 @@ export interface WorkspaceAPI {
   ) => void;
   openPanel: (panel: PanelSpec) => void;
   closePanel: () => void;
-  navigate: (page: PageId) => void;
+  navigate: (page: PageId, hash?: string) => void;
   attach: (ref: ContextRef) => void;
   discussAuditDocument: (doc: WorkDocument) => void;
   selectSkill: (ref: ContextRef) => void;

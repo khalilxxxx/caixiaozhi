@@ -4,6 +4,7 @@ import type { ContextRef, ResultCard, Task } from './workspace';
 import { useWorkspace } from './workspace';
 import { Badge, Icon, Button } from './ui';
 import { DocumentResults, materialBatchId } from './Documents';
+import { BusinessAnalysisCard } from './BusinessAnalysisResults';
 import { AnalysisCard } from './AnalyticsSkills';
 import { PublicFinancialCard } from './PublicFinancials';
 import { currentCard } from './card-model';
@@ -356,7 +357,7 @@ export function Composer({
           <span className="ref-chip" key={`${ref.kind}/${ref.id}`}>
             <Icon name={ref.kind === 'file' ? 'attach' : 'link'} size={13} />
             <span>
-              {ref.title}
+              {ref.kind === 'business-board' ? '来源看板 · ' : ''}{ref.title}
               {ref.version ? ` · ${ref.version}` : ''}
             </span>
             <button
@@ -563,6 +564,7 @@ export function Result({
         unavailableSources={card.data?.unavailableSources}
       />
     );
+  if (card.kind === 'analysis' && card.data?.businessBoard) return <BusinessAnalysisCard card={card} />;
   if (card.kind === 'analysis')
     return card.data?.publicFinance
       ? <PublicFinancialCard
@@ -701,9 +703,17 @@ export function ChatPage({
     !pending &&
     (/暂停|未完成|失败|中断|异常/.test(task.status) ||
       ['failed', 'interrupted', 'cancelled'].includes(last?.runStatus ?? ''));
-  const kind = last ? visibleMessageCards(last)[0]?.card.kind : undefined;
+  const latestCard = last ? visibleMessageCards(last)[0]?.card : undefined;
+  const kind = latestCard?.kind;
+  const boardRef = task.refs.find(ref => ref.kind === 'business-board');
   const suggestions =
-    kind === 'analysis'
+    latestCard?.data?.businessBoard
+      ? (latestCard.data.focus === 'ranking' ? ['查看费用趋势', '生成报告'] : ['谁的差旅费最高？', '生成报告'])
+      : latestCard?.data?.publicFinance
+      ? ['查看成本费用结构', '生成会话报告']
+      : kind === 'tool' && latestCard?.id?.startsWith('expense-summary-')
+      ? ['生成报告']
+      : kind === 'analysis'
       ? ['只看销售部', '换成9月', '生成报告']
       : kind === 'documents'
         ? ['哪些单据还在审批中？', '哪些单据待我处理？']
@@ -758,7 +768,13 @@ export function ChatPage({
           {!task.messages.length && !busy && (
             <div className="chat-empty-brand">
               <XiaozhiMark className="empty-chat-mark" />
-              <p>从这里继续对话</p>
+              <p>{boardRef ? '想了解这张看板里的哪些数据？' : '从这里继续对话'}</p>
+              {boardRef && <div className="suggestions">
+                {(boardRef.scope?.system === 'travel'
+                  ? ['看看这段时间的差旅情况', '谁的差旅费最高？']
+                  : ['看看这段时间的部门费用和差旅情况', '费用主要花在哪里？']
+                ).map(text => <button type="button" key={text} onClick={() => w.send(text)}>{text}<Icon name="chevron" size={12} /></button>)}
+              </div>}
             </div>
           )}
           {task.messages.map((message) => {

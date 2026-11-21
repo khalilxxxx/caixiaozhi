@@ -320,6 +320,11 @@ class Store:
                 CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, task_id TEXT NOT NULL, status TEXT NOT NULL, request TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL);
                 CREATE INDEX IF NOT EXISTS events_run ON events(run_id,id);
+                CREATE TABLE IF NOT EXISTS business_board_results (
+                    id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id),
+                    kind TEXT NOT NULL, body TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS board_results_run ON business_board_results(run_id,kind);
                 CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, metadata TEXT NOT NULL, storage_name TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS translations (file_id TEXT PRIMARY KEY REFERENCES files(id), result TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS reimbursement_batches (

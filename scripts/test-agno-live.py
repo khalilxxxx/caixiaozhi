@@ -22,8 +22,8 @@ if __name__=='__main__':
     a=run(task_id,'请查询2026年10月销售部报销费用总额，并告诉我比9月增加了多少。')
     assert a['status']=='completed',a
     tools=[e['data'] for e in a['events'] if e['kind']=='tool' and e['data']['status']=='completed']
-    assert any(t['name']=='analyze_expenses' for t in tools),tools
-    b=run(task_id,'那集团10月总额是多少？请沿用同一统计口径。')
+    assert any(t['name']=='query_business_board' for t in tools),tools
+    b=run(task_id,'那所有已授权部门10月总额是多少？请沿用同一统计口径。')
     assert b['status']=='completed',b
     result=[e['data'] for e in b['events'] if e['kind']=='result'][0]
     assert result['cards'],result

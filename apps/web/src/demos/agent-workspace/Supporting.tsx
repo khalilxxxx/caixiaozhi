@@ -498,19 +498,14 @@ export function HelpPanel({ skillsContext = false, onClose, toolPanel }: { skill
       <a href="#schedules" onClick={onClose}>前往定时任务</a>
     </section>
   </>;
-  if (location.hash === '#analysis') return <>
+  if (location.hash.split('?')[0] === '#analysis') return <>
     <section className="help-section">
-      <h3>公开财报</h3>
+      <h3>查看业务看板</h3>
       <ol>
-        <li>选择年度，查看营收、归母净利润、经营现金流、成本费用与原始指标。</li>
-        <li>展开数据来源与计算口径，可核查巨潮资讯法定披露年报、逐年指标页码及数据版本。</li>
-        <li>生成报告后可在分析报告列表重开，下载 HTML 或三年指标 CSV。</li>
-        <li>使用“在对话中分析”继续查询，报告中的“继续分析”会引用已保存快照。</li>
+        <li>切换报销或差旅系统，选择日期和有权限查看的部门。各项指标和图表使用同一范围。</li>
+        <li>选择“问小智”新建会话，所选看板、日期和部门会随会话带入。</li>
+        <li>在会话中可以追问费用或员工差旅费排行，再选择“生成报告”汇总本次分析。报告可以从原会话重新打开。</li>
       </ol>
-    </section>
-    <section className="help-section">
-      <h3>数据覆盖</h3>
-      <p>公开财报采用海康威视法定披露年报中的 2023—2025 年度合并财务指标，金额以人民币计量，原值保留两位小数，图表按亿元展示。企业报销样例保留在“报销费用 · 示例数据”入口。</p>
     </section>
   </>;
   return (
@@ -529,7 +524,7 @@ export function HelpPanel({ skillsContext = false, onClose, toolPanel }: { skill
           <li>票据：核对业务信息 → 保存费用 → 生成报销草稿。</li>
           <li>提单：编辑草稿 → 预检 → 查看问题与依据 → 确认提交。</li>
           <li>审单：查看汇总 → 筛选需要关注的单据 → 逐项核实。</li>
-          <li>分析：选择期间与组织 → 图表下钻 → 生成并编辑报告。</li>
+          <li>分析：在看板选择日期和部门，进入对话追问，再生成图表报告。</li>
         </ul>
       </section>
       <section className="help-section">

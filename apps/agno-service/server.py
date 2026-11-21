@@ -19,6 +19,7 @@ import config
 from store import Store, Conflict
 from business import Business, BusinessError
 from agent_runtime import Runtime, generate_rule, model
+from board_conversation import get_board_report, lookup_plan
 from rule_service import SemanticRuleService, validate_semantic_rule
 from rule_catalog import demo_cases
 from expert_teams import TeamError, TeamRequest, is_team
@@ -137,9 +138,9 @@ def create_app(store=None, rule_service=None):
     async def business_error(request, error):
         code = getattr(error, 'code', '')
         status = 409 if code == 'STALE_DRAFT' or any(x in code.lower() for x in ('conflict', 'version', 'locked', 'duplicate')) else 422
-        if code == 'WORK_DOCUMENT_NOT_FOUND':
+        if code in ('WORK_DOCUMENT_NOT_FOUND', 'BOARD_REPORT_NOT_FOUND'):
             status = 404
-        elif code == 'WORK_DECISION_FORBIDDEN':
+        elif code in ('WORK_DECISION_FORBIDDEN', 'ANALYTICS_FORBIDDEN'):
             status = 403
         elif code == 'BUSINESS_BLOCKED':
             status = 422
@@ -215,6 +216,7 @@ def create_app(store=None, rule_service=None):
             if current and current.get('activeRunId'):
                 return JSONResponse({'message': '该会话已有进行中的任务。'}, status_code=409)
             capability = payload.capability
+            pending = None
             if current:
                 pending = next((m for m in reversed(current['messages'])
                                 if m.get('question', {}).get('status') == 'pending'), None)
@@ -226,7 +228,12 @@ def create_app(store=None, rule_service=None):
                     capability = current['capability']
             team = runtime.expert_teams.resolve(capability)
             request_data['capability'] = capability
-            if not deferred and not config.API_KEY:
+            if not deferred and not team and payload.questionAnswer is None and not pending:
+                requested_refs = payload.refs if 'refs' in payload.model_fields_set else (current or {}).get('refs', [])
+                plan = lookup_plan(store, current, requested_refs, capability, payload.message)
+                if plan is not None:
+                    request_data['businessBoardAction'] = plan
+            if not deferred and not config.API_KEY and 'businessBoardAction' not in request_data:
                 return JSONResponse({'message': '尚未配置模型，请配置本地 AGNO_API_KEY 后重启服务。'}, status_code=503)
             if not deferred and len(runtime.tasks) >= 4:
                 return JSONResponse({'message': '正在处理其他任务，请稍后再试。'}, status_code=429)
@@ -470,6 +477,18 @@ def create_app(store=None, rule_service=None):
     async def analyze(payload: dict):
         return business.analyze(payload.get('month', '10'), payload.get('dept', '全部部门'), payload.get('type'))
 
+    @app.get('/api/local/analytics/business/options')
+    async def business_board_options():
+        from business_analytics import business_options
+        return business_options()
+
+    @app.get('/api/local/analytics/business/board')
+    async def business_board(system: str | None = None, startDate: str | None = None,
+                             endDate: str | None = None, departmentIds: str | None = None):
+        from business_analytics import query_board
+        departments = departmentIds.split(',') if departmentIds is not None else None
+        return query_board(system, startDate, endDate, departments)
+
     @app.get('/api/local/analytics/public/query')
     async def public_financial_query(request: Request):
         from financial_analytics import query_financials
@@ -498,6 +517,10 @@ def create_app(store=None, rule_service=None):
             return {'report': get_report(store, report_id)}
         except ValueError as error:
             return JSONResponse({'message': str(error)}, status_code=404)
+
+    @app.get('/api/local/analytics/business/reports/{report_id}')
+    async def business_board_report(report_id: str):
+        return {'report': get_board_report(store, report_id)}
 
     @app.post('/api/local/business/knowledge')
     async def knowledge(payload: dict):

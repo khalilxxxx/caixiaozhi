@@ -25,6 +25,9 @@ import {
   type RunStream,
 } from './run-progress-model';
 import { isReimbursementPanel } from './reimbursement-batch';
+import { boardReference } from './business-board-handoff';
+import type { BusinessBoardSnapshot } from './business-board-model';
+import { BusinessAnalysisCard, BusinessReportPanel } from './BusinessAnalysisResults';
 import { ContextHelp } from './ContextHelp';
 import { PublicFinancialsPanel, PublicFinancialReportPanel } from './PublicFinancials';
 import {
@@ -801,6 +804,19 @@ export default function App() {
     setPanel(null);
     navigate('home');
   }
+  function discussBoard(snapshot: BusinessBoardSnapshot) {
+    const ref = boardReference(snapshot);
+    const task = makeTask(snapshot.departmentLabel + ' · ' + snapshot.title.replace(/看板$/, '分析'));
+    task.capability = 'analysis';
+    task.refs = [ref];
+    setDraftTarget(task.id);
+    setState((current) => ({
+      ...current, activeTask: task.id, tasks: [task, ...current.tasks],
+    }));
+    setPanel(null);
+    navigate('chat');
+    requestAnimationFrame(() => document.getElementById('message-input')?.focus());
+  }
   function discussAuditDocument(doc: WorkDocument) {
     const title = workDocumentTitle(doc);
     const ref: ContextRef = { kind: 'audit', id: doc.id, title };
@@ -1400,8 +1416,10 @@ export default function App() {
       ) : panel.kind === 'rule' ? (
         <RulesPanel panel={panel} />
       ) : panel.kind === 'analysis' ? (
+        panel.data?.businessBoard ? <BusinessAnalysisCard card={panel} /> :
         panel.data?.publicFinance ? <PublicFinancialsPanel panel={panel} /> : <AnalysisPanel panel={panel} />
       ) : panel.kind === 'report' ? (
+        panel.data?.businessReport || panel.id?.startsWith('business-report-') ? <BusinessReportPanel id={panel.id} /> :
         panel.data?.publicFinance || panel.id?.startsWith('public-report-')
           ? <PublicFinancialReportPanel panel={panel} />
           : <ReportPanel panel={panel} />
@@ -1764,7 +1782,7 @@ export default function App() {
             <div className={`page-container${page === 'todos' ? ' work-inbox-page' : page === 'documents' ? ' document-progress-page' : ''}`}>
               {page === 'skills' || page === 'light-apps' || page === 'schedules' ? (
                 <CatalogHeading area={page} />
-              ) : page === 'documents' ? null : (
+              ) : page === 'documents' || page === 'analysis' ? null : (
                 <div className="page-heading">
                   <h1>{pageTitles[page]}</h1>
                   {page === 'submission' && (
@@ -1792,7 +1810,7 @@ export default function App() {
               ) : page === 'rules' ? (
                 <RulesPage />
               ) : page === 'analysis' ? (
-                <AnalysisPage />
+                <AnalysisPage onAsk={discussBoard} />
               ) : page === 'skills' ? (
                 <CapabilityCenter />
               ) : page === 'light-apps' ? (

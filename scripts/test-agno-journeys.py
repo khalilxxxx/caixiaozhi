@@ -8,7 +8,7 @@ live=module_from_spec(spec);spec.loader.exec_module(live)
 
 checks=[
  ('policy','在上海出差住宿每晚700元符合标准吗？请查询当前制度，引用具体条款。','search_policies'),
- ('report','请生成并保存2026年10月销售部费用分析报告。','create_expense_report'),
+ ('report','请生成并保存2026年10月销售部费用分析报告。','create_analysis_report'),
  ('rule','帮我添加一个个人审单规则草稿：住宿费用每间夜超过700元时提醒本人。不要启用。','prepare_personal_rule'),
 ]
 

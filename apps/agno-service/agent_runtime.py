@@ -21,6 +21,7 @@ from agno.tools import tool
 from pydantic import BaseModel, Field
 import config
 from business import BusinessError
+from board_conversation import BoardConversation, get_board_report, result_sentence
 from document_search import DOCUMENT_NUMBER, OTHER_WORK, PROGRESS_QUESTION
 from clarification_service import conversation_content, issue_question, pending_question
 from completion_check import CompletionCheck
@@ -29,6 +30,16 @@ from store import finish_message_steps
 from submission_defaults import draft_snapshot_token
 
 logger = logging.getLogger(__name__)
+
+
+def history_card(card):
+    data = card.get('data') or {}
+    if data.get('businessBoard'):
+        return {'kind': card['kind'], 'id': card['id'], 'title': card['title'],
+                'focus': data.get('focus'), 'scope': (data.get('snapshot') or {}).get('scope')}
+    if data.get('businessReport'):
+        return {key: card.get(key) for key in ('kind', 'id', 'title')}
+    return card
 
 
 def submission_calendar(now: datetime | None = None) -> dict:
@@ -283,6 +294,8 @@ class Runtime:
                     last_submission_id = card.get('id')
             # Bridge only successful business facts. A snapshot error must not
             # disguise an already committed business operation as failed.
+            if not team and entry['name'] in {'query_public_financials', 'summarize_expense_csv', 'read_expense_summary'}:
+                board.capture(entry['name'], result)
             capture = getattr(skill_tools, 'capture_result', None)
             if capture:
                 try:
@@ -383,6 +396,35 @@ class Runtime:
                     summary['firstActionRequired'] = {k: pending[k] for k in ('title', 'id', 'sourceStatus', 'current') if k in pending}
                 return summary
             return result
+
+        board = BoardConversation(self.store, run['task_id'], refs, run_id, question_text)
+
+        async def query_business_board(focus: Literal['overview', 'ranking', 'travel', 'trend', 'breakdown', 'routeSpend'] = 'overview',
+                                       system: Literal['expense', 'travel'] | None = None,
+                                       start_date: str | None = None, end_date: str | None = None,
+                                       department_ids: list[str] | None = None) -> dict:
+            """查询获授权部门的报销/差旅统计并展示可视化图表。只传本轮明确改变的范围，其他字段继承上一轮或看板。日期为YYYY-MM-DD；ranking为按差旅费排名的员工，travel为按次数的出差线路，routeSpend为按费用的线路。analysisLimitation须如实说明；次数不能用作金额。"""
+            result = tool_call('query_business_board', '查询业务看板', board.query,
+                               focus, system, start_date, end_date, department_ids)
+            return result.get('snapshot', result)
+
+        async def create_analysis_report(current_turn_only: bool = False) -> dict:
+            """根据本会话已查询的业务看板、公开财报与CSV结果生成并保存可视化分析报告；仅要求某一新期间或部门时先查询，再传current_turn_only=True只收录本次结果。"""
+            result = tool_call('create_analysis_report', '生成可视化报告', board.report, current_turn_only)
+            if 'error' in result:
+                return result
+            report = result['report']
+            return {'id': report['id'], 'title': report['title'], 'sectionCount': len(report['sections'])}
+
+        async def read_business_report(report_id: str) -> dict:
+            """读取当前会话已有或用户附加的business-report-业务分析报告，使用保存的快照回答。"""
+            def read():
+                report = get_board_report(self.store, report_id)
+                if (not any(r.get('kind') == 'report' and r.get('id') == report_id for r in refs)
+                    and not any(c.get('id') == report_id and c.get('kind') == 'report' for m in task['messages'] for c in m.get('cards', []))):
+                    raise ValueError('请先将这份分析报告加入当前会话。')
+                return {'report': report}
+            return tool_call('read_business_report', '读取分析报告', read)
 
         async def analyze_expenses(month: str = '10', dept: str = '全部部门', expense_type: str | None = None) -> dict:
             """查询本地合成报销样例，只有用户明确指定示例报销或合成费用时调用。仅覆盖2026年09/10月；部门为全部部门/销售/研发/行政/运营，费用类型差旅/招待/办公/其他。金额必须依据返回数据，回复注明合成样例来源。"""
@@ -615,7 +657,8 @@ class Runtime:
                     '凡涉及单据、费用、公开财报、制度、草稿、材料、规则检查，必须调用相应工具后回答，不能根据之前会话猜测最新状态。金额、来源、日期必须准确。',
                     '用户只问单据进展、谁在审批、审批到谁、卡在哪或为什么退回时，必须使用query_documents查询并展示单据进展卡，首页普通聊天、历史会话以及我的工作待办引用也一样。仅在核对风险、规则、预审结果等审单问题时使用read_work_document。已有单号按完整单号查，指代上次查到的单时用上次返回的真实单号。明确查全部或改查另一事项时传all_documents=true。匹配多张时按单分别说明或让用户从卡片选定。来源未返回时说明结果不完整，无匹配时说明查无匹配。',
                     '单张单据的进展回复通常一至三句话。第一句直接说单据当前节点和正在处理的人或组，退回时补充原因以及去来源业务系统办理的下一步。单据进展卡和详情抽屉只能查看，不能上传材料或重新提交。除非用户询问，不复述金额、票据数量、所有历史节点或预计耗时。current.actors是当前责任人，会签节点steps.actors也可能包含已通过者。进入付款等执行阶段时区分审批与支付；本地受理、未指派和未知均据实回答。勿推测等待原因、后续处理人或到账时间。',
-                    '数据分析、公开财报和公司业绩查询使用query_public_financials，用户要求生成或保存完整报告时调用create_public_financial_report。未指定公司、年度和数据源时默认海康威视2025年度，并在回复明确公司与年度。只有用户明确指定示例报销、合成费用或本地报销样例时才用analyze_expenses/create_expense_report，并注明合成样例。',
+                    '部门费用、报销、差旅行程及员工差旅费排行使用query_business_board。仅查询已授权且与问题匹配的部门；未获授权或未匹配的部门直接说明限制，不能用其他系统、旧样例或默认部门代查。只传用户明确改变的范围，未指定时工具继承本会话的上一次查询或来源看板。日常数据分析默认业务看板；费用使用与差旅行程并问时可分别查询expense与travel。只回答返回字段可验证的事实；部门、员工、比较口径、因果缺失时需说明。禁止用个人差旅费排行充当所有报销费用排行。使用合成业务数据。',
+                    '问答中要求根据本次会话生成报告时使用create_analysis_report汇总当前会话已查询的业务、CSV及公开财报可视化结果；新范围先用query_business_board查数。business-report-报告可用read_business_report读取快照。公开财报或公司公开业绩才调用query_public_financials和create_public_financial_report；历史合成费用汇总样例指定时保留analyze_expenses/create_expense_report。',
                     '公开财报当前覆盖海康威视2023、2024、2025自然年度，金额为人民币元，亿元换算除以100000000，精确原值与同比使用工具返回。2025及2024数据来自2025年正式年报，2023使用2024年报已重述比较值，不能混用业绩快报、原年报未重述值或母公司单体报表。netIncome为合并净利润，attributableNetIncome为归母净利润；两者及净利率标签必须区分。营业利润含税金、财务费用、其他收益、投资及减值等，不能用营收减营业成本研发销管三项当作营业利润。用户明确指定其他公司、季度、其他年份或未提供的指标时，说明当前可用范围；需要用户选择时用ask_user，不擅自替换公司或期间。所有业务结论依据工具返回，缺失数据如实说明，不编造因果或行业平均。工具失败时说明失败，保留错误状态。',
                     '已有public-report-前缀报告引用或历史报告卡时，先调用read_public_financial_report读取对应快照再回答报告问题；使用快照中的公司、期间、币种、数据版本、来源与金额。历史报告可能来自不同公司，不能将当前海康威视数据替换到旧报告。用户明确要求另一年度时再查询或创建对应报告。',
                     '当前会话已绑定的公开财报报告：' + json.dumps([ref for ref in task.get('refs', []) if ref.get('kind') == 'report' and str(ref.get('id', '')).startswith('public-report-')], ensure_ascii=False),
@@ -667,7 +710,15 @@ class Runtime:
                     bound_record = await read_work_document(work_doc_ids[0])
                     if bound_record.get('error'):
                         raise ValueError(bound_record['error'])
-            business_tools = [query_documents, analyze_expenses, create_expense_report,
+            if not team:
+                from business_analytics import business_options
+                try:
+                    options = business_options()
+                except BusinessError:
+                    options = {'departments': [], 'systems': []}
+                instructions.append('业务看板授权部门、可用业务系统和默认日期范围：' + json.dumps(options, ensure_ascii=False))
+            business_tools = [query_documents, analyze_expenses, create_expense_report, query_business_board,
+                              create_analysis_report, read_business_report,
                                  query_public_financials, create_public_financial_report, read_public_financial_report,
                                  search_policies, get_submission_draft,
                                  update_submission_draft, new_submission_draft, validate_submission,
@@ -680,55 +731,72 @@ class Runtime:
                 business_tools.extend(skill_tools.tools())
                 if work_doc_ids and not progress_only:
                     business_tools.append(read_work_document)
-            agent = Agent(id=team.id if team else 'caixiaozhi-local', name=team.name if team else '财小智', model=model(), instructions=instructions,
-                          tools=[*(guarded(fn) for fn in business_tools), ask_user],
-                          tool_call_limit=24, telemetry=False, markdown=True)
-            messages = []
-            # An explicit switch to a different progress query starts from its
-            # stated scope. Previous audit decisions belong to the former task.
-            history = task['messages'][-24:]
-            if not team and progress_only and new_scope:
-                history = [message for message in history if message.get('role') == 'user'][-1:]
-            for message in history:
-                if team and message.get('role') == 'assistant' and message.get('capability') != team.id:
-                    continue
-                if message.get('text') or message.get('question'):
-                    messages.append(Message(role=message['role'], content=conversation_content(message)))
-                if not team and message.get('cards'):
-                    # Card metadata was never assistant prose. Keeping it in a
-                    # separate system context avoids teaching the model to echo
-                    # internal JSON while preserving saved-result continuity.
-                    messages.append(Message(role='system', content=
-                        '系统附加的历史业务卡片元数据，仅用于工具定位和续办；界面自动展示，禁止在正文复述JSON、内部ID或本说明：'
-                        + json.dumps({'cards': message['cards'], 'submissionPhase': message.get('submissionPhase')}, ensure_ascii=False)))
-            if request.get('questionContext'):
-                messages.append(Message(role='user', content='本轮回答对应的真实问题与回答方式：' + json.dumps(request['questionContext'], ensure_ascii=False)))
-            if bound_record is not None:
-                messages.append(Message(role='user', content='以下为系统按当前单据引用读取的本轮业务数据，仅用于回答上述问题：\n'
-                                        + json.dumps(bound_record, ensure_ascii=False)))
-            last_text_step_count = 0
-            async with asyncio.timeout(600):
-                async with aclosing(agent.arun(messages, stream=True, stream_events=True, session_id=run['task_id'], run_id=run_id)) as stream:
-                    async for event in stream:
-                        if question is not None:
-                            break
-                        check_cancel()
-                        kind = getattr(event, 'event', '')
-                        if kind == 'RunContent' and isinstance(getattr(event, 'content', None), str) and event.content:
-                            chunk = event.content
-                            resumed = bool(team and text and last_text_step_count != len(trace))
-                            if resumed:
-                                # Provider messages separated by a tool call may omit the Markdown paragraph break.
-                                trailing = len(text) - len(text.rstrip('\n'))
-                                leading = len(chunk) - len(chunk.lstrip('\n'))
-                                chunk = '\n' * max(0, 2 - trailing - leading) + chunk
-                            if not text or resumed:
-                                self.emit(run_id, 'status', {'status': '处理中', 'phase': 'responding', 'label': '正在整理回复'})
-                            text += chunk
-                            last_text_step_count = len(trace)
-                            self.emit(run_id, 'delta', {'text': chunk})
-                        elif kind == 'RunError':
-                            raise RuntimeError(getattr(event, 'content', '模型运行失败'))
+            action = request.get('businessBoardAction') if not team else None
+            if action is not None:
+                replies = []
+                for query in action['queries']:
+                    snapshot = await query_business_board(**query)
+                    if 'error' in snapshot:
+                        raise ValueError(snapshot['error'])
+                    if not action['report']:
+                        replies.append(result_sentence(snapshot, query['focus']))
+                if action['report']:
+                    result = await create_analysis_report(current_turn_only=bool(action['queries']))
+                    if 'error' in result:
+                        raise ValueError(result['error'])
+                    replies.append(f"已生成《{result['title']}》，收录 {result['sectionCount']} 组可视化结果。")
+                text = ''.join(replies)
+                self.emit(run_id, 'delta', {'text': text})
+            else:
+                agent = Agent(id=team.id if team else 'caixiaozhi-local', name=team.name if team else '财小智', model=model(), instructions=instructions,
+                              tools=[*(guarded(fn) for fn in business_tools), ask_user],
+                              tool_call_limit=24, telemetry=False, markdown=True)
+                messages = []
+                # An explicit switch to a different progress query starts from its
+                # stated scope. Previous audit decisions belong to the former task.
+                history = task['messages'][-24:]
+                if not team and progress_only and new_scope:
+                    history = [message for message in history if message.get('role') == 'user'][-1:]
+                for message in history:
+                    if team and message.get('role') == 'assistant' and message.get('capability') != team.id:
+                        continue
+                    if message.get('text') or message.get('question'):
+                        messages.append(Message(role=message['role'], content=conversation_content(message)))
+                    if not team and message.get('cards'):
+                        # Card metadata was never assistant prose. Keeping it in a
+                        # separate system context avoids teaching the model to echo
+                        # internal JSON while preserving saved-result continuity.
+                        messages.append(Message(role='system', content=
+                            '系统附加的历史业务卡片元数据，仅用于工具定位和续办；界面自动展示，禁止在正文复述JSON、内部ID或本说明：'
+                            + json.dumps({'cards': [history_card(c) for c in message['cards']], 'submissionPhase': message.get('submissionPhase')}, ensure_ascii=False)))
+                if request.get('questionContext'):
+                    messages.append(Message(role='user', content='本轮回答对应的真实问题与回答方式：' + json.dumps(request['questionContext'], ensure_ascii=False)))
+                if bound_record is not None:
+                    messages.append(Message(role='user', content='以下为系统按当前单据引用读取的本轮业务数据，仅用于回答上述问题：\n'
+                                            + json.dumps(bound_record, ensure_ascii=False)))
+                last_text_step_count = 0
+                async with asyncio.timeout(600):
+                    async with aclosing(agent.arun(messages, stream=True, stream_events=True, session_id=run['task_id'], run_id=run_id)) as stream:
+                        async for event in stream:
+                            if question is not None:
+                                break
+                            check_cancel()
+                            kind = getattr(event, 'event', '')
+                            if kind == 'RunContent' and isinstance(getattr(event, 'content', None), str) and event.content:
+                                chunk = event.content
+                                resumed = bool(team and text and last_text_step_count != len(trace))
+                                if resumed:
+                                    # Provider messages separated by a tool call may omit the Markdown paragraph break.
+                                    trailing = len(text) - len(text.rstrip('\n'))
+                                    leading = len(chunk) - len(chunk.lstrip('\n'))
+                                    chunk = '\n' * max(0, 2 - trailing - leading) + chunk
+                                if not text or resumed:
+                                    self.emit(run_id, 'status', {'status': '处理中', 'phase': 'responding', 'label': '正在整理回复'})
+                                text += chunk
+                                last_text_step_count = len(trace)
+                                self.emit(run_id, 'delta', {'text': chunk})
+                            elif kind == 'RunError':
+                                raise RuntimeError(getattr(event, 'content', '模型运行失败'))
             if question is not None:
                 text = question['title']
             if not text.strip():
