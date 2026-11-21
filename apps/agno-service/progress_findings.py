@@ -43,6 +43,16 @@ def tool_finding(name, result):
             return f'识别出 {groups} 组费用{remainder}。'
         files, items = result.get('files'), result.get('items')
         if isinstance(files, list) and isinstance(items, list):
+            statuses = [file.get('extractionStatus') for file in files if isinstance(file, dict)]
+            unread = statuses.count('failed') + statuses.count('unreadable')
+            review = statuses.count('needs_review')
+            if unread or review:
+                parts = [f'当前有 {len(items)} 条费用记录'] if items else []
+                if unread:
+                    parts.append(f'{unread} 份材料未能识别')
+                if review:
+                    parts.append(f'{review} 份材料待核对')
+                return '，'.join(parts) + '。'
             return f'本次 {len(files)} 份材料中有 {len(items)} 条费用记录。'
     if name in ('summarize_expense_csv', 'read_expense_summary'):
         summary = result.get('result')

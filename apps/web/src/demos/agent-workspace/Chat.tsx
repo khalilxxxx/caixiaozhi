@@ -30,6 +30,14 @@ import {
 } from './question-model';
 import { RunProgress } from './RunProgress';
 
+function taskStatusTone(status: string) {
+  if (/失败|未完成|异常/.test(status)) return 'red';
+  if (/待你回答|补充|核对/.test(status)) return 'amber';
+  if (/暂停|停止|中断/.test(status)) return 'neutral';
+  if (/已完成|已受理/.test(status)) return 'green';
+  return 'blue';
+}
+
 function messageProgressStatus(
   message: ChatMessage,
   pendingId?: string,
@@ -311,7 +319,7 @@ export function Composer({
   onAdd: (ref: ContextRef) => void;
   onRemove: (ref: ContextRef) => void;
   busy: boolean;
-  onStop: () => void;
+  onStop?: () => void;
   onUpload: (files: FileList) => void;
   compact?: boolean;
   capability: CapabilityId | null;
@@ -533,10 +541,11 @@ export function Composer({
           {busy ? (
             <button
               className="send-button"
-              aria-label="停止当前任务"
+              aria-label={onStop ? '停止当前任务' : '正在发送请求'}
+              disabled={!onStop}
               onClick={onStop}
             >
-              <Icon name="stop" size={16} />
+              <Icon name={onStop ? 'stop' : 'clock'} size={16} />
             </button>
           ) : (
             <button
@@ -665,6 +674,7 @@ export function ChatPage({
   streamingRunId,
   onRename,
   onStop,
+  onRetrySend,
 }: {
   task: Task;
   composer: React.ReactNode;
@@ -673,7 +683,8 @@ export function ChatPage({
   phase?: string;
   streamingRunId?: string;
   onRename: () => void;
-  onStop: () => void;
+  onStop?: () => void;
+  onRetrySend?: () => void;
 }) {
   const w = useWorkspace(),
     scroll = useRef<HTMLDivElement>(null),
@@ -730,10 +741,15 @@ export function ChatPage({
     : undefined;
   const canResume =
     !busy &&
-    !pending &&
+    !pendingId &&
     (/暂停|未完成|失败|中断|异常/.test(task.status) ||
       ['failed', 'interrupted', 'cancelled'].includes(last?.runStatus ?? ''));
   const kind = last ? visibleMessageCards(last)[0]?.card.kind : undefined;
+  const resumeTask = () => w.send(
+    task.status === '已暂停'
+      ? resumeQuestionMessage(task)
+      : '继续处理当前事项，保留已保存的草稿和成果，先核对当前办理状态，再继续尚未完成的步骤，不要重复提交已提交的单据。',
+  );
   const suggestions =
     kind === 'analysis'
       ? ['只看销售部', '换成9月', '生成报告']
@@ -753,15 +769,7 @@ export function ChatPage({
         <div className="inline-actions">
           {pending && activeTeam && <span className="chat-question-team">{activeTeam}</span>}
           {!busy && (
-            <Badge
-              tone={
-                task.status.includes('补充') ||
-                task.status.includes('核对') ||
-                task.status === '待你回答'
-                  ? 'amber'
-                  : 'blue'
-              }
-            >
+            <Badge tone={taskStatusTone(task.status)}>
               {task.status}
             </Badge>
           )}
@@ -796,6 +804,7 @@ export function ChatPage({
           {task.messages.map((message) => {
             const visibleCards = visibleMessageCards(message);
             const messageRunning = isRunningMessage(message);
+            const sendFailed = onRetrySend && message.id === last?.id;
             const author = isExpertTeam(message.capability)
               ? getCapability(message.capability, message.expertTeamName)?.label
               : messageRunning ? activeTeam : undefined;
@@ -824,16 +833,18 @@ export function ChatPage({
                       <XiaozhiMark className="reply-mark" />
                       <span>{author ?? '财小智'}</span>
                     </div>
-                    <RunProgress
-                      steps={message.tools}
-                      runStartedAt={message.runStartedAt}
-                      runFinishedAt={message.runFinishedAt}
-                      running={messageRunning}
-                      onStop={onStop}
-                      status={progressStatus}
-                      activity={messageRunning ? activity : undefined}
-                      phase={messageRunning ? phase : undefined}
-                    />
+                    {!sendFailed && (
+                      <RunProgress
+                        steps={message.tools}
+                        runStartedAt={message.runStartedAt}
+                        runFinishedAt={message.runFinishedAt}
+                        running={messageRunning}
+                        onStop={onStop}
+                        status={progressStatus}
+                        activity={messageRunning ? activity : undefined}
+                        phase={messageRunning ? phase : undefined}
+                      />
+                    )}
                     {message.text.trim() &&
                       (!message.question ||
                         message.text !== message.question.title) && (
@@ -902,20 +913,14 @@ export function ChatPage({
               </div>
             </article>
           )}
-          {canResume && (
+          {(onRetrySend || canResume) && (
             <div className="chat-resume-action">
               <Button
                 variant="primary"
                 icon="refresh"
-                onClick={() =>
-                  w.send(
-                    task.status === '已暂停'
-                      ? resumeQuestionMessage(task)
-                      : '继续处理当前事项，保留已保存的草稿和成果，先核对当前办理状态，再继续尚未完成的步骤，不要重复提交已提交的单据。',
-                  )
-                }
+                onClick={onRetrySend ?? resumeTask}
               >
-                继续处理
+                {onRetrySend ? '重新发送' : '继续处理'}
               </Button>
             </div>
           )}

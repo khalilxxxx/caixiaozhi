@@ -32,7 +32,7 @@ def custom(**overrides):
                  'skillIds': ['review-policy'], 'connectorIds': ['policy-library']}, **overrides)
 
 
-def execute(service, monkeypatch, capability, script, refs=None, message='请核对现有资料'):
+def execute(service, monkeypatch, capability, script, refs=None, message='请核对现有资料', **options):
     store, runtime, client = service
     results, tool_names, instructions = [], set(), []
     class Provider:
@@ -49,7 +49,7 @@ def execute(service, monkeypatch, capability, script, refs=None, message='请核
     monkeypatch.setattr(agent_runtime, 'Agent', Provider)
     monkeypatch.setattr(agent_runtime, 'model', lambda: object())
     run = client.post('/api/local/runs', json={
-        'taskId': 't', 'capability': capability, 'message': message, 'refs': refs or [],
+        'taskId': 't', 'capability': capability, 'message': message, 'refs': refs or [], **options,
     })
     assert run.status_code == 200, run.text
     rid = run.json()['runId']
@@ -234,6 +234,55 @@ def test_team_draft_and_identity_survive_cancel_and_restart(service):
         answer = next(m for m in task['messages'] if m['id'] == 'assistant-' + rid)
         assert answer['capability'] == REVIEW and answer['expertTeamName'] == '财务核验专家团'
         assert answer['runStatus'] in ('cancelled', 'interrupted')
+
+
+def test_resending_keeps_saved_composer_while_run_uses_original_team_and_refs(service):
+    store, _, client = service
+    composer = {'input': '草稿中的新问题', 'refs': [], 'capability': ANALYSIS, 'expertTeamName': '财务分析专家团'}
+    store.mutate(lambda state: state['tasks'].append({'id': 't', 'messages': [], **composer}))
+    refs = [{'kind': 'file', 'id': 'original-file', 'title': '原材料.csv'}]
+    response = client.post('/api/local/runs', json={'taskId': 't', 'message': '再次核对材料', 'refs': refs,
+                                                    'capability': REVIEW, 'useSavedComposer': True})
+    assert response.status_code == 200
+    body = response.json()
+    request = store.run(body['runId'])['request']
+    assert request['refs'] == refs and request['capability'] == REVIEW
+    task = body['workspace']['state']['tasks'][0]
+    assert {key: task[key] for key in composer} == composer
+    assert (task['messages'][-1]['capability'], task['messages'][-1]['expertTeamName']) == (REVIEW, '财务核验专家团')
+
+
+def test_resending_plain_chat_does_not_inherit_new_team_or_refs(service):
+    store, _, client = service
+    refs = [{'kind': 'file', 'id': 'later'}]
+    store.mutate(lambda state: state['tasks'].append({'id': 't', 'messages': [], 'capability': ANALYSIS, 'refs': refs}))
+    response = client.post('/api/local/runs', json={'taskId': 't', 'message': '这是一条普通问候', 'useSavedComposer': True})
+    assert response.status_code == 200
+    request = store.run(response.json()['runId'])['request']
+    assert request['capability'] is None and request['refs'] == []
+    task = store.get_state()['tasks'][0]
+    assert task['capability'] == ANALYSIS and task['refs'] == refs
+
+
+def test_resending_submission_uses_original_draft_through_completion(service, monkeypatch):
+    store, runtime, _ = service
+    original = runtime.business.new_draft('travel')['draft']
+    newer = runtime.business.new_draft('personal')['draft']
+    ref = lambda draft: {'kind': 'submission', 'id': draft['id'], 'title': draft['title']}
+    refs = [ref(original), {'kind': 'report', 'id': 'public-report-original'}]
+    composer = {'input': '下一条草稿', 'refs': [ref(newer), {'kind': 'report', 'id': 'public-report-next'}],
+                'capability': ANALYSIS, 'expertTeamName': '财务分析专家团'}
+    history = [{'id': 'previous', 'role': 'assistant', 'text': '已保存草稿。', 'cards': [ref(original), ref(newer)]}]
+    store.mutate(lambda state: state['tasks'].append({'id': 't', 'messages': history, **composer}))
+    async def text_only(tools):
+        pass
+    run, message, _, _, instructions = execute(service, monkeypatch, 'submission', text_only, refs,
+                                                '继续核对原来的草稿', useSavedComposer=True)
+    assert run['status'] == 'completed'
+    assert [card['id'] for card in message['cards']] == [original['id']]
+    assert not any('public-report-next' in line or newer['id'] in line for line in instructions)
+    task = store.get_state()['tasks'][0]
+    assert {key: task[key] for key in composer} == composer
 
 
 @pytest.mark.parametrize(('before', 'after', 'want'), [

@@ -37,14 +37,21 @@
   color: #29292d;
 }
 
+.chat-page {
+  --reply-indent: 41px;
+}
+.chat-page .message.assistant:has(+ .chat-resume-action) {
+  margin-bottom: 10px;
+}
 .chat-resume-action {
-  margin: 4px 0 18px;
+  margin: 0 0 18px;
+  margin-inline-start: var(--reply-indent);
 }
 
 /* Keep the author's portrait in the same gutter for live and final replies. */
 .chat-page .message.assistant > div {
   position: relative;
-  padding-inline-start: 41px;
+  padding-inline-start: var(--reply-indent);
 }
 .chat-page .message.assistant .assistant-name {
   min-height: 24px;
@@ -59,31 +66,39 @@
   padding: 0;
   background: transparent;
 }
+.chat-page .assistant-text,
+.run-progress {
+  font-size: 13px;
+}
 .run-progress {
   min-width: 0;
   margin-bottom: 9px;
-  color: #46524c;
-  font-size: 13px;
+  color: var(--enterprise-secondary);
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
 .run-progress-summary {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
   min-height: 28px;
+}
+.run-progress-action {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
 }
 .run-progress-face {
   flex: 0 0 20px;
   margin-top: 2px;
-  color: #526962;
+  color: var(--enterprise-link);
 }
 .run-progress-label {
   position: relative;
   min-width: 0;
   padding-block: 1px;
-  color: #4d5852;
-  font-size: 14px;
+  color: var(--enterprise-secondary);
   font-weight: 500;
 }
 .run-progress-stop {
@@ -97,17 +112,17 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #58635d;
+  color: var(--enterprise-muted);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
 }
 .run-progress-stop:hover {
-  background: #f1f4ef;
+  background: var(--enterprise-hover);
 }
 .run-progress-stop:focus-visible,
 .run-progress-toggle:focus-visible {
-  outline: 2px solid #3569ac;
+  outline: 2px solid var(--enterprise-focus);
   outline-offset: 2px;
 }
 .run-progress-details {
@@ -116,7 +131,7 @@
 .run-progress-toggle,
 .run-progress-elapsed {
   width: fit-content;
-  color: #5b6660;
+  color: var(--enterprise-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -132,6 +147,9 @@
 .run-progress-toggle::-webkit-details-marker {
   display: none;
 }
+.run-progress-toggle:hover {
+  color: var(--enterprise-link);
+}
 .run-progress-chevron {
   flex: none;
 }
@@ -141,15 +159,14 @@
 .run-progress-scope,
 .run-progress-finding {
   margin: 5px 0;
-  color: #37433d;
-  font-size: 14px;
+  color: var(--enterprise-secondary);
   line-height: 1.7;
 }
 .run-progress-steps {
   list-style: none;
   margin: 6px 0 0;
   padding: 0 0 0 12px;
-  border-inline-start: 1px solid #e0e4e0;
+  border-inline-start: 1px solid var(--enterprise-line);
 }
 .run-progress-step + .run-progress-step {
   margin-top: 7px;
@@ -158,7 +175,7 @@
   display: flex;
   gap: 6px;
   align-items: baseline;
-  color: #5b675f;
+  color: var(--enterprise-muted);
   font-size: 12px;
 }
 .run-progress-step-title svg {
@@ -180,12 +197,12 @@
 }
 .run-progress-state {
   margin: 0;
-  color: #5a5c51;
+  color: var(--enterprise-secondary);
 }
 .run-expert-source {
   display: block;
   margin-top: 1px;
-  color: #5c6861;
+  color: var(--enterprise-muted);
   font-size: 12px;
 }
 .run-progress-step .run-expert-source {
@@ -210,7 +227,7 @@
     position: absolute;
     inset: 0;
     padding-block: inherit;
-    color: #83958a;
+    color: var(--enterprise-muted);
     pointer-events: none;
     user-select: none;
     mask-image: linear-gradient(
@@ -282,8 +299,8 @@
   }
 }
 @media (max-width: 480px) {
-  .chat-page .message.assistant > div {
-    padding-inline-start: 33px;
+  .chat-page {
+    --reply-indent: 33px;
   }
   .chat-page .message.assistant .reply-mark {
     width: 26px;

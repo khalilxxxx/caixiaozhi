@@ -192,6 +192,9 @@ export function reduceRunEvent(
   if (kind === 'error')
     return {
       ...stream,
+      text: typeof item.message === 'string' && item.message.trim()
+        ? item.message
+        : stream.text,
       runStatus:
         item.runStatus === 'cancelled' || item.runStatus === 'interrupted'
           ? item.runStatus

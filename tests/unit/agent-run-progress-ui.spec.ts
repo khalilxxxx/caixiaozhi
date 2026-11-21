@@ -193,6 +193,22 @@ describe('会话内真实执行进度', () => {
     expect(html).not.toContain('正在查询制度');
   });
 
+  it('收起后保留最近尚未恢复的具体操作，已经重试成功的操作不再作为失败原因', () => {
+    const check = { name: 'validate_submission', status: 'failed' };
+    const lookup = { name: 'search_policies', status: 'completed' };
+    function failureSummary(steps: (typeof check)[]) {
+      return render({ running: false, status: 'failed', steps }).match(
+        /<p class="run-progress-state".*?<\/p>/,
+      )?.[0];
+    }
+    expect(failureSummary([check, lookup])).toContain('检查单据未成功');
+    const otherCheck = { ...check, label: '检查补充单据', status: 'completed' };
+    expect(failureSummary([check, otherCheck])).toContain('检查单据未成功');
+    expect(
+      failureSummary([check, lookup, { ...check, status: 'completed' }]),
+    ).not.toContain('检查单据未成功');
+  });
+
   it.each(['interrupted', 'incomplete'])(
     '中断发现时间不能作为本轮 %s 的结束时间',
     (status) => {

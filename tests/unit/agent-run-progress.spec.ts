@@ -92,10 +92,12 @@ describe('真实运行进度', () => {
     ]);
     const failed = reduceRunEvent(stream, 'error', {
       runStatus: 'cancelled',
+      message: '任务已暂停，草稿已保存。',
       runFinishedAt: 1_790_000_008_214,
     });
     expect(mergeRunMessages([], failed)[0]).toMatchObject({
       runStatus: 'cancelled',
+      text: '任务已暂停，草稿已保存。',
       runStartedAt: 1_790_000_000_000,
       runFinishedAt: 1_790_000_008_214,
     });

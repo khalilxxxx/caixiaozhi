@@ -155,6 +155,8 @@ class Runtime:
             self.emit(run_id, 'done', {})
             return
         identity = {'capability': team.id, 'expertTeamName': team.name} if team else {}
+        saved_composer = request.get('useSavedComposer', False)
+        expected_composer_refs = refs
         work_doc_ids = list(dict.fromkeys(ref['id'] for ref in refs
                             if ref.get('kind') == 'audit' and isinstance(ref.get('id'), str)
                             and ref['id'] and ref['id'] != 'batch'))
@@ -195,6 +197,16 @@ class Runtime:
                     return await fn(*args, **kwargs)
             return invoke
 
+        def bind_draft(current, card):
+            nonlocal expected_composer_refs
+            current_refs = current.get('refs', [])
+            if saved_composer and (current_refs != expected_composer_refs or
+                                   current.get('capability') != request.get('capability')):
+                return
+            current['refs'] = [ref for ref in current_refs if ref.get('kind') != 'submission'] + [
+                {'kind': 'submission', 'id': card['id'], 'title': card['title']}]
+            expected_composer_refs = current['refs']
+
         def save_progress():
             # Persist even read-only tools, before their body runs. A model or
             # process failure must not erase the user's current operation.
@@ -217,8 +229,7 @@ class Runtime:
                 draft_card = next((card for card in cards if card.get('kind') == 'submission'
                                    and card.get('id') == last_submission_id), None)
                 if draft_card:
-                    current['refs'] = [ref for ref in current.get('refs', []) if ref.get('kind') != 'submission'] + [
-                        {'kind': 'submission', 'id': draft_card['id'], 'title': draft_card['title']}]
+                    bind_draft(current, draft_card)
             self.store.mutate(update)
 
         def start_step(name, label, args=(), kwargs=None):
@@ -614,6 +625,7 @@ class Runtime:
             if team:
                 instructions = team.instructions(refs)
             else:
+                bound_refs = refs if saved_composer else task.get('refs', [])
                 turn_refs = [ref for ref in refs if ref.get('kind') not in ('audit', 'document')] if progress_only and new_scope else refs
                 instructions = [
                     '你是财小智，真实运行于本地的财务智能体。用简洁、自然的中文完成用户任务。时间统一转换为Asia/Shanghai北京时间显示；状态使用中文业务含义，不展示accepted、not_connected等内部枚举。',
@@ -624,7 +636,7 @@ class Runtime:
                     '数据分析、公开财报和公司业绩查询使用query_public_financials，用户要求生成或保存完整报告时调用create_public_financial_report。未指定公司、年度和数据源时默认海康威视2025年度，并在回复明确公司与年度。只有用户明确指定示例报销、合成费用或本地报销样例时才用analyze_expenses/create_expense_report，并注明合成样例。',
                     '公开财报当前覆盖海康威视2023、2024、2025自然年度，金额为人民币元，亿元换算除以100000000，精确原值与同比使用工具返回。2025及2024数据来自2025年正式年报，2023使用2024年报已重述比较值，不能混用业绩快报、原年报未重述值或母公司单体报表。netIncome为合并净利润，attributableNetIncome为归母净利润；两者及净利率标签必须区分。营业利润含税金、财务费用、其他收益、投资及减值等，不能用营收减营业成本研发销管三项当作营业利润。用户明确指定其他公司、季度、其他年份或未提供的指标时，说明当前可用范围；需要用户选择时用ask_user，不擅自替换公司或期间。所有业务结论依据工具返回，缺失数据如实说明，不编造因果或行业平均。工具失败时说明失败，保留错误状态。',
                     '已有public-report-前缀报告引用或历史报告卡时，先调用read_public_financial_report读取对应快照再回答报告问题；使用快照中的公司、期间、币种、数据版本、来源与金额。历史报告可能来自不同公司，不能将当前海康威视数据替换到旧报告。用户明确要求另一年度时再查询或创建对应报告。',
-                    '当前会话已绑定的公开财报报告：' + json.dumps([ref for ref in task.get('refs', []) if ref.get('kind') == 'report' and str(ref.get('id', '')).startswith('public-report-')], ensure_ascii=False),
+                    '当前会话已绑定的公开财报报告：' + json.dumps([ref for ref in bound_refs if ref.get('kind') == 'report' and str(ref.get('id', '')).startswith('public-report-')], ensure_ascii=False),
                     *submission_instructions(),
                     '任务关键决策不明确时调用ask_user生成可回答问题并立即结束本轮；一次只问一个决定。不得仅在正文反复罗列问题，不得提问后继续写业务工具，不重复输出问题的大段说明。',
                     '先读取草稿判断现有内容。用户明确说“改从北京出发”“把去程改一等座”等局部变更时直接更新目标字段，不用ask_user问新建。仅无法区分用户在发起另一趟行程还是修改原单时，用ask_user确认新建还是继续，不能擅自覆盖旧单。明确新建后调用new_submission_draft并始终使用返回的实例ID。',
@@ -633,7 +645,7 @@ class Runtime:
                     '不得编造交通时长、航班、高铁班次、预计费用或其他未知业务事实；没有工具或用户证据的值保持未知，不能将推测写成已知安排。',
                     '回答上下文的free_text仅表示用户发来了自由文本，不表示选择任何选项；不相关回复不能视为新建、覆盖或提交授权。仍不明确时继续澄清。任何问题回答都不代替右侧抽屉的确认提交。',
                     '用户继续或恢复失败任务时，先读取当前会话已绑定的真实草稿实例并核对已保存成果。已成功新建的草稿仍然有效，模型失败不代表业务回滚；不得重放历史新建请求或回到旧类型入口。只有用户本轮明确要求另建一份时才能再新建。',
-                    '当前会话已绑定的草稿：' + json.dumps([ref for ref in task.get('refs', []) if ref.get('kind') == 'submission'], ensure_ascii=False),
+                    '当前会话已绑定的草稿：' + json.dumps([ref for ref in bound_refs if ref.get('kind') == 'submission'], ensure_ascii=False),
                     '无法代表用户确认提交、批准、发布或付款；工具只能准备草稿。请让用户在右侧抽屉确认。',
                     'analyze_expenses返回的items是合成费用汇总记录，不能说成真实发票数量；零金额分组没有记录，编号不连续不代表缺单，不可推断遗漏。',
                     '工具返回的cards由界面自动展示，不属于你要撰写的正文。正文只写简短业务说明，禁止复述卡片JSON、内部草稿ID或“已保存的业务结果卡”等系统上下文标签，也不要输出大表格或假称点击动作已完成。历史系统附加的卡片元数据只用于工具定位与续办，不能模仿为回复格式。不要臆测卡片位置或打开形式，只说打开卡片即可。个人规则只能提醒，不能承诺可以改为拦截。',
@@ -745,7 +757,8 @@ class Runtime:
                 # a question or provider interruption. Restore only the bound
                 # target, never a type entry point or an older draft.
                 current = next(t for t in self.store.get_state()['tasks'] if t['id'] == run['task_id'])
-                target = next((ref for ref in current.get('refs', []) if ref.get('kind') == 'submission'), None)
+                bound_refs = refs if saved_composer else current.get('refs', [])
+                target = next((ref for ref in bound_refs if ref.get('kind') == 'submission'), None)
                 previous = next((message for message in reversed(current['messages'])
                                  if any(card.get('kind') == 'submission' and target and card.get('id') == target['id']
                                         for card in message.get('cards', []))), None)
@@ -792,7 +805,7 @@ class Runtime:
                 if task_type == 'submission' and cards:
                     draft_card = next((c for c in cards if c['kind'] == 'submission' and c.get('id') == last_submission_id), None)
                     if draft_card:
-                        current['refs'] = [r for r in current.get('refs', []) if r['kind'] != 'submission'] + [{'kind': 'submission', 'id': draft_card['id'], 'title': draft_card['title']}]
+                        bind_draft(current, draft_card)
             timing = self.store.finish_run(run_id, 'completed', finish)
             if timing is None:
                 return

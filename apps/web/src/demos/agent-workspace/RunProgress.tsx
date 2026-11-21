@@ -114,6 +114,15 @@ function useMotionVisibility(animate: boolean) {
   return progress;
 }
 
+function latestUnresolvedAction(items: ReturnType<typeof feedItems>) {
+  const completedLater = new Set<string>();
+  for (const item of [...items].reverse()) {
+    const action = JSON.stringify([item.name, item.label, item.source]);
+    if (item.status === 'completed') completedLater.add(action);
+    else if (!completedLater.has(action)) return itemTitle(item);
+  }
+}
+
 const emptySteps: ToolStep[] = [];
 export function RunProgress({
   steps = emptySteps,
@@ -171,24 +180,12 @@ export function RunProgress({
           : phase === 'thinking'
             ? '正在分析任务'
             : '正在处理');
-  const last = items.at(-1);
-  // With the feed collapsed, the last actual problem remains visible.
   const problemLabel =
-    blocked &&
-    last &&
-    (last.status === 'failed' ||
-      last.status === 'incomplete' ||
-      last.status === 'cancelled')
-      ? itemTitle(last)
-      : undefined;
+    blocked && state !== 'waiting' ? latestUnresolvedAction(items) : undefined;
   return (
     <div ref={progress} className={`run-progress is-${state}`}>
       {hasFeed ? (
-        <details
-          className="run-progress-details"
-          key={live ? 'live' : state}
-          open={live || blocked}
-        >
+        <details className="run-progress-details" open={live || blocked}>
           <summary className="run-progress-toggle">
             {toggleLabel}
             <Icon name="chevron" size={12} className="run-progress-chevron" />
@@ -239,14 +236,16 @@ export function RunProgress({
               : (phase ?? 'thinking')
           }
         >
-          <FaceMark />
-          <span className="run-progress-label" role="status">
-            {currentLabel}
-            <span
-              aria-hidden="true"
-              className="run-progress-glint"
-              data-label={currentLabel}
-            />
+          <span className="run-progress-action">
+            <FaceMark />
+            <span className="run-progress-label" role="status">
+              {currentLabel}
+              <span
+                aria-hidden="true"
+                className="run-progress-glint"
+                data-label={currentLabel}
+              />
+            </span>
           </span>
           {onStop && (
             <button

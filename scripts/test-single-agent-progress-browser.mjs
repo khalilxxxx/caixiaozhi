@@ -70,13 +70,14 @@ function finish(status, text, { elapsedMs, question } = {}) {
   clients.clear();
 }
 
+const server = http.createServer();
 const vite = await createServer({
   configFile: fileURLToPath(new URL('../apps/web/vite.agent.config.ts', import.meta.url)),
   cacheDir: fileURLToPath(new URL('../.runtime/progress-browser-vite', import.meta.url)),
-  server: { middlewareMode: true, hmr: false },
+  server: { middlewareMode: true, watch: null, hmr: { server } },
   logLevel: 'error',
 });
-const server = http.createServer(async (request, response) => {
+server.on('request', async (request, response) => {
   const path = new URL(request.url, 'http://fixture').pathname;
   if (!path.startsWith('/api/local/')) return vite.middlewares(request, response);
   const json = value => { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(value)); };
@@ -96,7 +97,13 @@ const server = http.createServer(async (request, response) => {
   if (path.endsWith('/workspace')) {
     if (request.method === 'PATCH') {
       const incoming = payload.tasks?.find(item => item.id === task.id);
-      if (incoming) for (const key of ['input', 'title', 'refs']) if (key in incoming) task[key] = incoming[key];
+      if (incoming) {
+        for (const key of ['input', 'title', 'refs']) if (key in incoming) task[key] = incoming[key];
+        for (const message of incoming.messages ?? []) {
+          if (message.role === 'user' && !task.messages.some(previous => previous.id === message.id))
+            task.messages.push(message);
+        }
+      }
       snapshot.revision++;
     }
     return json(snapshot);
@@ -107,7 +114,7 @@ const server = http.createServer(async (request, response) => {
   }
   if (path.endsWith('/runs') && request.method === 'POST') {
     const previous = responseTo();
-    if (previous.question && payload.questionAnswer) {
+    if (previous?.question && payload.questionAnswer) {
       previous.question.status = 'answered';
       previous.question.answer = payload.questionAnswer;
     }
@@ -115,7 +122,11 @@ const server = http.createServer(async (request, response) => {
     runId = 'qa-run-' + submitted.length; runStatus = 'running';
     const now = Date.now();
     task.status = '处理中'; task.activeRunId = runId;
-    task.messages.push({ id: 'user-' + runId, role: 'user', text: payload.message });
+    if (!payload.useSavedComposer) task.refs = payload.refs;
+    if (!payload.preserveComposerDraft && !payload.questionAnswer) task.input = '';
+    const last = task.messages.at(-1);
+    if (last?.role !== 'user' || last.text !== payload.message)
+      task.messages.push({ id: 'user-' + runId, role: 'user', text: payload.message });
     task.messages.push({ id: 'assistant-' + runId, runId, runStatus, role: 'assistant', text: '', tools: [], createdAt: now, runStartedAt: now });
     snapshot.revision++;
     return json({ taskId: task.id, runId, workspace: snapshot });
@@ -163,6 +174,30 @@ try {
   await expect(disclosure).toHaveCount(0);
   await expect(message.getByText(/办理记录|执行记录/)).toHaveCount(0);
   await expect(message.locator('.run-progress-face')).toBeHidden();
+
+  // Let a single lookup actually cross the threshold without sending a new SSE event.
+  reset();
+  await open();
+  step('policy', 'search_policies', '查询差旅制度', 'running');
+  await expect(activity).toContainText('查询差旅制度');
+  await expect(disclosure).toHaveCount(0);
+  const scope = progress.getByText('我先查找与这次咨询相关的制度条款。', { exact: true });
+  await expect(scope).toBeVisible({ timeout: 11000 });
+  await expect(disclosure).toContainText(/用时\s*\d+\s*秒/);
+  await disclosure.focus();
+  await page.keyboard.press('Space');
+  await expect(scope).toBeHidden();
+  step('policy', 'search_policies', '查询差旅制度', 'completed', { finding: '查到 2 份相关制度。' });
+  step('draft', 'get_submission_draft', '读取草稿', 'running');
+  await expect(activity).toContainText('读取草稿');
+  await expect(scope).toBeHidden();
+  await expect(disclosure).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(progress.getByText('查到 2 份相关制度。', { exact: true })).toBeVisible();
+  step('draft', 'get_submission_draft', '读取草稿', 'completed');
+  finish('completed', '已根据两份制度核对差旅草稿。');
+  await expect(message).toContainText('已根据两份制度核对差旅草稿。');
+  await expect(scope).toBeHidden();
 
   // Keep facts while subsequent operations run, across live events, reconnect and history.
   reset(470000);
@@ -237,11 +272,19 @@ try {
   const question = { id: 'q-trip', title: '这次需要另起一份申请吗？', multiple: false, status: 'pending', options: [{ id: 'new', label: '另起一份申请' }, { id: 'existing', label: '我指的是已有申请' }] };
   finish('awaiting_input', question.title, { question, elapsedMs: 17000 });
   await expect(page.getByRole('radio', { name: '我指的是已有申请' })).toBeVisible();
-  await expect(page.getByText('差旅申请中已有 1 段行程。', { exact: true })).toBeVisible();
+  const tripFact = page.getByText('差旅申请中已有 1 段行程。', { exact: true });
+  await expect(tripFact).toBeVisible();
+  await disclosure.focus();
+  await page.keyboard.press('Space');
+  await expect(tripFact).toBeHidden();
+  await expect(progress.getByRole('status')).toContainText('待你回答');
   const send = page.getByRole('button', { name: '发送回答' });
   await expect(send).toBeDisabled();
-  await page.getByRole('radio', { name: '我指的是已有申请' }).check();
-  await send.click();
+  await page.getByRole('radio', { name: '我指的是已有申请' }).focus();
+  await page.keyboard.press('Space');
+  await expect(send).toBeEnabled();
+  await send.focus();
+  await page.keyboard.press('Enter');
   await expect.poll(() => submitted.length).toBe(1);
   await expect.poll(() => clients.size).toBeGreaterThan(0);
   finish('completed', '原申请已提交待受理。');
@@ -271,6 +314,7 @@ try {
   await expect(page.getByRole('button', { name: '回到最新' })).toBeVisible();
   await expect.poll(hasMotion).toBe(false);
   emit('delta', { text: '正在核对金额字段。' });
+  await expect(message).toContainText('正在核对金额字段。');
   await expect.poll(() => thread.evaluate(el => el.scrollTop)).toBe(0);
   await page.getByRole('button', { name: '回到最新' }).click();
   await expect.poll(hasMotion).toBe(true);
@@ -279,14 +323,149 @@ try {
   await expect(message.locator('.run-progress-face')).toBeHidden();
   await page.getByRole('button', { name: '继续处理', exact: true }).click();
   await expect.poll(() => clients.size).toBeGreaterThan(0);
+  step('extract', 'extract_expense_materials', '提取费用材料', 'running');
+  await expect(activity).toContainText('提取费用材料');
   finish('failed', '材料缺少金额列，请补充附件后继续。');
   await expect(message).toContainText('材料缺少金额列');
-  await expect(page.getByRole('button', { name: /继续处理|重试/ }).last()).toBeVisible();
+  await expect(page.locator('.chat-titlebar .badge.red')).toHaveText('执行失败');
+  const resume = page.getByRole('button', { name: '继续处理', exact: true });
+  await expect(resume).toBeVisible();
   await expect(message.locator('.run-progress-face')).toBeHidden();
+  await page.setViewportSize({ width: 320, height: 740 });
+  await disclosure.focus();
+  await page.keyboard.press('Enter');
+  await expect(progress.locator('.run-progress-steps')).toBeHidden();
+  await expect(progress.getByRole('status')).toContainText('提取费用材料未成功');
+  await expect(progress.getByRole('status').locator('.run-problem-action')).toBeVisible();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.screenshot({ path: out + '/mobile-failure.png' });
+  await resume.focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(() => submitted.length).toBe(2);
+  await expect.poll(() => clients.size).toBeGreaterThan(0);
+  finish('completed', '已重新读取补充的材料。');
+  await expect(message).toContainText('已重新读取补充的材料。');
 
+  // A terminal notification can arrive while the reader has keyboard focus on a closed disclosure.
+  for (const terminalStatus of ['awaiting_input', 'failed']) {
+    reset(12000);
+    await open();
+    step('files', 'list_materials', '查看材料', 'completed', { finding: '已列出 2 份材料。' });
+    step('validate', 'validate_submission', '检查单据', 'running');
+    await expect(activity).toContainText('检查单据');
+    await disclosure.focus();
+    await page.keyboard.press('Space');
+    await expect(progress.locator('details')).toHaveJSProperty('open', false);
+    if (terminalStatus === 'failed') {
+      step('validate', 'validate_submission', '检查单据', 'failed');
+      step('policy', 'search_policies', '查询制度说明', 'completed');
+      finish('failed', '办理未完成，可稍后继续处理。');
+      await expect(message).toContainText('办理未完成，可稍后继续处理。');
+    } else {
+      finish('awaiting_input', question.title, { question: { ...question, status: 'pending' } });
+      await expect(page.getByRole('radio', { name: '我指的是已有申请' })).toBeVisible();
+    }
+    await expect(progress.getByRole('status')).toContainText(terminalStatus === 'failed' ? '办理未完成' : '待你回答');
+    await expect(progress.locator('details')).toHaveJSProperty('open', false);
+    await expect(disclosure).toBeFocused();
+    if (terminalStatus === 'failed')
+      await expect(progress.getByRole('status').getByText(/检查单据未成功/)).toBeVisible();
+  }
+
+  // The run does not exist yet. Hold the actual POST until the user has typed another draft.
+  reset();
+  finish('completed', '上一轮核对已完成。');
+  const sourceFile = { kind: 'file', id: 'qa-expenses', title: '费用清单.pdf' };
+  task.refs = [sourceFile];
+  await open();
+  const input = page.locator('.composer textarea');
+  const originalText = '请根据费用清单核对本次报销金额。';
+  const nextDraft = '稍后再帮我准备一份新的差旅申请。';
+  const failureText = '服务暂时不可用，请稍后重试。';
+  let releaseRequest;
+  const holdFirstPost = new Promise(resolve => { releaseRequest = resolve; });
+  await page.route('**/api/local/runs', async route => {
+    await holdFirstPost;
+    await route.fulfill({ status: 503, json: { message: failureText } });
+  }, { times: 1 });
+  const firstRequest = page.waitForRequest(request =>
+    request.method() === 'POST' && request.url().endsWith('/api/local/runs')
+  );
+  await input.fill(originalText);
+  await input.press('Enter');
+  const firstPayload = (await firstRequest).postDataJSON();
+  try {
+    await expect(page.getByRole('button', { name: '正在发送请求' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: /停止当前任务|停止办理/ })).toHaveCount(0);
+    await input.fill(nextDraft);
+  } finally {
+    releaseRequest();
+  }
+  await expect(message.getByText(failureText, { exact: true })).toBeVisible();
+  await expect(page.locator('.chat-titlebar .badge.red')).toHaveText('发送失败');
+  await expect(page.locator('.toast').filter({ hasText: failureText })).toHaveCount(0);
+  await expect(input).toHaveValue(nextDraft);
+  await page.getByRole('button', { name: '移除费用清单.pdf' }).click();
+  assert.equal(firstPayload.message, originalText);
+  assert.deepEqual(firstPayload.refs, [sourceFile]);
+  await page.getByRole('button', { name: '重新发送', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(1);
+  assert.equal(submitted[0].message, originalText);
+  assert.deepEqual(submitted[0].refs, [sourceFile]);
+  assert.equal(submitted[0].preserveComposerDraft, true);
+  await expect.poll(() => clients.size).toBeGreaterThan(0);
+  await expect(input).toHaveValue(nextDraft);
+  await expect(page.getByRole('button', { name: '移除费用清单.pdf' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '停止当前任务' })).toBeEnabled();
+  finish('completed', '已根据费用清单核对报销金额。');
+  await expect(message).toContainText('已根据费用清单核对报销金额。');
+  await expect(input).toHaveValue(nextDraft);
+  await expect(page.locator('.message.user').getByText(originalText, { exact: true })).toHaveCount(1);
+
+  // A newly typed draft can reach workspace PATCH before an ordinary POST reaches the service.
+  let acceptRequest;
+  const holdOrdinaryPost = new Promise(resolve => { acceptRequest = resolve; });
+  await page.route('**/api/local/runs', async route => {
+    await holdOrdinaryPost;
+    await route.continue();
+  }, { times: 1 });
+  const ordinaryRequest = page.waitForRequest(request =>
+    request.method() === 'POST' && request.url().endsWith('/api/local/runs')
+  );
+  await input.press('Enter');
+  assert.equal((await ordinaryRequest).postDataJSON().message, nextDraft);
+  const laterDraft = '新申请请补充出发地和目的地。';
+  try {
+    await input.fill(laterDraft);
+    await expect.poll(() => task.input).toBe(laterDraft);
+  } finally {
+    acceptRequest();
+  }
+  await expect.poll(() => submitted.length).toBe(2);
+  assert.deepEqual(submitted[1].refs, []);
+  await expect.poll(() => clients.size).toBeGreaterThan(0);
+  await expect(input).toHaveValue(laterDraft);
+  finish('completed', '差旅申请已准备好。');
+  await expect(message).toContainText('差旅申请已准备好。');
+  await expect(input).toHaveValue(laterDraft);
   assert.deepEqual(errors, []);
-  const results = ['短任务直接呈现结果', '动作、发现和当前面屏同屏', '事件去重及刷新恢复', '整轮实测耗时与键盘回看', '待答停动与输入区应答', '窄屏和减少动态', '阅读位置与停止/继续、失败恢复'];
+  const results = [
+    '短任务直接呈现结果',
+    '单项任务超过 8 秒自动展示范围',
+    '手动折叠经过工具切换仍保持可键盘展开',
+    '动作、发现和当前面屏同屏',
+    '事件去重及刷新恢复',
+    '整轮耗时与键盘回看',
+    '待答停动、收起后键盘应答',
+    '窄屏和减少动态',
+    '阅读位置与停止/继续',
+    '失败收起后仍可读原因并键盘重试',
+    '转为待答或失败保留折叠及键盘焦点',
+    '失败后其他步骤成功仍保留实际失败原因',
+    '创建运行前的发送状态与可编辑草稿',
+    '发送失败后仅提示一次，重发原话与引用并保留新草稿',
+    '普通发送成功后保留请求途中已暂存的新草稿',
+  ];
   await fs.writeFile(out + '/browser-verification.json', JSON.stringify({ fixture: true, results, errors, status: 'passed' }, null, 2));
   console.log(JSON.stringify({ status: 'passed', results }, null, 2));
 } finally {

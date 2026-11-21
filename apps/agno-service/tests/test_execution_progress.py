@@ -144,6 +144,128 @@ def test_restart_cancels_saved_running_steps_and_preserves_cards(tmp_path):
     assert tool_events(store)[-1]['status'] == 'cancelled'
 
 
+@pytest.mark.parametrize('legacy_split', [False, True])
+def test_recovery_keeps_committed_answer_and_completion_time(tmp_path, monkeypatch, legacy_split):
+    async def script(tools, store, business):
+        await tools['query_documents']('北京')
+
+    store, runtime = setup_run(tmp_path, monkeypatch, script)
+    asyncio.run(runtime.execute('r'))
+    original = saved_message(store)
+    if legacy_split:
+        # Older releases persisted the reply before finalizing the run row.
+        with store.connect() as db:
+            db.execute("UPDATE runs SET status='running', updated_at=created_at WHERE id='r'")
+            db.execute("DELETE FROM events WHERE kind IN ('result','done')")
+        def legacy_reply(state):
+            message = state['tasks'][0]['messages'][-1]
+            del message['runFinishedAt']
+            del message['runStartedAt']
+            message['createdAt'] = original['runFinishedAt']
+        store.mutate(legacy_reply)
+    else:
+        # An old workspace can still refer to a run that already finished.
+        store.mutate(lambda state: state['tasks'][0].update(activeRunId='r', status='处理中'))
+    store.recover()
+    store.recover()
+    assert store.run('r')['status'] == 'completed'
+    assert saved_message(store)['runStatus'] == 'completed'
+    assert saved_message(store)['text'] == original['text']
+    assert saved_message(store)['tools'] == original['tools']
+    assert saved_message(store)['runFinishedAt'] == original['runFinishedAt']
+    assert store.get_state()['tasks'][0]['activeRunId'] is None
+    assert store.get_state()['tasks'][0]['status'] == '已完成'
+    assert [event['kind'] for event in store.events('r')].count('done') == 1
+    assert all(event['kind'] != 'error' for event in store.events('r'))
+
+
+def test_recovery_respects_cancel_recorded_before_reply_was_saved(tmp_path):
+    store = Store(tmp_path / 'legacy.db')
+    store.create_run('r', 't', {})
+    store.mutate(lambda state: state['tasks'].append({'id': 't', 'activeRunId': 'r', 'messages': [
+        {'id': 'assistant-r', 'runId': 'r', 'runStatus': 'running', 'tools': [
+            {'id': 's', 'label': '核对材料', 'status': 'running'}]}]}))
+    store.finish_run('r', 'cancelled')
+    finish = store.run('r')['runFinishedAt']
+    store.recover()
+    assert saved_message(store)['runStatus'] == 'cancelled'
+    assert saved_message(store)['runFinishedAt'] == finish
+    assert_run_window(store, 'error', initial_event=False)
+    assert next(e for e in store.events('r') if e['kind'] == 'error')['data']['runStatus'] == 'cancelled'
+
+
+@pytest.mark.parametrize('status', ['failed', 'cancelled'])
+def test_legacy_error_reply_creation_is_not_a_known_end_time(tmp_path, status):
+    store = Store(tmp_path / 'legacy.db')
+    store.create_run('r', 't', {})
+    start = store.run('r')['runStartedAt']
+    store.mutate(lambda state: state['tasks'].append({'id': 't', 'activeRunId': 'r', 'status': '处理中', 'messages': [
+        {'id': 'assistant-r', 'runId': 'r', 'runStatus': status,
+         'createdAt': start, 'text': '已保存的反馈。'}]}))
+    store.recover()
+    assert saved_message(store)['text'] == '已保存的反馈。'
+    assert 'runFinishedAt' not in saved_message(store)
+    assert 'runFinishedAt' not in store.run('r')
+    assert store.get_state()['tasks'][0]['status'] == ('执行失败' if status == 'failed' else '已暂停')
+
+
+@pytest.mark.parametrize('saved_result', [False, True])
+def test_completed_run_row_with_partial_reply_survives_recovery(tmp_path, monkeypatch, saved_result):
+    async def script(tools, store, business):
+        await tools['query_documents']('北京')
+    store, runtime = setup_run(tmp_path, monkeypatch, script)
+    asyncio.run(runtime.execute('r'))
+    original = saved_message(store)
+    def partial(state):
+        task = state['tasks'][0]
+        task.update(activeRunId='r', status='处理中')
+        task['messages'][-1] = {'id': 'assistant-r', 'role': 'assistant', 'text': '已保存的片段',
+                                'runStatus': 'running', 'runId': 'r', 'tools': original['tools']}
+    store.mutate(partial)
+    if not saved_result:
+        with store.connect() as db:
+            db.execute("DELETE FROM events WHERE kind='result'")
+    store.recover()
+    assert saved_message(store)['text'] == (original['text'] if saved_result else '已保存的片段')
+    assert saved_message(store)['runStatus'] == 'completed'
+    assert saved_message(store)['tools'] == original['tools']
+    assert saved_message(store)['runFinishedAt'] == original['runFinishedAt']
+    if saved_result:
+        assert saved_message(store)['cards'] == original['cards']
+    assert store.get_state()['tasks'][0]['status'] == '已完成'
+    assert all(event['kind'] != 'error' for event in store.events('r'))
+    assert [event['kind'] for event in store.events('r')].count('done') == 1
+
+
+@pytest.mark.parametrize('missing_reply', [False, True])
+def test_recovery_of_old_result_does_not_reopen_an_answered_question(tmp_path, monkeypatch, missing_reply):
+    async def script(tools, store, business):
+        await tools['ask_user']('需要核对哪个月份？')
+    store, runtime = setup_run(tmp_path, monkeypatch, script)
+    asyncio.run(runtime.execute('r'))
+    def answered(state):
+        task = state['tasks'][0]
+        task.update(activeRunId='r', status='本地已受理')
+        message = task['messages'][-1]
+        message['runStatus'] = 'running'
+        answer = {'text': '10月', 'optionIds': []}
+        question_id = message['question']['id']
+        message['question'].update(status='answered', answer=answer)
+        if missing_reply:
+            task['messages'].pop()
+        task['messages'].append({'id': 'user-later', 'role': 'user', 'text': '10月',
+                                 'questionAnswer': {'questionId': question_id, **answer, 'mode': 'free_text', 'deferred': False}})
+        task['messages'].append({'id': 'assistant-later', 'runId': 'later',
+                                 'role': 'assistant', 'text': '下一轮答复。', 'runStatus': 'completed'})
+    store.mutate(answered)
+    store.recover()
+    question = saved_message(store)['question']
+    assert question['status'] == 'answered' and question['answer'] == {'text': '10月', 'optionIds': []}
+    assert saved_message(store)['runStatus'] == 'awaiting_input'
+    task = store.get_state()['tasks'][0]
+    assert task['status'] == '本地已受理' and task['messages'][-1]['text'] == '下一轮答复。'
+
+
 def test_ask_user_has_one_complete_step_and_waiting_run_status(tmp_path, monkeypatch):
     async def script(tools, store, business):
         await tools['ask_user']('哪一天出发？')
@@ -463,6 +585,11 @@ def test_step_finding_reaches_stream_and_history_without_return_payload(tmp_path
     ('analyze_expenses', {'items': [{}], 'count': 2, 'totalMinor': '8'}, None),
     ('extract_expense_materials', {'groupCount': 1, 'unassignedCount': 2},
      '识别出 1 组费用，另有 2 份材料待归组。'),
+    ('extract_expense_materials', {'files': [{'extractionStatus': 'unreadable'}], 'items': []},
+     '1 份材料未能识别。'),
+    ('extract_expense_materials', {'files': [{'extractionStatus': 'needs_review'}, {'extractionStatus': 'failed'}],
+                                  'items': [{}]},
+     '当前有 1 条费用记录，1 份材料未能识别，1 份材料待核对。'),
     ('validate_submission', {'check': {}, 'canSubmit': False}, None),
     ('summarize_expense_csv', {'result': {'rowCount': True, 'currency': 'CNY', 'total': '900.00'}}, None),
     ('summarize_expense_csv', {'result': {'rowCount': 2, 'currency': 'CNY', 'total': '/secret/path'}}, None),
