@@ -85,6 +85,8 @@ def test_failed_return_is_recorded_and_retry_can_restore_completion(tmp_path, mo
     assert store.run('r')['status'] == expected
     message = saved_message(store)
     assert message['runStatus'] == expected
+    assert_run_window(store, 'result' if retry else 'error')
+    assert 'finding' not in message['tools'][0]
     assert [step['status'] for step in message['tools']] == (['failed', 'completed'] if retry else ['failed'])
     if retry:
         assert len({step['id'] for step in message['tools']}) == 2
@@ -115,6 +117,7 @@ def test_cancellation_during_async_tool_keeps_terminal_step(tmp_path, monkeypatc
 
     asyncio.run(execute())
     message = saved_message(store)
+    assert_run_window(store, 'error')
     assert message['runStatus'] == 'cancelled'
     assert message['tools'][0]['status'] == 'cancelled'
     assert message['tools'][0]['durationMs'] >= 0
@@ -132,6 +135,7 @@ def test_restart_cancels_saved_running_steps_and_preserves_cards(tmp_path):
     store.create_run('r', 't', {})
     store.recover()
     message = saved_message(store)
+    assert_run_window(store, 'error', initial_event=False)
     assert message['runStatus'] == 'interrupted'
     assert message['tools'][0]['status'] == 'cancelled'
     assert message['tools'][0]['finishedAt'] >= 1000
@@ -147,6 +151,7 @@ def test_ask_user_has_one_complete_step_and_waiting_run_status(tmp_path, monkeyp
     store, runtime = setup_run(tmp_path, monkeypatch, script)
     asyncio.run(runtime.execute('r'))
     message = saved_message(store)
+    assert_run_window(store, 'result')
     assert message['runStatus'] == 'awaiting_input'
     assert [entry['status'] for entry in tool_events(store)] == ['running', 'completed']
     assert len(message['tools']) == 1
@@ -409,3 +414,60 @@ def test_progress_uses_only_the_outbound_leg_for_itinerary_context(tmp_path, mon
     events = tool_events(store)
     assert events[-1]['itinerary'] == {'destination': '南京', 'transport': '高铁二等座'}
     assert 'private-itinerary-note' not in json.dumps(events)
+
+
+def assert_run_window(store, event_kind, *, initial_event=True):
+    saved = saved_message(store)
+    run = store.run('r')
+    start, end = saved['runStartedAt'], saved['runFinishedAt']
+    events = store.events('r')
+    terminal = next(e['data'] for e in reversed(events) if e['kind'] == event_kind)
+    assert type(start) is int and type(end) is int and start <= end
+    assert (start, end) == (run['runStartedAt'], run['runFinishedAt'])
+    assert (start, end) == (terminal['runStartedAt'], terminal['runFinishedAt'])
+    if initial_event:
+        assert next(e['data'] for e in events if e['kind'] == 'status')['runStartedAt'] == start
+
+
+def test_step_finding_reaches_stream_and_history_without_return_payload(tmp_path, monkeypatch):
+    async def script(tools, store, business):
+        assert saved_message(store)['runStartedAt'] == store.run('r')['runStartedAt']
+        assert 'runFinishedAt' not in saved_message(store)
+        business.search_knowledge = lambda q: {'items': [{'title': '/private/internal-path'}]}
+        await tools['search_policies']('query not intended for progress')
+
+    store, runtime = setup_run(tmp_path, monkeypatch, script)
+    asyncio.run(runtime.execute('r'))
+    events = tool_events(store)
+    assert 'finding' not in events[0]
+    assert events[1]['finding'] == '检索到 1 份本地示例制度。'
+    assert saved_message(store)['tools'][0]['finding'] == events[1]['finding']
+    assert 'internal-path' not in json.dumps(events)
+    assert_run_window(store, 'result')
+
+
+@pytest.mark.parametrize(('name', 'result', 'expected'), [
+    ('list_materials', {'files': [{}, {}]}, '已列出 2 份材料。'),
+    ('query_documents', {'items': [], 'unavailableSources': ['internal-only']},
+     '可用来源中查到 0 张单据，另有 1 个来源未返回。'),
+    ('get_submission_draft', {'draft': {'type': 'travel', 'legs': [{}, {}]}},
+     '差旅申请中已有 2 段行程。'),
+    ('validate_submission', {'check': {'issues': [{}]}, 'canSubmit': False}, '草稿有 1 项字段需要核对。'),
+    ('summarize_expense_csv', {'result': {'rowCount': 2, 'currency': 'CNY', 'total': '900.00'}},
+     '2 条费用记录合计 900.00 元。'),
+    ('read_current_rules', {'rules': []}, '当前规则清单中有 0 条规则。'),
+    ('read_work_document', {'document': {'expenses': [{'id': '/private'}], 'files': ['secret.pdf']}},
+     '这张单据有 1 条费用明细、1 份附件。'),
+    ('analyze_expenses', {'items': [{}, {}], 'count': 2, 'totalMinor': '10019'},
+     '本地合成样例中，2 条费用汇总记录合计 100.19 元。'),
+    ('analyze_expenses', {'items': [{}], 'count': 2, 'totalMinor': '8'}, None),
+    ('extract_expense_materials', {'groupCount': 1, 'unassignedCount': 2},
+     '识别出 1 组费用，另有 2 份材料待归组。'),
+    ('validate_submission', {'check': {}, 'canSubmit': False}, None),
+    ('summarize_expense_csv', {'result': {'rowCount': True, 'currency': 'CNY', 'total': '900.00'}}, None),
+    ('summarize_expense_csv', {'result': {'rowCount': 2, 'currency': 'CNY', 'total': '/secret/path'}}, None),
+    ('read_uploaded_file', {'text': 'private-reasoning', 'path': '/private'}, None),
+])
+def test_progress_facts_use_validated_business_values(name, result, expected):
+    from progress_findings import tool_finding
+    assert tool_finding(name, result) == expected

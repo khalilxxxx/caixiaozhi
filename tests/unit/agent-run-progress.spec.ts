@@ -66,6 +66,59 @@ describe('真实运行进度', () => {
     expect(JSON.stringify(stream)).not.toContain('secret');
     expect(JSON.stringify(stream)).not.toContain('/private/path');
   });
+  it('重放阶段发现不会重复，耗时使用服务端整轮时间', () => {
+    let stream = reduceRunEvent(createRunStream('run'), 'status', {
+      phase: 'working',
+      runStartedAt: 1_790_000_000_000,
+    });
+    const completed = {
+      id: 'read',
+      name: 'query_documents',
+      status: 'completed',
+      finding: '本次查到 2 张单据。',
+      output: { internal: '不可见' },
+    };
+    stream = reduceRunEvent(stream, 'tool', completed);
+    stream = reduceRunEvent(stream, 'tool', completed);
+    const [live] = mergeRunMessages([], stream);
+    expect(live?.runStartedAt).toBe(1_790_000_000_000);
+    expect(live?.tools).toEqual([
+      {
+        id: 'read',
+        name: 'query_documents',
+        status: 'completed',
+        finding: completed.finding,
+      },
+    ]);
+    const failed = reduceRunEvent(stream, 'error', {
+      runStatus: 'cancelled',
+      runFinishedAt: 1_790_000_008_214,
+    });
+    expect(mergeRunMessages([], failed)[0]).toMatchObject({
+      runStatus: 'cancelled',
+      runStartedAt: 1_790_000_000_000,
+      runFinishedAt: 1_790_000_008_214,
+    });
+  });
+  it('旧消息和重连均不以订阅时间假充运行开始', () => {
+    expect(
+      mergeRunMessages([], createRunStream('old'))[0]?.runStartedAt,
+    ).toBeUndefined();
+    const saved: ChatMessage = {
+      id: 'assistant-r',
+      role: 'assistant',
+      text: '',
+      runId: 'r',
+      runStatus: 'running',
+      runStartedAt: 1_790_000_000_000,
+    };
+    const stream = reduceRunEvent(createRunStream('r'), 'status', {
+      runStartedAt: '错误时间',
+    });
+    expect(mergeRunMessages([saved], stream)[0]?.runStartedAt).toBe(
+      saved.runStartedAt,
+    );
+  });
   it('服务端已保存卡片时仍继续合并流式文字和步骤', () => {
     const messages: ChatMessage[] = [
       {
@@ -130,6 +183,64 @@ describe('真实运行进度', () => {
     steps = mergeToolStep(steps, { name: 'read', status: 'completed' });
     steps = mergeToolStep(steps, { name: 'read', status: 'running' });
     expect(steps.map((s) => s.status)).toEqual(['completed', 'running']);
+  });
+  it('完整重放旧事件时，迟到的开始不覆盖已保存的阶段发现', () => {
+    const saved: ChatMessage = {
+      id: 'assistant-run',
+      role: 'assistant',
+      text: '',
+      runStatus: 'running',
+      tools: [
+        { name: 'read', status: 'completed', finding: '已读取 2 条费用记录。' },
+      ],
+    };
+    let stream = reduceRunEvent(createRunStream('run'), 'tool', {
+      name: 'read',
+      status: 'running',
+    });
+    expect(mergeRunMessages([saved], stream)[0]?.tools).toEqual(saved.tools);
+    stream = reduceRunEvent(stream, 'tool', {
+      name: 'read',
+      status: 'completed',
+      durationMs: 350,
+    });
+    expect(mergeRunMessages([saved], stream)[0]?.tools).toEqual([
+      {
+        name: 'read',
+        status: 'completed',
+        durationMs: 350,
+        finding: '已读取 2 条费用记录。',
+      },
+    ]);
+  });
+  it('按旧工具的同名调用次序合并快照，保留失败、重试和新增调用', () => {
+    const saved: ChatMessage = {
+      id: 'assistant-run',
+      role: 'assistant',
+      text: '',
+      runStatus: 'running',
+      tools: [
+        { name: 'read', status: 'failed' },
+        { id: 'check', name: 'read', status: 'completed', label: '读取规则' },
+        { name: 'read', status: 'running' },
+      ],
+    };
+    let stream = createRunStream('run');
+    for (const step of [
+      { name: 'read', status: 'running' },
+      { name: 'read', status: 'failed' },
+      { id: 'check', name: 'read', status: 'completed' },
+      { name: 'read', status: 'running' },
+      { name: 'read', status: 'completed', finding: '已取得材料清单。' },
+      { name: 'read', status: 'running' },
+    ])
+      stream = reduceRunEvent(stream, 'tool', step);
+    expect(mergeRunMessages([saved], stream)[0]?.tools).toEqual([
+      { name: 'read', status: 'failed' },
+      { id: 'check', name: 'read', status: 'completed', label: '读取规则' },
+      { name: 'read', status: 'completed', finding: '已取得材料清单。' },
+      { name: 'read', status: 'running' },
+    ]);
   });
   it('未知或损坏事件不清空已有进度', () => {
     const stream = reduceRunEvent(createRunStream('run'), 'tool', {

@@ -153,7 +153,13 @@
   border-radius: 18px;
 }
 .agent-first .chat-compose > .composer {
-  border-color: var(--brand-line-soft);
+  --composer-line: var(--brand-line-soft);
+  --composer-focus: var(--brand-focus);
+  border-color: var(--composer-line);
+}
+.agent-first .chat-compose > .question-composer {
+  --composer-line: var(--enterprise-line);
+  --composer-focus: var(--enterprise-focus);
 }
 @media (hover: hover) {
   .agent-first .workspace-home .composer:hover:not(:focus-within) {
@@ -169,10 +175,10 @@
   }
 }
 .agent-first .chat-compose > .composer:focus-within {
-  border-color: var(--brand-focus);
+  border-color: var(--composer-focus);
 }
 .agent-first .chat-compose > .composer:has(textarea:focus-visible) {
-  outline: 1px solid var(--brand-focus);
+  outline: 1px solid var(--composer-focus);
 }
 .agent-first .composer textarea {
   color: var(--enterprise-ink);

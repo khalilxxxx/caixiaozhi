@@ -25,6 +25,7 @@ from document_search import DOCUMENT_NUMBER, OTHER_WORK, PROGRESS_QUESTION
 from clarification_service import conversation_content, issue_question, pending_question
 from completion_check import CompletionCheck
 from expert_teams import ExpertTeams, TeamError, is_team
+from progress_findings import tool_finding
 from store import finish_message_steps
 from submission_defaults import draft_snapshot_token
 
@@ -176,7 +177,8 @@ class Runtime:
         starts = {}
         attempt_keys = {}
         draft_snapshots: dict[str, str] = {}
-        self.emit(run_id, 'status', {'status': '处理中', 'phase': 'thinking', 'label': '正在思考'})
+        self.emit(run_id, 'status', {'status': '处理中', 'phase': 'thinking', 'label': '正在思考',
+                                     'runStartedAt': run['runStartedAt']})
 
         def check_cancel():
             if run_id in self.cancelled or self.store.run(run_id).get('status') != 'running':
@@ -206,7 +208,7 @@ class Runtime:
                     current['messages'].append(message)
                 if message.get('runStatus') not in {None, 'running'}:
                     return
-                message.update(cards=cards, tools=trace, runStatus='running', **identity)
+                message.update(cards=cards, tools=trace, runStatus='running', runStartedAt=run['runStartedAt'], **identity)
                 if last_submission_id:
                     message['submissionPhase'] = 'collecting'
                 current['updated'] = '刚刚'
@@ -245,6 +247,10 @@ class Runtime:
                     return
                 entry.update(status=status, finishedAt=int(time.time()*1000),
                              durationMs=max(0, round((time.monotonic()-starts[entry['id']])*1000)))
+                if status == 'completed':
+                    finding = tool_finding(entry['name'], result)
+                    if finding:
+                        entry['finding'] = finding
                 completion.observe(entry['name'], attempt_keys[entry['id']], result or {}, status, draft_retry_id)
                 save_progress()
                 self.emit(run_id, 'tool', entry)
@@ -766,10 +772,10 @@ class Runtime:
                     self.fail(run_id, run['task_id'], issue, 'failed')
                     return
             submission_phase = None if team else ('collecting' if question is not None else ('ready' if last_submission_id else None))
-            def finish(state):
+            def finish(state, timing):
                 current = next(t for t in state['tasks'] if t['id'] == run['task_id'])
                 message = {'id': 'assistant-' + run_id, 'role': 'assistant', 'text': text, 'cards': cards, 'createdAt': int(time.time()*1000), 'runId': run_id, 'runStatus': 'awaiting_input' if question is not None else 'completed', 'tools': trace}
-                message.update(identity)
+                message.update(identity, **timing)
                 if submission_phase:
                     message['submissionPhase'] = submission_phase
                 existing = next((item for item in current['messages'] if item.get('id') == message['id']), None)
@@ -787,14 +793,15 @@ class Runtime:
                     draft_card = next((c for c in cards if c['kind'] == 'submission' and c.get('id') == last_submission_id), None)
                     if draft_card:
                         current['refs'] = [r for r in current.get('refs', []) if r['kind'] != 'submission'] + [{'kind': 'submission', 'id': draft_card['id'], 'title': draft_card['title']}]
-            self.store.mutate(finish)
-            self.store.finish_run(run_id, 'completed')
+            timing = self.store.finish_run(run_id, 'completed', finish)
+            if timing is None:
+                return
             current = next(t for t in self.store.get_state()['tasks'] if t['id'] == run['task_id'])
             visible_cards = [card for card in cards if submission_phase != 'collecting' or card.get('kind') != 'submission']
             result = {'text': text, 'cards': visible_cards, 'status': current['status'], 'type': task_type,
                       'runId': run_id, 'runStatus': 'awaiting_input' if question is not None else 'completed',
                       'tools': trace, 'workspace': self.store.snapshot()}
-            result.update(identity)
+            result.update(identity, **timing)
             if submission_phase:
                 result['submissionPhase'] = submission_phase
             if question is not None:
@@ -818,7 +825,7 @@ class Runtime:
     def fail(self, run_id, task_id, message, status):
         closed_steps = []
         request = (self.store.run(run_id) or {}).get('request', {})
-        def fail_state(state):
+        def fail_state(state, timing):
             task = next((t for t in state['tasks'] if t['id'] == task_id), None)
             if task:
                 if task.get('activeRunId') in {None, run_id}:
@@ -828,22 +835,23 @@ class Runtime:
                     existing = {'id': 'assistant-' + run_id, 'role': 'assistant', 'text': message,
                                 'createdAt': int(time.time()*1000), 'runId': run_id}
                     task['messages'].append(existing)
-                existing['runId'] = run_id
+                existing.update(runId=run_id, **timing)
                 if is_team(request.get('capability')):
                     existing['capability'] = request['capability']
                     if request.get('expertTeamName'):
                         existing['expertTeamName'] = request['expertTeamName']
-                closed_steps.extend(finish_message_steps(existing, status))
+                closed_steps.extend(finish_message_steps(existing, status, timing['runFinishedAt']))
                 if not existing.get('question'):
                     existing['text'] = message
                     if any(card.get('kind') == 'submission' for card in existing.get('cards', [])):
                         existing['submissionPhase'] = 'collecting' if pending_question(task) else 'ready'
         with self.store.lock:
-            self.store.finish_run(run_id, status)
-            self.store.mutate(fail_state)
+            timing = self.store.finish_run(run_id, status, fail_state)
+            if timing is None:
+                return
             for step in closed_steps:
                 self.emit(run_id, 'tool', step)
-            self.emit(run_id, 'error', {'message': message, 'runId': run_id, 'runStatus': status})
+            self.emit(run_id, 'error', {'message': message, 'runId': run_id, 'runStatus': status, **timing})
 
 
 async def generate_rule(text):

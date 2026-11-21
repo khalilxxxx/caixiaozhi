@@ -132,6 +132,52 @@ describe('差旅追问与草稿展示', () => {
     expect(html).not.toContain('复制回复');
   });
 
+  it.each(['answered', 'deferred', 'expired'] as const)(
+    '追问已结束（%s）时历史消息不再提示待回答',
+    (status) => {
+      const current = task([
+        {
+          id: 'old',
+          role: 'assistant',
+          text: '',
+          runStatus: 'awaiting_input',
+          question: { ...question, status },
+        },
+      ]);
+      current.status = '已完成';
+      const html = render(ChatPage, {
+        task: current,
+        busy: false,
+        composer: null,
+      });
+      expect(html).not.toContain('run-progress is-waiting');
+      expect(html).toContain('question-history');
+    },
+  );
+
+  it('服务重启后按消息的中断状态展示，回看不计入停机时间', () => {
+    const current = task([
+      {
+        id: 'old',
+        role: 'assistant',
+        text: '服务已重启，上次任务已暂停。',
+        runStatus: 'interrupted',
+        runStartedAt: 1_790_000_000_000,
+        runFinishedAt: 1_790_003_600_000,
+        tools: [{ name: 'query_documents', status: 'cancelled' }],
+      },
+    ]);
+    current.status = '已暂停';
+    const html = render(ChatPage, {
+      task: current,
+      busy: false,
+      composer: null,
+    });
+    expect(html).toContain('服务已重启');
+    expect(html).toContain('本轮进展');
+    expect(html).not.toContain('用时');
+  });
+
   it.each(['ready', undefined] as const)(
     '完成追问或历史消息可展示可编辑草稿（%s）',
     (submissionPhase) => {

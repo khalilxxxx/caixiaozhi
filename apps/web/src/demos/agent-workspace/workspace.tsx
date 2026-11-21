@@ -54,6 +54,8 @@ export interface ChatMessage {
   capability?: CapabilityId | null;
   expertTeamName?: string | null;
   runStatus?: string;
+  runStartedAt?: number;
+  runFinishedAt?: number;
   time?: string;
   createdAt?: number;
   question?: ClarificationQuestion;

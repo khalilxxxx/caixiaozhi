@@ -4,7 +4,6 @@ import copy
 import json
 import sqlite3
 import threading
-import time
 from pathlib import Path
 from datetime import datetime, timezone
 from rule_catalog import migrate_rules
@@ -38,10 +37,16 @@ def migrate_reimbursement_numbers(data):
     return changed
 
 
-def finish_message_steps(message, run_status):
+def run_timing(created, finished=None):
+    timing = {'runStartedAt': int(datetime.fromisoformat(created).timestamp() * 1000)} if created else {}
+    if finished:
+        timing['runFinishedAt'] = int(datetime.fromisoformat(finished).timestamp() * 1000)
+    return timing
+
+
+def finish_message_steps(message, run_status, finished):
     """Close interrupted operations without discarding earlier outcomes/cards."""
     message['runStatus'] = run_status
-    finished = int(time.time() * 1000)
     changed = []
     for step in message.get('tools', []):
         if step.get('status') != 'running':
@@ -459,12 +464,24 @@ class Store:
             if not row:
                 return None
             result = dict(row)
+            result.update(run_timing(row['created_at'], row['updated_at'] if row['status'] != 'running' else None))
             result['request'] = json.loads(result['request'])
             return result
 
-    def finish_run(self, run_id, status):
-        with self.lock, self.connect() as db:
-            db.execute('UPDATE runs SET status=?,updated_at=? WHERE id=?', (status, now(), run_id))
+    def finish_run(self, run_id, status, update=None):
+        # The run and its visible reply must publish the same terminal boundary,
+        # including when cancellation races a retry or a process exits mid-write.
+        def finish(state, db):
+            row = db.execute(
+                "UPDATE runs SET status=?,updated_at=? WHERE id=? AND status='running' RETURNING created_at,updated_at",
+                (status, now(), run_id)).fetchone()
+            if row is None:
+                return None
+            timing = run_timing(row['created_at'], row['updated_at'])
+            if update is not None:
+                update(state, timing)
+            return timing
+        return self.mutate_with_db(finish, only_if_changed=True)
 
     def append_event(self, run_id, kind, data):
         with self.lock, self.connect() as db:
@@ -487,18 +504,26 @@ class Store:
             if not interrupted:
                 return
             changed_steps = []
-            def recover_state(state):
+            timings = {}
+            def recover_state(state, db):
+                finished = now()
                 for run_id, task_id in interrupted.items():
+                    row = db.execute(
+                        "UPDATE runs SET status='interrupted',updated_at=? WHERE id=? AND status='running' RETURNING created_at",
+                        (finished, run_id)).fetchone()
+                    timing = run_timing(row['created_at'] if row else None, finished)
                     task = next((item for item in state['tasks'] if item['id'] == task_id), None)
+                    timings[run_id] = timing
                     if task is None:
                         continue
                     message_id = 'assistant-' + run_id
                     existing = next((m for m in task.get('messages', []) if m.get('id') == message_id), None)
                     if existing is None:
-                        existing = {'id': message_id, 'role': 'assistant', 'createdAt': int(time.time()*1000)}
+                        existing = {'id': message_id, 'role': 'assistant', 'createdAt': timing['runFinishedAt']}
                         task.setdefault('messages', []).append(existing)
-                    existing['runId'] = run_id
-                    changed_steps.extend((run_id, step) for step in finish_message_steps(existing, 'interrupted'))
+                    existing.update(runId=run_id, **timing)
+                    changed_steps.extend((run_id, step) for step in finish_message_steps(
+                        existing, 'interrupted', timing['runFinishedAt']))
                     if not existing.get('question'):
                         existing['text'] = '服务已重启，上次任务已暂停，可重新发送继续。'
                         if any(card.get('kind') == 'submission' for card in existing.get('cards', [])):
@@ -506,13 +531,12 @@ class Store:
                     if task.get('activeRunId') in {None, run_id}:
                         task['activeRunId'] = None
                         task['status'] = '待你回答' if pending_question(task) else '已暂停'
-            self.mutate(recover_state)
-            for run_id in interrupted:
-                self.finish_run(run_id, 'interrupted')
+            self.mutate_with_db(recover_state)
             for run_id, step in changed_steps:
                 self.append_event(run_id, 'tool', step)
-            for run_id in interrupted:
-                self.append_event(run_id, 'error', {'message': '服务已重启，上次任务已暂停，可重新发送继续。'})
+            for run_id, timing in timings.items():
+                self.append_event(run_id, 'error', {'message': '服务已重启，上次任务已暂停，可重新发送继续。',
+                                                    'runStatus': 'interrupted', **timing})
                 self.append_event(run_id, 'done', {})
 
     def add_file(self, metadata, storage_name):

@@ -1,6 +1,6 @@
 import { MessageText } from './MessageText';
 import { useEffect, useId, useRef, useState } from 'react';
-import type { ContextRef, ResultCard, Task } from './workspace';
+import type { ChatMessage, ContextRef, ResultCard, Task } from './workspace';
 import { useWorkspace } from './workspace';
 import { Badge, Icon, Button } from './ui';
 import { DocumentResults, materialBatchId } from './Documents';
@@ -23,8 +23,30 @@ import {
   visibleMessageCards,
 } from './submission-conversation';
 import { QuestionCard } from './QuestionCard';
-import { pendingQuestion, resumeQuestionMessage } from './question-model';
+import {
+  pendingQuestion,
+  questionState,
+  resumeQuestionMessage,
+} from './question-model';
 import { RunProgress } from './RunProgress';
+
+function messageProgressStatus(
+  message: ChatMessage,
+  pendingId?: string,
+  latestTaskStatus?: string,
+) {
+  const { question, runStatus } = message;
+  if (
+    question &&
+    (!runStatus || ['awaiting_input', 'waiting', '待你回答'].includes(runStatus))
+  )
+    return question.id === pendingId ? 'awaiting_input' : 'completed';
+  if (runStatus && runStatus !== 'running') return runStatus;
+  if (latestTaskStatus === '已暂停') return 'paused';
+  if (/中断/.test(latestTaskStatus ?? '')) return 'interrupted';
+  if (/未完成|失败|异常/.test(latestTaskStatus ?? '')) return 'failed';
+  return runStatus;
+}
 
 export const logo = '/agent-assets/caixiaozhi.png';
 function XiaozhiMark({ className = '' }: { className?: string }) {
@@ -640,6 +662,7 @@ export function ChatPage({
   busy,
   activity,
   phase,
+  streamingRunId,
   onRename,
   onStop,
 }: {
@@ -648,6 +671,7 @@ export function ChatPage({
   busy: boolean;
   activity?: string;
   phase?: string;
+  streamingRunId?: string;
   onRename: () => void;
   onStop: () => void;
 }) {
@@ -683,16 +707,24 @@ export function ChatPage({
   }, []);
 
   const last = task.messages.filter((m) => m.role === 'assistant').at(-1);
-  const isRunningMessage = (message: Task['messages'][number]) =>
-    busy &&
+  const currentRunId = task.activeRunId ?? streamingRunId;
+  const belongsToCurrentRun = (message: ChatMessage) =>
     message.role === 'assistant' &&
-    Boolean(task.activeRunId) &&
-    (message.runId === task.activeRunId ||
-      message.id === task.activeRunId ||
-      message.id === `assistant-${task.activeRunId}`);
-  const hasRunningMessage = task.messages.some(isRunningMessage);
+    Boolean(currentRunId) &&
+    (message.runId === currentRunId ||
+      message.id === currentRunId ||
+      message.id === `assistant-${currentRunId}`);
+  const isRunningMessage = (message: ChatMessage) =>
+    busy &&
+    belongsToCurrentRun(message) &&
+    (!message.runStatus || message.runStatus === 'running');
+  const hasCurrentMessage = task.messages.some(belongsToCurrentRun);
   const latestSubmissions = latestSubmissionCards(task);
   const pending = pendingQuestion(task);
+  const pendingId =
+    pending && questionState(pending, w.state.data) === 'pending'
+      ? pending.id
+      : undefined;
   const activeTeam = isExpertTeam(task.capability)
     ? getCapability(task.capability, task.expertTeamName)?.label
     : undefined;
@@ -767,16 +799,11 @@ export function ChatPage({
             const author = isExpertTeam(message.capability)
               ? getCapability(message.capability, message.expertTeamName)?.label
               : messageRunning ? activeTeam : undefined;
-            const latestStatus =
-              message.id === last?.id && !busy
-                ? pending
-                  ? 'awaiting_input'
-                  : task.status === '已暂停'
-                    ? 'paused'
-                    : /未完成|失败|中断|异常/.test(task.status)
-                      ? 'failed'
-                      : undefined
-                : undefined;
+            const progressStatus = messageProgressStatus(
+              message,
+              pendingId,
+              !busy && message.id === last?.id ? task.status : undefined,
+            );
             if (
               message.role === 'assistant' &&
               message.submissionPhase === 'collecting' &&
@@ -799,9 +826,11 @@ export function ChatPage({
                     </div>
                     <RunProgress
                       steps={message.tools}
+                      runStartedAt={message.runStartedAt}
+                      runFinishedAt={message.runFinishedAt}
                       running={messageRunning}
                       onStop={onStop}
-                      status={latestStatus ?? message.runStatus}
+                      status={progressStatus}
                       activity={messageRunning ? activity : undefined}
                       phase={messageRunning ? phase : undefined}
                     />
@@ -857,7 +886,7 @@ export function ChatPage({
               </article>
             );
           })}
-          {busy && !hasRunningMessage && (
+          {busy && !hasCurrentMessage && (
             <article className="message assistant" data-team-author={activeTeam}>
               <div>
                 <div className="assistant-name">

@@ -551,13 +551,9 @@ export default function App() {
       return next;
     });
     setBusyIds((old) => (old.includes(taskId) ? old : [...old, taskId]));
-    const savedRun = resumedTask?.messages.find(
-      (message) =>
-        message.runId === runId || message.id === `assistant-${runId}`,
-    );
     setStreams((old) => ({
       ...old,
-      [taskId]: createRunStream(runId, savedRun?.tools),
+      [taskId]: createRunStream(runId),
     }));
     const seen = new Set<string>();
     let terminal = false;
@@ -1720,6 +1716,7 @@ export default function App() {
               <div className="work-main">
                 {chatVisible ? (
                   <ChatPage
+                    streamingRunId={streams[active.id]?.runId}
                     task={active}
                     composer={composer}
                     busy={busyIds.includes(active.id)}
