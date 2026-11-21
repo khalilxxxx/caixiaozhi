@@ -1,4 +1,4 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src/demos/agent-workspace", "vite.agent.config.ts"]
+  "include": ["src/demos/agent-workspace", "src/demos/approval-assistant", "vite.agent.config.ts"]
 }

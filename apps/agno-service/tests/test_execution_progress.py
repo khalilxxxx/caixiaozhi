@@ -387,3 +387,25 @@ def test_intermediate_preview_image_does_not_create_a_delivery_requirement():
     check.observe('run_skill_script', 'script', {'status': 'success', 'exitCode': 0, 'files': [
         {'path': 'work/chart.png'}, {'path': 'output/preview.png'}, {'path': 'tmp/data.txt'}]}, 'completed')
     assert check.issue([]) is None
+
+
+def test_progress_uses_only_the_outbound_leg_for_itinerary_context(tmp_path, monkeypatch):
+    async def script(tools, store, business):
+        await tools['get_submission_draft']('travel')
+
+    store, runtime = setup_run(tmp_path, monkeypatch, script)
+    previous = runtime.business.get_draft
+
+    def get_draft(draft_id):
+        result = previous(draft_id)
+        result['draft']['legs'] = [
+            {'arrivalCity': '南京', 'transport': '高铁二等座', 'privateNote': 'private-itinerary-note'},
+            {'arrivalCity': '杭州', 'isReturn': True},
+        ]
+        return result
+
+    runtime.business.get_draft = get_draft
+    asyncio.run(runtime.execute('r'))
+    events = tool_events(store)
+    assert events[-1]['itinerary'] == {'destination': '南京', 'transport': '高铁二等座'}
+    assert 'private-itinerary-note' not in json.dumps(events)

@@ -1,0 +1,239 @@
+.wr-panel {
+  --wr-ink: #25354a;
+  --wr-muted: #536477;
+  --wr-line: #d9e2e8;
+  --wi-sub: var(--wr-muted);
+  min-width: 0;
+  color: var(--wr-ink);
+  font-variant-numeric: tabular-nums;
+}
+.wr-section-heading,
+.wr-point-heading,
+.wr-filter {
+  display: flex;
+  align-items: center;
+}
+.wr-section-heading {
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+.wr-panel .wr-section-heading h4 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--wr-ink);
+  font-weight: 640;
+}
+.wr-section-heading > span {
+  color: var(--wr-muted);
+  font-size: 12px;
+}
+.wr-rules,
+.wr-points {
+  margin-top: 19px;
+}
+.wr-points ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--wr-line);
+  border-radius: 9px;
+  background: #fff;
+}
+.wr-points li + li {
+  border-top: 1px solid var(--wr-line);
+}
+.wr-point {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 0;
+  color: var(--wr-ink);
+  text-align: left;
+  background: transparent;
+  font: inherit;
+}
+.wr-points li:first-child > .wr-point {
+  border-start-start-radius: 8px;
+  border-start-end-radius: 8px;
+}
+.wr-points li:last-child > .wr-point {
+  border-end-start-radius: 8px;
+  border-end-end-radius: 8px;
+}
+.wr-points button.wr-point {
+  cursor: pointer;
+}
+.wr-points button.wr-point:hover {
+  background: #eff5f9;
+}
+.wr-points button.wr-point[aria-current='true'] {
+  background: #e8f1f7;
+}
+.wr-point-heading {
+  gap: 6px;
+  line-height: 1.5;
+}
+.wr-point-heading strong {
+  font-size: 14px;
+  font-weight: 625;
+}
+.wr-point-heading svg {
+  margin-inline-start: auto;
+  flex: none;
+  color: #547188;
+}
+.wr-point-reason {
+  display: block;
+  margin-top: 5px;
+  color: var(--wr-muted);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.wr-severity {
+  flex: none;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.65;
+  font-weight: 550;
+  padding: 0 5px;
+  background: var(--wr-badge, #ecf0f5);
+  color: var(--wr-label, #50647b);
+}
+.wr-panel p.wr-empty {
+  margin: 7px 0 0;
+  color: var(--wr-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.wr-block {
+  --wr-marker: #bf7065;
+  --wr-label: #893e36;
+  --wr-badge: #f8e8e4;
+}
+.wr-warn {
+  --wr-marker: #b78238;
+  --wr-label: #795018;
+  --wr-badge: #f8eedc;
+}
+.wr-passed {
+  --wr-marker: #578777;
+}
+.wr-pending {
+  --wr-marker: #7488a3;
+}
+.wr-notRun,
+.wr-inapplicable {
+  --wr-marker: #8894a0;
+}
+.wr-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--wr-line);
+  border-radius: 9px;
+  background: #fff;
+}
+.wr-filter {
+  font: inherit;
+  cursor: pointer;
+}
+.wr-filter:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.wr-filter.wr-metric {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--wr-ink);
+  text-align: left;
+  min-width: 0;
+}
+.wr-metric + .wr-metric {
+  border-inline-start: 1px solid var(--wr-line);
+}
+.wr-metric:first-child {
+  border-radius: 8px 0 0 8px;
+}
+.wr-metric:last-child {
+  border-radius: 0 8px 8px 0;
+}
+.wr-metric-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--wr-muted);
+}
+.wr-metric-label > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--wr-marker);
+}
+.wr-metric strong {
+  font-size: 21px;
+  font-weight: 625;
+  line-height: 1.2;
+}
+.wr-metric:disabled strong {
+  color: #637284;
+}
+.wr-metric-meter {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  height: 3px;
+  margin-top: 1px;
+  border-radius: 2px;
+  background: #e9edf0;
+}
+.wr-metric-meter i {
+  display: block;
+  height: 100%;
+  background: var(--wr-marker);
+}
+.wr-other-outcomes {
+  margin-top: 5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+}
+.wr-other-outcomes .wr-filter {
+  gap: 4px;
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
+  color: #415871;
+  font-size: 12px;
+}
+.wr-filter[aria-expanded='true'],
+.wr-filter:enabled:hover {
+  background: #eaf1f6;
+}
+.wr-other-outcomes .wr-filter[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.wr-rows:not([hidden]) {
+  margin-top: 9px;
+}
+.wr-rows .wi-rule {
+  border-color: var(--wr-line);
+}
+.wr-rows .wi-rule summary strong {
+  overflow-wrap: anywhere;
+}
+.wr-panel :is(summary, button):focus-visible {
+  outline: 2px solid #517ca8;
+  outline-offset: 2px;
+}
+.wr-panel ::selection {
+  background: #d9e8f7;
+  color: #1d3852;
+}

@@ -1,0 +1,91 @@
+.agent-first .page-heading.catalog-heading {
+  display: block;
+  container-type: inline-size;
+  margin-bottom: 24px;
+  --catalog-art: url('/agent-assets/catalog/studio-hub.webp');
+  --catalog-paper: #e8effa;
+}
+.page-heading.catalog-heading[data-catalog='light-apps'] {
+  --catalog-art: url('/agent-assets/catalog/studio-apps.webp');
+  --catalog-paper: #e6f1f3;
+}
+.page-heading.catalog-heading[data-catalog='schedules'] {
+  --catalog-art: url('/agent-assets/catalog/studio-schedules.webp');
+  --catalog-paper: #e6ecfa;
+}
+.catalog-heading-surface {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: clamp(154px, 18cqw, 206px);
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 14px;
+  background-color: var(--catalog-paper);
+}
+.catalog-heading-art {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  container-type: size;
+  pointer-events: none;
+}
+/* The 3:1 painting keeps its figures in proportion while its quiet left edge fills the header. */
+.catalog-heading-art::before, .catalog-heading-art::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  background-image: var(--catalog-art);
+  background-repeat: no-repeat;
+}
+.catalog-heading-art::before {
+  left: 0;
+  right: calc(180cqh - 1px);
+  background-size: 250% 100%;
+  background-position: left center;
+}
+.catalog-heading-art::after {
+  right: 0;
+  width: 180cqh;
+  background-size: auto 100%;
+  background-position: right center;
+}
+.catalog-heading-text { padding: 23px clamp(20px, 3.6cqw, 45px); width: 60%; }
+.agent-first .catalog-heading-text h1 {
+  margin: 0;
+  color: #15354d;
+  font-size: clamp(27px, 3.8cqw, 42px);
+  font-weight: 680;
+  line-height: 1.2;
+}
+.catalog-heading-text p {
+  margin: 10px 0 0;
+  max-width: 36em;
+  color: #344f61;
+  font-size: 15px;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+@container (max-width: 620px) {
+  .catalog-heading-surface { min-height: 140px; }
+  .catalog-heading-text { width: 52%; padding: 16px 5px 16px 16px; }
+  .catalog-heading-text p { font-size: 13px; margin-top: 7px; line-height: 1.5; }
+  .catalog-heading-art::before { right: 0; }
+  .catalog-heading-art::after {
+    width: 49%;
+    mask-image: linear-gradient(to right, transparent, black 15%);
+  }
+}
+@container (max-width: 380px) {
+  .catalog-heading[data-catalog='schedules'] .catalog-heading-surface {
+    min-height: clamp(116px, 37cqw, 140px);
+  }
+  .catalog-heading[data-catalog='schedules'] .catalog-heading-text {
+    width: 50%;
+    padding-block: 9px;
+  }
+  .catalog-heading[data-catalog='schedules'] .catalog-heading-art::after {
+    width: 54%;
+    mask-image: linear-gradient(to right, transparent, black 8%);
+  }
+}

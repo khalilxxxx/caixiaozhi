@@ -142,8 +142,9 @@ class BusinessTests(unittest.TestCase):
         with self.assertRaises(BusinessError):
             self.business.submit_draft('travel', draft['version'], 'rule-changed')
         result = self.business.preaudit()
-        self.assertEqual(len(result['items']), 8)
-        self.assertEqual(sum(result['counts'].values()), 8)
+        documents = self.store.state['data']['auditDocuments']
+        self.assertCountEqual([item['document']['id'] for item in result['items']], [doc['id'] for doc in documents])
+        self.assertEqual(sum(result['counts'].values()), len(documents))
 
 if __name__ == '__main__':
     unittest.main()

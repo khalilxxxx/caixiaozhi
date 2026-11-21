@@ -20,6 +20,12 @@ def ocr_result():
         'sourceLanguage': 'zh-Hans'}
 
 
+@pytest.fixture(autouse=True)
+def local_ocr_fallback(monkeypatch):
+    # 这里专门覆盖没有配置视觉模型时的原文/OCR兼容路径。
+    monkeypatch.setattr('material_vision.vision_settings', lambda: None)
+
+
 def setup(tmp_path, monkeypatch, name='材料.png'):
     monkeypatch.setattr(config, 'DATA_DIR', tmp_path)
     store = Store(tmp_path / 'state.db')

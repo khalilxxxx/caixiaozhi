@@ -1,3 +1,5 @@
+import { getExpenseCategory, materialCategoryId } from './submission-model';
+
 export interface MaterialFile {
   id: string;
   name: string;
@@ -15,12 +17,22 @@ export interface MaterialFile {
 export interface MaterialExpense {
   id: string;
   name: string;
-  category: '交通' | '住宿' | '餐饮' | '办公' | null;
+  category: '交通' | '住宿' | '餐饮' | '办公' | '其他' | null;
+  categoryId?: string | null;
+  categoryHint?:
+    'unclear' | 'mixed' | 'meal-purpose' | 'meal-oa' | 'travel-misc';
   amount: number | null;
   date: string;
   end?: string;
   purpose: string;
   oaId?: string;
+  tripId?: string;
+  matchedDraftId?: string;
+  tripMode?: string;
+  departureCity?: string;
+  arrivalCity?: string;
+  city?: string;
+  transport?: string;
   group: 'travel' | 'daily' | null;
   sourceFileId: string;
   confirmed: boolean;
@@ -32,6 +44,43 @@ export interface MaterialExpense {
 
 export const materialBatchId = 'batch-20261111';
 
+export function materialExpenseCategory(item: MaterialExpense) {
+  return getExpenseCategory(
+    materialCategoryId(item, item.group === 'daily' ? 'personal' : 'expense'),
+  );
+}
+
+export function materialCategoryQuestion(item: MaterialExpense): string {
+  if (materialExpenseCategory(item)) return '';
+  if (item.categoryHint === 'meal-oa')
+    return '请核对接待 OA 单号，再选择费用类型。';
+  if (item.categoryHint === 'meal-purpose' || item.category === '餐饮')
+    return '请确认用餐用途。属于客户招待时，选择对应的餐饮类型。';
+  if (item.categoryHint === 'mixed')
+    return '票面含多种服务。请核对本笔报销项目并选择费用类型。';
+  if (item.categoryHint === 'travel-misc')
+    return '请核对是否属于差旅产生的长途交通杂费。';
+  return '请查看票面的商品或服务明细，再选择费用类型。';
+}
+
+export function draftMaterialFileIds(
+  draft:
+    | {
+        materialIds: string[];
+        expenses: { sourceFileId?: string; files: { id: string }[] }[];
+      }
+    | undefined,
+  selected: string[],
+): string[] {
+  const ids = new Set(draft?.materialIds);
+  for (const expense of draft?.expenses ?? []) {
+    if (expense.sourceFileId) ids.add(expense.sourceFileId);
+    for (const invoice of expense.files) ids.add(invoice.id);
+  }
+  for (const id of selected) ids.add(id);
+  return [...ids];
+}
+
 export function materialExpenseError(item: MaterialExpense): string {
   if (!item.name.trim()) return '请填写费用名称。';
   if (
@@ -40,28 +89,29 @@ export function materialExpenseError(item: MaterialExpense): string {
     (item.amount ?? 0) > 10000000000
   )
     return '请填写大于零且最多两位小数的有效金额。';
-  if (!['交通', '住宿', '餐饮', '办公'].includes(item.category ?? ''))
-    return '请选择费用类别。';
+  const category = materialExpenseCategory(item);
+  if (!category) return materialCategoryQuestion(item);
   if (!['travel', 'daily'].includes(item.group ?? ''))
     return '请选择费用归属。';
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(item.date) ||
-    !Number.isFinite(Date.parse(item.date)) ||
-    new Date(item.date).toISOString().slice(0, 10) !== item.date
-  )
+  if ((item.date || category.template !== 'T01') && !isMaterialDate(item.date))
     return '请填写有效的费用日期。';
   if (!item.purpose.trim()) return '请填写实际用途。';
   if (
-    item.category === '住宿' &&
-    (!item.end ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(item.end) ||
-      !Number.isFinite(Date.parse(item.end)) ||
-      new Date(item.end).toISOString().slice(0, 10) !== item.end ||
-      item.end <= item.date)
+    ['T03', 'T09'].includes(category.template) &&
+    (!item.end || !isMaterialDate(item.end) || item.end <= item.date)
   )
     return '离店日期应晚于入住日期。';
-  if (item.issue === 'oa' && !item.oaId) return '请填写对应的 OA 申请。';
+  if (category.id === 'reception-meal-oa' && !item.oaId?.trim())
+    return '请填写对应的 OA 申请。';
   return '';
+}
+
+function isMaterialDate(value: string) {
+  return (
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    Number.isFinite(Date.parse(value)) &&
+    new Date(value).toISOString().slice(0, 10) === value
+  );
 }
 
 export function selectMaterialScope<
@@ -112,7 +162,6 @@ export function buildMaterialExpenseBatch(
         item,
       ): item is MaterialExpense & {
         amount: number;
-        category: NonNullable<MaterialExpense['category']>;
         group: NonNullable<MaterialExpense['group']>;
       } =>
         !item.excluded &&
@@ -126,10 +175,20 @@ export function buildMaterialExpenseBatch(
     .map((item) => {
       const duration = Date.parse(item.end ?? '') - Date.parse(item.date);
       const nights =
-        item.category === '住宿' && Number.isFinite(duration) && duration > 0
+        ['T03', 'T09'].includes(
+          materialExpenseCategory(item)?.template ?? '',
+        ) &&
+        Number.isFinite(duration) &&
+        duration > 0
           ? Math.round(duration / 86400000)
           : undefined;
-      return { ...item, start: item.date, nights };
+      return {
+        ...item,
+        category: item.category ?? '',
+        categoryId: materialExpenseCategory(item)?.id ?? null,
+        start: item.date,
+        nights,
+      };
     });
   const materialIds = [...new Set(items.map((item) => item.sourceFileId))];
   return {

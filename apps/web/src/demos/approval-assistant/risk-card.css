@@ -1,0 +1,299 @@
+.ra-card {
+  --card-ink: #273749;
+  --card-muted: #576677;
+  --card-line: #dde4e9;
+  --card-link: #365e85;
+  --accent: #7c4552;
+  --arc: #ba5c50;
+  --track: #eadbd5;
+  --pass: #53887c;
+  --warn: #c08637;
+  --block: #bf6b60;
+  --pending: #8797b0;
+  border: 1px solid var(--card-line);
+  border-radius: 15px;
+  background: white;
+  color: var(--card-ink);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  min-width: 0;
+}
+.ra-card.tone-high {
+  --accent: #9c443d;
+  --arc: #c86859;
+  --track: #f0dfd9;
+}
+.ra-card.tone-medium {
+  --accent: #84551d;
+  --arc: #ba8439;
+  --track: #eae0ce;
+}
+.ra-card.tone-low {
+  --accent: #346b5f;
+  --arc: #568f7d;
+  --track: #dceae4;
+}
+.ra-card.tone-neutral {
+  --accent: #586a80;
+  --arc: #8b9caf;
+  --track: #e0e6ed;
+}
+.ra-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.ra-brand img {
+  display: block;
+  width: 29px;
+  height: 29px;
+  object-fit: contain;
+  flex: none;
+}
+.ra-brand span {
+  font-size: 13px;
+  font-weight: 610;
+}
+.ra-ring {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  flex: none;
+}
+.ra-ring svg,
+.ra-ring > span {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.ra-ring circle {
+  stroke-width: 6.4;
+}
+.ra-ring .ra-track {
+  stroke: var(--track);
+}
+.ra-ring .ra-arc {
+  stroke: var(--arc);
+  stroke-linecap: round;
+}
+.tone-neutral .ra-track {
+  stroke-dasharray: 3 3;
+}
+.ra-ring > span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.ra-ring b {
+  font-size: 29px;
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  font-weight: 625;
+}
+.ra-ring small {
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--card-muted);
+}
+.ra-level > span {
+  display: block;
+  font-size: 12px;
+  color: var(--card-muted);
+  font-weight: 500;
+}
+.ra-level strong {
+  display: block;
+  font-size: 24px;
+  margin-top: 1px;
+  line-height: 1.35;
+  color: var(--accent);
+  font-weight: 640;
+  letter-spacing: -0.025em;
+}
+.ra-card .ra-summary {
+  font-size: 13px;
+  color: #3d5061;
+  line-height: 1.7;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.ra-points,
+.ra-execution {
+  padding: 16px 19px 0;
+}
+.ra-card h4 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--card-ink);
+  font-size: 13px;
+  font-weight: 640;
+  margin: 0 0 9px;
+}
+.ra-card h4 > small {
+  color: var(--card-muted);
+  font-size: 11px;
+  font-weight: 450;
+}
+.ra-points ol,
+.ra-execution ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ra-points ol {
+  display: grid;
+  gap: 10px;
+}
+.ra-point {
+  min-width: 0;
+}
+.ra-point-head {
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+}
+.ra-point-head strong {
+  font-size: 13px;
+  font-weight: 580;
+  line-height: 1.5;
+}
+.ra-flag {
+  display: inline-block;
+  flex: none;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 560;
+  line-height: 1.55;
+  padding: 1px 5px;
+  color: #913e35;
+  background: #f9e9e6;
+}
+.ra-warn .ra-flag {
+  background: #fbefda;
+  color: #80521a;
+}
+.ra-pending .ra-flag {
+  background: #e9edf4;
+  color: #445a75;
+}
+.ra-point p,
+.ra-points > .ra-empty,
+.ra-points > .ra-more,
+.ra-execution > .ra-skipped {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--card-muted);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.ra-card button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  border-radius: 3px;
+  color: var(--card-link);
+}
+.ra-card button:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ra-execution h4 {
+  justify-content: space-between;
+}
+.ra-execution h4 > span {
+  font-size: 11px;
+  color: var(--card-muted);
+  font-weight: 450;
+}
+.ra-execution h4 > span b {
+  font-weight: 640;
+}
+.ra-bar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #e9edf1;
+}
+.ra-bar i {
+  flex-basis: 0;
+}
+.ra-passed {
+  --stat: var(--pass);
+}
+.ra-warn {
+  --stat: var(--warn);
+}
+.ra-block {
+  --stat: var(--block);
+}
+.ra-pending {
+  --stat: var(--pending);
+}
+.ra-bar i,
+.ra-execution li i {
+  background-color: var(--stat);
+}
+.ra-execution ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 17px;
+  margin-top: 7px;
+}
+.ra-execution li {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--card-muted);
+}
+.ra-execution li i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+.ra-execution li b {
+  color: var(--card-ink);
+  font-size: 12px;
+  font-weight: 610;
+}
+.ra-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 5px 17px;
+  border-top: 1px solid var(--card-line);
+  margin-top: 13px;
+}
+.ra-rules-link {
+  min-height: 27px;
+  padding: 2px 0 2px 8px;
+}
+@container approval-card (max-width: 390px) {
+  .ra-points,
+  .ra-execution {
+    padding-inline: 14px;
+  }
+  .ra-card-foot {
+    padding-inline: 13px;
+  }
+  .ra-ring {
+    width: 72px;
+    height: 72px;
+  }
+  .ra-ring b {
+    font-size: 25px;
+  }
+  .ra-level strong {
+    font-size: 21px;
+  }
+}

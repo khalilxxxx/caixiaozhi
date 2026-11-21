@@ -11,8 +11,4 @@ BASE_URL = os.getenv('AGNO_BASE_URL') or os.getenv('DSH_BASE_URL') or 'https://a
 THINKING = os.getenv('AGNO_THINKING', 'true').strip().lower() not in {'0', 'false', 'off', 'disabled', 'no'}
 PORT = int(os.getenv('AGNO_PORT', '5191'))
 ALLOWED_ORIGINS = {'http://127.0.0.1:5190', 'http://localhost:5190', f'http://127.0.0.1:{PORT}'}
-for origin in os.getenv('AGNO_ALLOWED_ORIGINS', '').split(','):
-    origin = origin.strip()
-    if origin:
-        ALLOWED_ORIGINS.add(origin)
 MAX_FILE_BYTES = 10 * 1024 * 1024

@@ -19,6 +19,7 @@ import {
 import {
   draftPeriod,
   getDraftType,
+  submissionLabels,
   draftCurrencyTotals,
   draftTotal,
   expenseNights,
@@ -27,7 +28,6 @@ import {
   amountCents as parseCents,
   validateDraft,
   type DraftId,
-  type DraftType,
   type MaterialExpenseImport,
   type SubmissionDraft,
   type ValidationIssue,
@@ -47,13 +47,10 @@ import {
 } from './submission-state.js';
 export { SUBMISSIONS_KEY } from './submission-state.js';
 import './submission.css';
+import './submission-expense-shell.css';
 import { api } from './runtime-client';
 
-export const submissionLabels: Record<DraftType, string> = {
-  travel: '差旅申请',
-  expense: '差旅报销',
-  personal: '个人费用报销',
-};
+export { submissionLabels } from './submission-model.js';
 
 interface SubmissionCheck {
   version: number;
@@ -603,9 +600,11 @@ function DraftOverview({
 function CheckResults({
   check,
   current,
+  compact = false,
 }: {
   check?: SubmissionCheck;
   current: boolean;
+  compact?: boolean;
 }) {
   if (!check)
     return (
@@ -643,10 +642,15 @@ function CheckResults({
           <p>{finding.detail}</p>
           {finding.evidence?.length ? (
             <details className="rs-source">
-              <summary>执行证据</summary>
+              <summary>{compact ? '查看依据' : '执行证据'}</summary>
               {finding.evidence.map((e, index) => (
                 <p key={e.path + index}>
-                  <code>{e.path}</code> · {e.quote}
+                  {!compact && (
+                    <>
+                      <code>{e.path}</code> ·{' '}
+                    </>
+                  )}
+                  {e.quote}
                 </p>
               ))}
             </details>
@@ -656,8 +660,8 @@ function CheckResults({
           <small>{finding.actual}</small>
         </div>
       ))}
-      <RuleEvaluationResults review={check.review} />
-      {!hasBlockingIssues(check) && (
+      {!compact && <RuleEvaluationResults review={check.review} />}
+      {!compact && !hasBlockingIssues(check) && (
         <div className="rs-clear">
           <Icon name="check" size={16} />
           {check.review.findings.some((f) => f.state === 'unknown')
@@ -668,18 +672,51 @@ function CheckResults({
         </div>
       )}
       <div className="rs-check-meta">
-        <span>{businessTime(check.checkedAt)}</span>
-        {check.review.engine && (
+        <span>
+          {compact ? '检查时间 ' : ''}
+          {businessTime(check.checkedAt)}
+        </span>
+        {!compact && check.review.engine && (
           <span>
             {check.review.engine}
             {check.review.model ? ` · ${check.review.model}` : ''}
           </span>
         )}
-        <span>
-          草稿 v{check.version} · {check.review.applicable.length} 项规则
-        </span>
+        {!compact && (
+          <span>
+            草稿 v{check.version} · {check.review.applicable.length} 项规则
+          </span>
+        )}
       </div>
     </div>
+  );
+}
+
+function ExpenseCheckDetails({
+  check,
+  current,
+  receipt = false,
+}: {
+  check: SubmissionCheck;
+  current: boolean;
+  receipt?: boolean;
+}) {
+  const count = check.issues.length + check.review.findings.length;
+  const status = !current
+    ? '需重新检查'
+    : count
+      ? `${count} 项需核对`
+      : '已通过';
+  return (
+    <details
+      className="sf-expense-check"
+      open={current && count > 0 && !receipt}
+    >
+      <summary>
+        {receipt ? '提交时检查' : '提交检查'} · {status}
+      </summary>
+      <CheckResults check={check} current={current} compact />
+    </details>
   );
 }
 
@@ -687,6 +724,21 @@ export function SubmissionPage() {
   const workspace = useWorkspace();
   const [state] = useSubmissionData();
   const [tab, setTab] = useState<'drafts' | 'requests'>('drafts');
+  const [creating, setCreating] = useState(false);
+  async function createFromReceipts(type: string) {
+    if (creating || (type !== 'personal' && type !== 'expense')) return;
+    setCreating(true);
+    try {
+      await workspace.flush();
+      const { draft } = await api<{ draft: SubmissionDraft }>('/business/new-draft', { id: type });
+      await workspace.refresh();
+      workspace.openPanel({ kind: 'materials', title: '发票转费用', data: { draftId: draft.id } });
+    } catch (error) {
+      workspace.notify(error instanceof Error ? error.message : '新建报销单失败，请重试。');
+    } finally {
+      setCreating(false);
+    }
+  }
   const activeDrafts = Object.values(state.drafts)
     .filter((draft) => draft.status === 'draft')
     .reverse();
@@ -731,6 +783,15 @@ export function SubmissionPage() {
             提交记录 <small>{state.requests.length}</small>
           </button>
         </div>
+        <label className="sf-create-reimbursement">
+          <Icon name="upload" size={15} />
+          <select aria-label="从票据新建报销单" value="" disabled={creating}
+            onChange={(event) => void createFromReceipts(event.target.value)}>
+            <option value="" disabled>{creating ? '正在新建…' : '从票据新建报销单'}</option>
+            <option value="personal">新建个人费用报销</option>
+            <option value="expense">新建差旅报销</option>
+          </select>
+        </label>
       </div>
       {tab === 'drafts' ? (
         <div className="sf-draft-cards">
@@ -780,7 +841,7 @@ export function SubmissionPage() {
                 )}
                 <div className="sf-card-details">
                   <span>
-                    {draft.applicant || '申请人待补充'} ·{' '}
+                    {draft.documentNumber && <>{draft.documentNumber} · </>}{draft.applicant || '申请人待补充'} ·{' '}
                     {draft.department || '部门待补充'}
                   </span>
                   <span>{periodLabel(draft)}</span>
@@ -862,6 +923,10 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
   const id = resolveDraftId(panel.id);
   const saved = state.drafts[id]!;
   const draft = state.edits[id] ?? saved;
+  const expenseForm = getDraftType(saved) !== 'travel';
+  const panelClass = expenseForm
+    ? 'rs-panel sf-panel sf-expense-panel'
+    : 'rs-panel sf-panel';
   const ruleState = (workspace.state.data[RULES_SUBMISSION_KEY] ??
     INITIAL_RULES_SUBMISSION) as RulesSubmissionState;
   const [error, setError] = useState('');
@@ -901,7 +966,9 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
     incoming &&
     panel.data?.materialBatchId === incoming.materialBatchId &&
     importTargets.includes(id) &&
-    importTargets.some((key) => state.drafts[key]?.sourceImportKey !== batchKey);
+    importTargets.some(
+      (key) => state.drafts[key]?.sourceImportKey !== batchKey,
+    );
   const hasImportEdits = importTargets.some(
     (key) => state.edits[key] && isDirty(state.edits[key]!, state.drafts[key]!),
   );
@@ -956,12 +1023,19 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
         '.sf-field:has(.sf-field-error) input:not([readonly]), .sf-field:has(.sf-field-error) select, .sf-field:has(.sf-field-error) textarea',
       );
       const target =
+        (issuePath === 'expenses'
+          ? fields.querySelector<HTMLButtonElement>('[data-add-expense]')
+          : null) ??
         invalid ??
         fields.querySelector<HTMLElement>(
           'input:not([readonly]), select, textarea',
         );
-      const details = target?.closest('details');
-      if (details) details.open = true;
+      for (
+        let parent = target?.parentElement;
+        parent && parent !== fields;
+        parent = parent.parentElement
+      )
+        if (parent instanceof HTMLDetailsElement) parent.open = true;
       (target ?? fields).scrollIntoView({
         block: 'center',
         behavior: 'instant',
@@ -1071,6 +1145,16 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
       await workspace.refresh();
       if (!result.canSubmit) {
         if (result.check.issues.length) editDraft(result.check.issues[0]?.path);
+        else if (expenseForm) {
+          requestAnimationFrame(() => {
+            const summary =
+              fieldsRef.current?.parentElement?.querySelector<HTMLElement>(
+                '.sf-expense-check > summary',
+              );
+            summary?.scrollIntoView({ block: 'center' });
+            summary?.focus({ preventScroll: true });
+          });
+        }
         workspace.notify('请处理待完善项');
       } else if (continueToConfirm)
         workspace.openPanel(submissionPanel(id, { step: 'confirm' }));
@@ -1133,30 +1217,39 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
     state.requests.find((item) => item.draftId === id);
   if (saved.status === 'awaiting_receipt' || panel.data?.requestId) {
     const snapshot = request?.snapshot ?? saved;
+    const receiptDetails = (
+      <>
+        <dt>单据类型</dt>
+        <dd>{submissionLabels[getDraftType(id)]}</dd>
+        <dt>申请人</dt>
+        <dd>{request?.applicant || snapshot.applicant}</dd>
+        <dt>部门</dt>
+        <dd>{snapshot.department}</dd>
+        <dt>付款公司</dt>
+        <dd>{snapshot.paymentCompany}</dd>
+        <dt>请求编号</dt>
+        <dd>{request?.id || '待返回'}</dd>
+      </>
+    );
     return (
-      <div className="rs-panel sf-panel">
-        <SubmissionStages stage={2} />
+      <div className={panelClass}>
+        {!expenseForm && <SubmissionStages stage={2} />}
         <div className="rs-receipt-state">
           <span>
             <Icon name="clock" size={26} />
           </span>
           <div>
             <h3>{request?.localStatus ? '本地业务已受理' : '等待业务回执'}</h3>
-            <Badge tone={request?.localStatus ? 'success' : 'warning'}>
-              {request?.localStatus ? '已受理' : '待核实'}
-            </Badge>
+            {!expenseForm && (
+              <Badge tone={request?.localStatus ? 'success' : 'warning'}>
+                {request?.localStatus ? '已受理' : '待核实'}
+              </Badge>
+            )}
           </div>
         </div>
         <dl className="rs-definition">
-          <dt>单据类型</dt>
-          <dd>{submissionLabels[getDraftType(id)]}</dd>
-          <dt>申请人</dt>
-          <dd>{request?.applicant || snapshot.applicant}</dd>
-          <dt>部门</dt>
-          <dd>{snapshot.department}</dd>
-          <dt>付款公司</dt>
-          <dd>{snapshot.paymentCompany}</dd>
-          {getDraftType(id) !== 'travel' && (
+          {!expenseForm && receiptDetails}
+          {expenseForm && (
             <>
               <dt>报销金额</dt>
               <dd>
@@ -1166,8 +1259,6 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
           )}
           <dt>单据事由</dt>
           <dd>{snapshot.purpose}</dd>
-          <dt>请求编号</dt>
-          <dd>{request?.id || '待返回'}</dd>
           <dt>记录时间</dt>
           <dd>{businessTime(request?.createdAt || snapshot.savedAt)}</dd>
           <dt>业务单号</dt>
@@ -1185,16 +1276,27 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
             </>
           )}
         </dl>
+        {expenseForm && (
+          <details className="sf-expense-check">
+            <summary>单据信息</summary>
+            <dl className="rs-definition rs-compact-definition">
+              {receiptDetails}
+            </dl>
+          </details>
+        )}
         {error && (
           <p className="rs-error" role="alert">
             {error}
           </p>
         )}
-        {request?.check && (
-          <Section title="提交时检查">
-            <CheckResults check={request.check} current />
-          </Section>
-        )}
+        {request?.check &&
+          (expenseForm ? (
+            <ExpenseCheckDetails check={request.check} current receipt />
+          ) : (
+            <Section title="提交时检查">
+              <CheckResults check={request.check} current />
+            </Section>
+          ))}
         <div className="rs-panel-actions">
           <Button
             icon="link"
@@ -1280,8 +1382,8 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
   if (panel.data?.step === 'confirm') {
     const period = draftPeriod(saved);
     return (
-      <div className="rs-panel sf-panel">
-        <SubmissionStages stage={1} />
+      <div className={panelClass}>
+        {!expenseForm && <SubmissionStages stage={1} />}
         <div className="rs-confirm-amount">
           <span>{submissionLabels[getDraftType(id)]}</span>
           {getDraftType(id) !== 'travel' && <DraftAmount draft={saved} />}
@@ -1297,7 +1399,9 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
           <dd>{saved.purpose}</dd>
           <dt>业务日期</dt>
           <dd>
-            {period.start} — {period.end}
+            {expenseForm
+              ? periodLabel(saved)
+              : `${period.start} — ${period.end}`}
           </dd>
           {getDraftType(id) === 'travel' && (
             <>
@@ -1317,11 +1421,22 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
               <dd>{saved.expenses.length} 笔</dd>
             </>
           )}
-          <dt>检查版本</dt>
-          <dd>
-            草稿 v{saved.version} · {businessTime(check?.checkedAt)}
-          </dd>
+          {!expenseForm && (
+            <>
+              <dt>检查版本</dt>
+              <dd>
+                草稿 v{saved.version} · {businessTime(check?.checkedAt)}
+              </dd>
+            </>
+          )}
         </dl>
+        {expenseForm &&
+          current &&
+          !dirty &&
+          check &&
+          check.review.findings.length > 0 && (
+            <ExpenseCheckDetails check={check} current />
+          )}
         {(!current || dirty) && (
           <div className="rs-notice warning">
             单据或适用规则已变更，请返回重新检查。
@@ -1357,9 +1472,9 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
   }
 
   return (
-    <div className="rs-panel sf-panel">
-      <SubmissionStages stage={0} />
-      {pendingImport ? (
+    <div className={panelClass}>
+      {!expenseForm && <SubmissionStages stage={0} />}
+      {pendingImport && !editingExpense ? (
         <div className="rs-import-notice">
           <div>
             <strong>{incoming!.items.length} 笔费用待载入</strong>
@@ -1390,37 +1505,39 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
           </Button>
         </div>
       ) : null}
-      <div className="sf-view-toolbar">
-        <div className="sf-view-tabs" role="tablist" aria-label="单据视图">
-          <button
-            type="button"
-            role="tab"
-            id={`overview-tab-${id}`}
-            aria-selected={view === 'overview'}
-            aria-controls={`overview-${id}`}
-            disabled={editingExpense || busy}
-            className={view === 'overview' ? 'active' : ''}
-            onClick={() => setView('overview')}
-          >
-            单据概览
-          </button>
-          <button
-            type="button"
-            role="tab"
-            id={`edit-tab-${id}`}
-            aria-selected={view === 'edit'}
-            aria-controls={`edit-${id}`}
-            className={view === 'edit' ? 'active' : ''}
-            onClick={() => setView('edit')}
-          >
-            编辑单据
-          </button>
+      {!expenseForm && (
+        <div className="sf-view-toolbar">
+          <div className="sf-view-tabs" role="tablist" aria-label="单据视图">
+            <button
+              type="button"
+              role="tab"
+              id={`overview-tab-${id}`}
+              aria-selected={view === 'overview'}
+              aria-controls={`overview-${id}`}
+              disabled={editingExpense || busy}
+              className={view === 'overview' ? 'active' : ''}
+              onClick={() => setView('overview')}
+            >
+              单据概览
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id={`edit-tab-${id}`}
+              aria-selected={view === 'edit'}
+              aria-controls={`edit-${id}`}
+              className={view === 'edit' ? 'active' : ''}
+              onClick={() => setView('edit')}
+            >
+              编辑单据
+            </button>
+          </div>
+          <Badge tone={dirty ? 'warning' : 'neutral'}>
+            {dirty ? '有未保存更改' : `草稿 v${saved.version}`}
+          </Badge>
         </div>
-        <Badge tone={dirty ? 'warning' : 'neutral'}>
-          {dirty ? '有未保存更改' : `草稿 v${saved.version}`}
-        </Badge>
-      </div>
-      {view === 'overview' ? (
+      )}
+      {!expenseForm && view === 'overview' ? (
         <div
           role="tabpanel"
           id={`overview-${id}`}
@@ -1432,9 +1549,9 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
         <div
           className="sf-edit-content"
           ref={fieldsRef}
-          role="tabpanel"
+          role={expenseForm ? undefined : 'tabpanel'}
           id={`edit-${id}`}
-          aria-labelledby={`edit-tab-${id}`}
+          aria-labelledby={expenseForm ? undefined : `edit-tab-${id}`}
         >
           <SubmissionFields
             key={id}
@@ -1443,86 +1560,93 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
             issues={
               current && !dirty ? check?.issues : showValidation ? issues : []
             }
+            expenseAction={
+              expenseForm && (
+                <Button
+                  icon="upload"
+                  variant="ghost"
+                  disabled={editingExpense || busy}
+                  onClick={() =>
+                    workspace.openPanel({
+                      kind: 'materials',
+                      title: 'AI 发票转费用',
+                      data: { draftId: id },
+                    })
+                  }
+                >
+                  AI 发票转费用
+                </Button>
+              )
+            }
           />
-          {getDraftType(id) !== 'travel' && (
-            <div className="sf-material-actions">
-              <Button
-                icon="upload"
-                disabled={editingExpense || busy}
-                onClick={() =>
-                  workspace.openPanel({
-                    kind: 'materials',
-                    id: 'batch-20261111',
-                    title: 'AI 发票转费用',
-                    data: { draftId: id },
-                  })
-                }
-              >
-                AI 发票转费用
-              </Button>
-            </div>
-          )}
         </div>
       )}
-      {check && (
-        <Section
-          title="提交检查"
-          action={
-            <Button
-              variant="ghost"
-              disabled={editingExpense || busy}
-              onClick={() => saveAndCheck(false)}
-            >
-              重新检查
-            </Button>
-          }
-        >
-          <CheckResults check={check} current={current && !dirty} />
-        </Section>
-      )}
-      {error && (
+      {check &&
+        !editingExpense &&
+        (expenseForm ? (
+          <ExpenseCheckDetails check={check} current={current && !dirty} />
+        ) : (
+          <Section
+            title="提交检查"
+            action={
+              <Button
+                variant="ghost"
+                disabled={editingExpense || busy}
+                onClick={() => saveAndCheck(false)}
+              >
+                重新检查
+              </Button>
+            }
+          >
+            <CheckResults check={check} current={current && !dirty} />
+          </Section>
+        ))}
+      {!editingExpense && error && (
         <p className="rs-error" role="alert">
           {error}
         </p>
       )}
-      <div className="rs-panel-actions sf-primary-actions">
-        {editingExpense && (
-          <p className="sf-editing-notice">请先保存或取消当前费用编辑。</p>
-        )}
-        <Button
-          variant="ghost"
-          icon="link"
-          disabled={editingExpense || busy}
-          onClick={() => {
-            workspace.attach({
-              kind: 'submission',
-              id,
-              title: draft.title,
-              version: 'v' + saved.version,
-            });
-            workspace.closePanel();
-            workspace.navigate('chat');
-          }}
-        >
-          加入对话
-        </Button>
-        <span className="rs-grow" />
-        <Button disabled={editingExpense || busy} onClick={save}>
-          保存草稿
-        </Button>
-        <Button
-          variant="primary"
-          disabled={editingExpense || busy}
-          onClick={() =>
-            canSubmit
-              ? workspace.openPanel(submissionPanel(id, { step: 'confirm' }))
-              : saveAndCheck(true)
-          }
-        >
-          {canSubmit ? '核对并提交' : dirty ? '保存并检查' : '检查并继续'}
-          <Icon name="arrow" size={14} />
-        </Button>
-      </div>
+      {!editingExpense && (
+        <div className="rs-panel-actions sf-primary-actions">
+          <Button
+            variant="ghost"
+            icon="link"
+            disabled={editingExpense || busy}
+            onClick={() => {
+              workspace.attach({
+                kind: 'submission',
+                id,
+                title: draft.title,
+                version: 'v' + saved.version,
+              });
+              workspace.closePanel();
+              workspace.navigate('chat');
+            }}
+          >
+            加入对话
+          </Button>
+          <span className="rs-grow" />
+          <Button disabled={editingExpense || busy} onClick={save}>
+            保存草稿
+          </Button>
+          <Button
+            variant="primary"
+            disabled={editingExpense || busy}
+            onClick={() =>
+              canSubmit
+                ? workspace.openPanel(submissionPanel(id, { step: 'confirm' }))
+                : saveAndCheck(true)
+            }
+          >
+            {expenseForm || canSubmit
+              ? '核对并提交'
+              : dirty
+                ? '保存并检查'
+                : '检查并继续'}
+            <Icon name="arrow" size={14} />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,0 +1,127 @@
+.ra-ledger {
+  --card-ink: #2c3e3b;
+  --card-line: #d8e2dd;
+  --card-link: #315e54;
+}
+.ra-ledger-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 18px;
+  background: #edf4ef;
+  color: #375b51;
+  border-bottom: 1px dashed #becdc4;
+}
+.ra-ledger-head > span {
+  color: #56685e;
+  font-size: 11px;
+}
+.ra-ledger-head img {
+  width: 26px;
+  height: 26px;
+}
+.ra-ledger-assess {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px 12px;
+}
+.ra-ledger-assess > div:first-child {
+  min-width: 0;
+}
+.ra-ledger .ra-ring {
+  width: 72px;
+  height: 72px;
+}
+.ra-ledger .ra-ring b {
+  font-size: 24px;
+}
+.ra-ledger .ra-level {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.ra-ledger .ra-level strong {
+  font-size: 20px;
+}
+.ra-ledger .ra-summary {
+  margin-top: 4px;
+}
+.ra-ledger .ra-points {
+  padding-top: 11px;
+  border-top: 1px dashed #d2dcd5;
+}
+.ra-ledger .ra-points ol {
+  counter-reset: finding;
+  gap: 0;
+}
+.ra-ledger .ra-point {
+  position: relative;
+  counter-increment: finding;
+  padding: 5px 0 6px 26px;
+}
+.ra-ledger .ra-point::before {
+  content: counter(finding, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 6px;
+  color: #526d61;
+  font-size: 11px;
+  font-weight: 610;
+}
+.ra-ledger .ra-point + .ra-point {
+  border-top: 1px solid #edf0ed;
+}
+.ra-ledger .ra-point-head {
+  justify-content: space-between;
+}
+.ra-ledger .ra-point-head strong {
+  order: -1;
+}
+.ra-ledger .ra-evidence {
+  padding: 2px 0;
+  margin-top: 4px;
+  font-size: 11px;
+}
+.ra-ledger .ra-execution {
+  margin-top: 7px;
+  padding-top: 11px;
+  border-top: 1px dashed #d3ddd7;
+}
+.ra-viz-ledger ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+  gap: 1px;
+  background: #dfe8e2;
+  border: 1px solid #dfe8e2;
+  overflow: hidden;
+  border-radius: 5px;
+}
+.ra-viz-ledger li {
+  background: #f5f8f5;
+  display: flex;
+  gap: 4px;
+  padding: 7px 8px;
+  font-size: 11px;
+}
+.ra-viz-ledger li b {
+  margin-left: auto;
+  font-size: 13px;
+}
+.ra-ledger .ra-card-foot {
+  margin-top: 7px;
+  border-top: 0;
+  padding-block: 2px 5px;
+}
+@container approval-card (max-width:390px) {
+  .ra-ledger-head,
+  .ra-ledger-assess {
+    padding-inline: 14px;
+  }
+  .ra-ledger-assess {
+    gap: 8px;
+  }
+}

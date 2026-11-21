@@ -21,26 +21,26 @@
   overflow: hidden;
 }
 .translation-workspace {
-  --translation-border: #e5e5e3;
-  --translation-muted: #6f6f74;
-  --translation-selected: #fff3eb;
+  --translation-border: var(--line);
+  --translation-muted: var(--muted);
+  --translation-selected: var(--enterprise-selected);
   display: flex;
   flex: 1;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  color: #29292d;
+  color: var(--ink);
   background: #fff;
   font-size: 13px;
   scrollbar-color: #c6c5c2 transparent;
   scrollbar-width: thin;
 }
 .translation-workspace ::selection {
-  background: #f7d7ce;
-  color: #29292d;
+  background: #abc3df;
+  color: var(--ink);
 }
 .translation-workspace :is(button, select, summary):focus-visible {
-  outline: 2px solid #8c8782;
+  outline: 2px solid var(--enterprise-focus);
   outline-offset: 3px;
 }
 .translation-workspace button:disabled {
@@ -83,7 +83,7 @@
   font-weight: 550;
 }
 .translation-file-control select {
-  color: #29292d;
+  color: var(--ink);
   width: min(100%, 470px);
   min-width: 0;
   border: 1px solid var(--translation-border);
@@ -99,11 +99,11 @@
   align-items: center;
   gap: 10px;
   flex: none;
-  color: #525257;
+  color: var(--enterprise-text);
 }
 .translation-language strong {
   font-weight: 550;
-  color: #29292d;
+  color: var(--ink);
 }
 .translation-inline-error {
   display: flex;
@@ -129,11 +129,11 @@
   margin: 24px;
   border: 1px dashed #c9c7c3;
   border-radius: 10px;
-  background: #fafaf9;
+  background: var(--canvas);
 }
 .translation-upload-area.is-dragging {
   background: var(--translation-selected);
-  border-color: #945432;
+  border-color: var(--enterprise-link);
 }
 .translation-upload-area > svg {
   color: #77736e;
@@ -145,7 +145,7 @@
 }
 .translation-workspace .translation-upload-area p {
   margin: -5px 20px 5px;
-  color: #6f6f74;
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.6;
   text-align: center;
@@ -210,10 +210,10 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #525257;
+  color: var(--enterprise-text);
 }
 .translation-icon-button:hover:enabled {
-  background: #efefed;
+  background: var(--enterprise-hover);
 }
 .translation-icon-button:disabled {
   opacity: 0.35;
@@ -223,7 +223,7 @@
   text-align: center;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: #525257;
+  color: var(--enterprise-text);
 }
 .translation-image-scroll {
   position: relative;
@@ -231,7 +231,7 @@
   flex: 1;
   overflow: auto;
   padding: 22px;
-  background: #efefed;
+  background: var(--enterprise-hover);
   overscroll-behavior: contain;
 }
 .translation-image-sheet {
@@ -300,12 +300,12 @@
   gap: 22px;
   min-height: 46px;
   padding: 6px 14px;
-  background: #fafaf9;
+  background: var(--canvas);
   border-top: 1px solid var(--translation-border);
   flex: none;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: #525257;
+  color: var(--enterprise-text);
 }
 .translation-text-scroll {
   flex: 1;
@@ -320,7 +320,7 @@
   margin: 0;
 }
 .translation-blocks > li + li {
-  border-top: 1px solid #efefed;
+  border-top: 1px solid var(--enterprise-hover);
 }
 .translation-text-block {
   display: flex;
@@ -332,7 +332,7 @@
   border: 1px solid transparent;
   border-radius: 7px;
   text-align: left;
-  color: #29292d;
+  color: var(--ink);
   cursor: pointer;
 }
 .translation-text-block:hover {
@@ -367,7 +367,7 @@
 .translation-source {
   font-size: 12px;
   line-height: 1.65;
-  color: #6f6f74;
+  color: var(--muted);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -450,7 +450,7 @@
   cursor: pointer;
   list-style: none;
   font-size: 12px;
-  color: #6f6f74;
+  color: var(--muted);
 }
 .translation-guide > summary::-webkit-details-marker {
   display: none;
@@ -465,11 +465,11 @@
   border-radius: 9px;
   background: #fff;
   box-shadow: 0 8px 35px rgb(30 30 34 / 18%);
-  color: #525257;
+  color: var(--enterprise-text);
 }
 .translation-guide strong {
   font-weight: 550;
-  color: #29292d;
+  color: var(--ink);
   font-size: 13px;
 }
 .translation-workspace .translation-guide p {
@@ -481,7 +481,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: #945432;
+  color: var(--enterprise-link);
   font-size: 12px;
   cursor: pointer;
 }

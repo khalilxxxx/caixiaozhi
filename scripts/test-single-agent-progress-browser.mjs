@@ -3,7 +3,7 @@ import { chromium, expect } from '@playwright/test';
 import http from 'node:http';
 import fs from 'node:fs/promises';
 
-const out = 'artifacts/single-agent-progress-20261117';
+const out = process.env.PROGRESS_ARTIFACT_DIR || 'artifacts/single-agent-progress-20261117';
 await fs.mkdir(out, { recursive: true });
 const base = await fetch('http://127.0.0.1:5191/api/local/workspace').then(r => r.json());
 let snapshot, task, runId, runStatus, history, clients, sequence, submitted;
@@ -23,8 +23,8 @@ function emit(kind, data, replayId) {
   for (const client of clients) client.write(entry);
   return id;
 }
-function step(id, name, label, status, durationMs) {
-  const entry = { id, name, label, status, startedAt: Date.now() - 1500, ...(status === 'running' ? {} : { finishedAt: Date.now(), durationMs }) };
+function step(id, name, label, status, durationMs, itinerary) {
+  const entry = { id, name, label, status, ...(itinerary && { itinerary }), startedAt: Date.now() - 1500, ...(status === 'running' ? {} : { finishedAt: Date.now(), durationMs }) };
   const message = task.messages.find(m => m.runId === runId);
   const index = message.tools.findIndex(s => s.id === id);
   if (index < 0) message.tools.push(entry); else message.tools[index] = entry;
@@ -99,8 +99,15 @@ try {
   step('read', 'read_uploaded_file', '读取费用材料', 'completed', 120);
   const duplicate = step('sum', 'summarize_expense_csv', '核对费用合计', 'running');
   await expect(page.locator('.run-progress-summary').last()).toContainText('核对费用合计');
-  await page.locator('.run-progress-summary').last().click();
+  await expect(page.locator('.run-progress-details').last()).toHaveAttribute('open', '');
   await expect(page.locator('.run-progress-step')).toHaveCount(2);
+  await page.locator('.run-progress-toggle').click();
+  await expect(page.locator('.run-progress-steps')).toBeHidden();
+  emit('status', { phase: 'working', label: '核对费用合计' });
+  await expect(page.locator('.run-progress-steps')).toBeHidden();
+  await page.locator('.run-progress-toggle').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.run-progress-steps')).toBeVisible();
   emit('tool', task.messages.at(-1).tools.at(-1), duplicate);
   await expect(page.locator('.run-progress-step')).toHaveCount(2);
   emit('delta', { text: '已完成费用归类，正在核对合计。' });
@@ -112,7 +119,7 @@ try {
 
   await page.reload();
   await expect(page.locator('.run-progress-summary').last()).toContainText('核对费用合计');
-  await page.locator('.run-progress-summary').last().click();
+  await expect(page.locator('.run-progress-details').last()).toHaveAttribute('open', '');
   await expect(page.locator('.run-progress-step')).toHaveCount(2);
   await expect(page.locator('.composer textarea')).toHaveValue('请保留我还没有发送的补充说明');
   step('sum', 'summarize_expense_csv', '核对费用合计', 'failed', 1800);
@@ -122,7 +129,7 @@ try {
   finish();
   await expect(page.locator('.chat-titlebar')).toContainText('已完成');
   await expect(page.locator('.run-progress-details').last()).not.toHaveAttribute('open', '');
-  await page.locator('.run-progress-summary').last().click();
+  await page.locator('.run-progress-toggle').last().click();
   await expect(page.locator('.run-progress-step')).toHaveCount(4);
   await expect(page.locator('.run-progress-step.is-failed')).toHaveCount(1);
   await expect(page.locator('.composer textarea')).toHaveValue('请保留我还没有发送的补充说明');
@@ -149,7 +156,7 @@ try {
   for (let i = 0; i < 28; i++) step(`history-${i}`, 'read_uploaded_file', `核对第 ${i + 1} 份费用材料`, 'completed', 100 + i);
   step('current', 'validate_submission', '检查单据', 'running');
   await page.reload();
-  await page.locator('.run-progress-summary').last().click();
+  await expect(page.locator('.run-progress-details').last()).toHaveAttribute('open', '');
   const thread = page.locator('.chat-thread');
   await thread.evaluate(element => { element.scrollTop = 0; element.dispatchEvent(new Event('scroll')); });
   const top = await thread.evaluate(element => element.scrollTop);
@@ -165,7 +172,7 @@ try {
   step('mobile-two', 'validate_submission', '检查费用金额与附件完整性', 'running');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
-  await page.locator('.run-progress-summary').last().click();
+  await expect(page.locator('.run-progress-details').last()).toHaveAttribute('open', '');
   await expect(page.locator('.run-progress-step')).toHaveCount(2);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   if (overflow) throw new Error('窄屏存在横向溢出');
@@ -174,6 +181,163 @@ try {
   await expect(page.getByRole('button', { name: '继续处理', exact: true })).toBeVisible();
   await page.screenshot({ path: `${out}/mobile-paused.png`, fullPage: true });
   results.push('390px布局、暂停与继续操作可达');
+
+  // Exercise the real CSS animation path separately from the existing reduced-motion journeys.
+  reset();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.reload();
+  await expect.poll(() => clients.size).toBeGreaterThan(0);
+  const progress = page.locator('.run-progress').last();
+  const summary = progress.locator('.run-progress-summary');
+  const activityLabel = summary.locator('.run-progress-label');
+  const hasRunningAnimation = locator => locator.evaluate(element =>
+    element.getAnimations({ subtree: true }).some(animation => animation.playState === 'running'));
+  const icon = summary.locator('.run-progress-activity-icon');
+  const glint = activityLabel.locator('.run-progress-glint');
+  const orbit = icon.locator('.run-progress-orbit-light');
+  const animations = locator => locator.evaluate(element =>
+    element.getAnimations({ subtree: true }).map(animation => animation.animationName));
+  const expectActivity = async (kind, label) => {
+    await expect(summary).toHaveAttribute('data-activity', kind);
+    await expect(icon).toBeVisible();
+    await expect(progress.getByRole('status')).toHaveText(label);
+    await expect(activityLabel).toContainText(label);
+    await expect(glint).toHaveAttribute('aria-hidden', 'true');
+    await expect.poll(() => animations(glint)).toContain('run-progress-glint');
+    await expect.poll(() => hasRunningAnimation(summary)).toBe(true);
+    if (kind === 'thinking') {
+      await expect(orbit).toBeVisible();
+      await expect.poll(() => animations(orbit)).toContain('run-progress-orbit');
+    } else {
+      await expect(orbit).toHaveCount(0);
+    }
+  };
+  emit('status', { phase: 'thinking', label: '正在分析任务' });
+  await expectActivity('thinking', '正在分析任务');
+  await page.screenshot({ path: `${out}/desktop-thinking-motion.png`, fullPage: true });
+  await page.locator('.message.assistant').last().screenshot({ path: `${out}/thinking-status-detail.png` });
+  const captureMotionFrames = async (firstFrame, count) => {
+    if (process.env.CAPTURE_PROGRESS_GIF !== '1') return;
+    const frames = `${out}/motion-frames`;
+    await fs.mkdir(frames, { recursive: true });
+    try {
+      for (let frame = 0; frame < count; frame++) {
+        await summary.evaluate((element, time) => {
+          for (const animation of element.getAnimations({ subtree: true })) {
+            animation.pause();
+            animation.currentTime = time;
+          }
+        }, frame * 100);
+        const number = String(firstFrame + frame).padStart(2, '0');
+        await summary.screenshot({ path: `${frames}/frame-${number}.png` });
+      }
+    } finally {
+      await summary.evaluate(element => element.getAnimations({ subtree: true }).forEach(animation => animation.play()));
+    }
+  };
+  await captureMotionFrames(0, 38);
+  const activities = [
+    ['reading', 'read_uploaded_file', '读取费用材料'],
+    ['searching', 'search_policies', '检索差旅制度'],
+    ['calculating', 'summarize_expense_csv', '汇总费用金额'],
+    ['writing', 'write_skill_file', '保存工作文件'],
+    ['checking', 'validate_skill_artifact', '核对成果金额'],
+  ];
+  const symbols = new Set();
+  for (const [kind, name, label] of activities) {
+    step(kind, name, label, 'running');
+    emit('status', { phase: 'working', label });
+    await expectActivity(kind, label);
+    symbols.add(await icon.locator('svg').innerHTML());
+    const details = progress.locator('.run-progress-details');
+    if (kind === 'reading') {
+      await captureMotionFrames(38, 19);
+      await details.locator('summary').click();
+    }
+    await expect(details).not.toHaveAttribute('open', '');
+    step(kind, name, label, 'completed', 180);
+  }
+  if (symbols.size !== activities.length) throw new Error('不同业务动作使用了相同图标');
+  await progress.locator('.run-progress-toggle').click();
+  await expect(progress.locator('.run-progress-steps')).toBeVisible();
+  await expect.poll(() => hasRunningAnimation(progress.locator('.run-progress-details'))).toBe(false);
+  emit('status', { phase: 'thinking', label: '正在思考' });
+  await expectActivity('thinking', '正在思考');
+  emit('status', { phase: 'responding', label: '正在整理回复' });
+  await expectActivity('writing', '正在整理回复');
+  emit('status', { phase: 'checking', label: '正在核对结果' });
+  await expectActivity('checking', '正在核对结果');
+  await page.screenshot({ path: `${out}/desktop-checking-motion.png`, fullPage: true });
+  await page.locator('.message.assistant').last().screenshot({ path: `${out}/checking-status-detail.png` });
+  results.push('思考光轨、五类动作图标和当前动作扫光；新增步骤保留手动折叠状态，步骤和计数保持静态');
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect.poll(() => hasRunningAnimation(progress)).toBe(false);
+  await expect(progress.getByRole('status')).toHaveText('正在核对结果');
+  await page.emulateMedia({ reducedMotion: 'no-preference', forcedColors: 'active' });
+  await expect.poll(() => hasRunningAnimation(progress)).toBe(false);
+  await expect(activityLabel).toBeVisible();
+  await page.emulateMedia({ forcedColors: 'none', contrast: 'more' });
+  await expect.poll(() => hasRunningAnimation(progress)).toBe(false);
+  await expect(icon).toBeVisible();
+  await page.emulateMedia({ contrast: 'no-preference' });
+  await expectActivity('checking', '正在核对结果');
+  emit('status', { status: '待你回答', label: '等待回答' });
+  await expect(activityLabel).toHaveText('等待回答');
+  await expect(glint).toHaveCount(0);
+  await expect(orbit).toHaveCount(0);
+  await expect.poll(() => hasRunningAnimation(progress)).toBe(false);
+  results.push('服务端等待回答事件停止动效，即使尚未收到本轮终态');
+  finish();
+  await expect(progress).toHaveClass(/is-completed/);
+  await expect(glint).toHaveCount(0);
+  await expect(orbit).toHaveCount(0);
+  await expect.poll(() => hasRunningAnimation(progress)).toBe(false);
+  await expect(progress.locator('.run-progress-toggle')).toContainText('已完成');
+  results.push('减少动态、增强对比度和强制色彩时保持静态且文字可读，完成后停止进度动效');
+
+  // A long conversation provides real scroll clipping for IntersectionObserver pause/resume.
+  reset();
+  task.messages.unshift(...Array.from({ length: 18 }, (_, index) => ({
+    id: `motion-history-${index}`, role: index % 2 ? 'assistant' : 'user',
+    text: `第 ${index + 1} 条历史核对记录。\n已核对费用类型与归集月份。\n保留原始材料和业务依据。\n继续处理最新事项。`,
+  })));
+  await page.reload();
+  await expect.poll(() => clients.size).toBeGreaterThan(0);
+  emit('status', { phase: 'thinking', label: '正在分析任务' });
+  await expectActivity('thinking', '正在分析任务');
+  await thread.evaluate(element => { element.scrollTop = 0; element.dispatchEvent(new Event('scroll')); });
+  await expect(progress).toHaveAttribute('data-motion-paused', 'true');
+  await expect.poll(() => hasRunningAnimation(progress)).toBe(false);
+  await page.getByRole('button', { name: '回到最新' }).click();
+  await expect(progress).not.toHaveAttribute('data-motion-paused', 'true');
+  await expectActivity('thinking', '正在分析任务');
+  results.push('向上阅读使活动行离屏后暂停、回到最新恢复动效');
+
+  step('motion-stop', 'read_uploaded_file', '读取费用材料', 'running');
+  await expectActivity('reading', '读取费用材料');
+  await page.getByRole('button', { name: '停止办理', exact: true }).click();
+  await expect(progress).toHaveClass(/is-paused|is-cancelled/);
+  await expect(glint).toHaveCount(0);
+  await expect(orbit).toHaveCount(0);
+  await expect.poll(() => hasRunningAnimation(progress)).toBe(false);
+  await expect(page.getByRole('button', { name: '继续处理', exact: true })).toBeVisible();
+  results.push('卡内停止后无活动动画，保留继续处理入口');
+  reset();
+  task.title = '准备一份差旅申请';
+  task.messages[0].text = '帮我准备去上海的差旅申请。';
+  step('attachment', 'read_uploaded_file', '读取行程附件', 'completed', 800);
+  step('travel', 'get_submission_draft', '读取差旅草稿', 'completed', 1100,
+    { destination: '上海', transport: '高铁二等座' });
+  step('prepare', 'update_submission_draft', '正在更新差旅申请草稿', 'running');
+  await page.reload();
+  await expect(progress.locator('.run-progress-count')).toHaveText('2/3 项已完成');
+  await expect(progress.locator('.run-progress-context')).toContainText('上海');
+  await expect(progress.getByText('0.8 秒')).toBeVisible();
+  await page.locator('.message.assistant').last().screenshot({ path: `${out}/stitch-execution-card.png` });
+  await page.screenshot({ path: `${out}/stitch-execution-desktop.png` });
+  results.push('与本轮绑定的行程摘要、完成数量及毫秒级耗时');
   if (errors.length) throw new Error(errors.join('\n'));
   await fs.writeFile(`${out}/browser-verification.json`, JSON.stringify({ fixture: true, results, errors, status: 'passed' }, null, 2));
   console.log(JSON.stringify({ status: 'passed', results, errors }, null, 2));

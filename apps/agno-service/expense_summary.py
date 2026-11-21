@@ -121,27 +121,39 @@ def get_result(store, result_id):
     return result
 
 
-def summarize_csv(store, file_id):
+def _csv_input(store, file_id):
     file = store.get_file(file_id)
     if file is None:
         raise ValueError('文件不存在。')
     content = _read_content(file)
+    return file, content
+
+
+def _calculate(file, content):
+    rows, groups = _parse_csv(content)
+    return _with_display_amounts({
+        'toolId': TOOL_ID, 'fileId': file['metadata']['id'], 'fileName': file['metadata']['name'],
+        'rowCount': len(rows), 'totalMinor': str(sum(int(row['amountMinor']) for row in rows)),
+        'groups': groups, 'rows': rows,
+    })
+
+
+def preview_csv(store, file_id):
+    """Read and total the original CSV without creating a tool-result record."""
+    file, content = _csv_input(store, file_id)
+    return {'result': _calculate(file, content), 'cards': [{
+        'kind': 'materials', 'id': file_id, 'title': file['metadata']['name'],
+        'data': {'fileIds': [file_id]}, 'status': '汇总来源',
+    }]}
+
+
+def summarize_csv(store, file_id):
+    file, content = _csv_input(store, file_id)
     fingerprint = hashlib.sha256(file_id.encode() + b'\x00' + content).hexdigest()
     result_id = 'expense-summary-' + fingerprint[:24]
     previous = next((item for item in list_results(store) if item['id'] == result_id), None)
     if previous is None:
-        rows, groups = _parse_csv(content)
-        result = _with_display_amounts({
-            'id': result_id,
-            'toolId': TOOL_ID,
-            'fileId': file_id,
-            'fileName': file['metadata']['name'],
-            'createdAt': datetime.now(timezone.utc).isoformat(),
-            'rowCount': len(rows),
-            'totalMinor': str(sum(int(row['amountMinor']) for row in rows)),
-            'groups': groups,
-            'rows': rows,
-        })
+        result = {**_calculate(file, content), 'id': result_id, 'createdAt': datetime.now(timezone.utc).isoformat()}
 
         def persist(state):
             results = state.setdefault('data', {}).setdefault('toolResults', {})

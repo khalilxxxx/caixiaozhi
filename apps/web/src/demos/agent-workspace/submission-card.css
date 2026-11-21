@@ -5,7 +5,7 @@
   border-radius: 14px;
   background: #fff;
   overflow: hidden;
-  color: #29292d;
+  color: var(--ink);
   margin: 3px 0;
 }
 .agent-first.submission-open .chat-page {
@@ -28,8 +28,8 @@
   height: 34px;
   display: grid;
   place-items: center;
-  background: #fff2ed;
-  color: #a6513c;
+  background: var(--enterprise-hover);
+  color: var(--enterprise-secondary);
   border-radius: 9px;
   flex: none;
 }
@@ -43,7 +43,7 @@
 }
 .sc-card > header small {
   display: block;
-  color: #6f6f74;
+  color: var(--muted);
   font-size: 11px;
   margin-top: 2px;
 }
@@ -55,7 +55,7 @@
   margin: 0;
   padding: 0 20px;
   font-size: 13px;
-  color: #525257;
+  color: var(--enterprise-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -81,19 +81,19 @@
   letter-spacing: -0.03em;
 }
 .sc-route svg {
-  color: #aaa8a5;
+  color: var(--enterprise-icon);
 }
 .sc-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 5px 12px;
-  color: #6f6f74;
+  color: var(--muted);
   font-size: 11px;
   margin-top: 6px;
   font-variant-numeric: tabular-nums;
 }
 .sc-empty {
-  color: #6f6f74;
+  color: var(--muted);
   font-size: 13px;
 }
 .sc-expense-summary {
@@ -108,7 +108,7 @@
 }
 .sc-expense-summary strong small {
   font-size: 11px;
-  color: #6f6f74;
+  color: var(--muted);
   font-weight: 400;
   margin: 0 5px;
 }
@@ -161,7 +161,7 @@
   padding: 6px 10px;
 }
 .sc-version {
-  color: #6f6f74;
+  color: var(--muted);
   font-size: 11px;
 }
 .sc-history {
@@ -169,7 +169,7 @@
   max-width: 620px;
   border: 1px solid #e8e7e4;
   border-radius: 10px;
-  color: #6f6f74;
+  color: var(--muted);
   background: #fafaf9;
 }
 .sc-history > summary {
@@ -218,7 +218,7 @@
 }
 .sc-history:focus-visible,
 .sc-history summary:focus-visible {
-  outline: 2px solid #8c8782;
+  outline: 2px solid var(--enterprise-focus);
   outline-offset: 3px;
 }
 @media (max-width: 1280px) {

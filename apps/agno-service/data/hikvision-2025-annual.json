@@ -1,0 +1,917 @@
+{
+  "dataset": {
+    "id": "cninfo-hikvision-2025",
+    "version": "sha256-9b2a724aa725db130a3e4039f12511487ae8cd4f1cac70523da516ecdab3ddf2",
+    "label": "海康威视 2023—2025年度合并财报",
+    "shortName": "海康威视",
+    "entity": "杭州海康威视数字技术股份有限公司",
+    "currency": "CNY",
+    "displayUnit": "亿元",
+    "periodLabel": "年度",
+    "years": [
+      2023,
+      2024,
+      2025
+    ],
+    "source": {
+      "provider": "巨潮资讯·深交所法定披露",
+      "url": "https://static.cninfo.com.cn/finalpage/2026-04-18/1225123062.PDF",
+      "filingUrl": "https://static.cninfo.com.cn/finalpage/2026-04-18/1225123062.PDF",
+      "accession": "1225123062",
+      "filedAt": "2026-04-18",
+      "retrievedAt": "2026-11-17T09:39:36.719085+00:00",
+      "sha256": "a805779efb81bea8158e119ad7c733c4669b8d492dc03c7613199970bfa4b8b2",
+      "documents": [
+        {
+          "id": "hikvision-2025",
+          "label": "海康威视 2025年年度报告",
+          "url": "https://static.cninfo.com.cn/finalpage/2026-04-18/1225123062.PDF",
+          "accession": "1225123062",
+          "filedAt": "2026-04-18",
+          "sha256": "a805779efb81bea8158e119ad7c733c4669b8d492dc03c7613199970bfa4b8b2",
+          "pages": {
+            "income": 151,
+            "cashFlow": 153
+          },
+          "rawFile": "cninfo-hikvision-2025-a805779efb81bea8158e119ad7c733c4669b8d492dc03c7613199970bfa4b8b2.pdf.gz"
+        },
+        {
+          "id": "hikvision-2024",
+          "label": "海康威视 2024年年度报告",
+          "url": "https://static.cninfo.com.cn/finalpage/2025-04-19/1223153152.PDF",
+          "accession": "1223153152",
+          "filedAt": "2025-04-19",
+          "sha256": "f1a8771d81d6ed723c4d1a7d552400cf408cca4752033f5bbd0f88ae2729757b",
+          "pages": {
+            "income": 161,
+            "cashFlow": 163
+          },
+          "rawFile": "cninfo-hikvision-2024-f1a8771d81d6ed723c4d1a7d552400cf408cca4752033f5bbd0f88ae2729757b.pdf.gz"
+        }
+      ]
+    }
+  },
+  "records": [
+    {
+      "year": 2023,
+      "periodStart": "2023-01-01",
+      "periodEnd": "2023-12-31",
+      "restated": true,
+      "values": {
+        "revenue": 89341177610.4,
+        "costOfRevenue": 49732768547.57,
+        "taxesAndSurcharges": 704641378.69,
+        "sellingExpenses": 10746788076.01,
+        "administrativeExpenses": 2770781203.45,
+        "researchAndDevelopment": 11392948404.47,
+        "financialExpenses": -749800283.79,
+        "otherIncome": 2559523242.99,
+        "investmentIncome": 63302304.25,
+        "fairValueChanges": 22679257.89,
+        "creditImpairment": -879922773.25,
+        "assetImpairment": -463382275.12,
+        "assetDisposalIncome": -5674511.78,
+        "operatingIncome": 16039575528.98,
+        "nonOperatingIncome": 87573120.04,
+        "nonOperatingExpenses": 27933016.91,
+        "profitBeforeTax": 16099215632.11,
+        "incomeTaxExpense": 943313868.9,
+        "netIncome": 15155901763.21,
+        "attributableNetIncome": 14107726276.26,
+        "minorityInterest": 1048175486.95,
+        "operatingCashFlow": 16622209721.05,
+        "operatingCashInflows": 99392083915.65,
+        "operatingCashOutflows": 82769874194.6,
+        "sellingGeneralAndAdministrative": 13517569279.46
+      },
+      "valuesMinor": {
+        "revenue": "8934117761040",
+        "costOfRevenue": "4973276854757",
+        "taxesAndSurcharges": "70464137869",
+        "sellingExpenses": "1074678807601",
+        "administrativeExpenses": "277078120345",
+        "researchAndDevelopment": "1139294840447",
+        "financialExpenses": "-74980028379",
+        "otherIncome": "255952324299",
+        "investmentIncome": "6330230425",
+        "fairValueChanges": "2267925789",
+        "creditImpairment": "-87992277325",
+        "assetImpairment": "-46338227512",
+        "assetDisposalIncome": "-567451178",
+        "operatingIncome": "1603957552898",
+        "nonOperatingIncome": "8757312004",
+        "nonOperatingExpenses": "2793301691",
+        "profitBeforeTax": "1609921563211",
+        "incomeTaxExpense": "94331386890",
+        "netIncome": "1515590176321",
+        "attributableNetIncome": "1410772627626",
+        "minorityInterest": "104817548695",
+        "operatingCashFlow": "1662220972105",
+        "operatingCashInflows": "9939208391565",
+        "operatingCashOutflows": "8276987419460",
+        "sellingGeneralAndAdministrative": "1351756927946"
+      },
+      "sources": {
+        "revenue": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "costOfRevenue": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "taxesAndSurcharges": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "sellingExpenses": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "administrativeExpenses": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "researchAndDevelopment": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "financialExpenses": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "otherIncome": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "investmentIncome": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "fairValueChanges": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "creditImpairment": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "assetImpairment": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "assetDisposalIncome": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "operatingIncome": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "nonOperatingIncome": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "nonOperatingExpenses": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "profitBeforeTax": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "incomeTaxExpense": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "netIncome": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "attributableNetIncome": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "minorityInterest": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ],
+        "operatingCashFlow": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 163,
+            "section": "合并现金流量表",
+            "restated": true
+          }
+        ],
+        "operatingCashInflows": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 163,
+            "section": "合并现金流量表",
+            "restated": true
+          }
+        ],
+        "operatingCashOutflows": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 163,
+            "section": "合并现金流量表",
+            "restated": true
+          }
+        ],
+        "sellingGeneralAndAdministrative": [
+          {
+            "year": 2023,
+            "documentId": "hikvision-2024",
+            "page": 161,
+            "section": "合并利润表",
+            "restated": true
+          }
+        ]
+      }
+    },
+    {
+      "year": 2024,
+      "periodStart": "2024-01-01",
+      "periodEnd": "2024-12-31",
+      "restated": false,
+      "values": {
+        "revenue": 92495525118.3,
+        "costOfRevenue": 51953857912.21,
+        "taxesAndSurcharges": 692285927.36,
+        "sellingExpenses": 12051218102.62,
+        "administrativeExpenses": 3095939643.92,
+        "researchAndDevelopment": 11864013392.27,
+        "financialExpenses": -114817493.16,
+        "otherIncome": 2653682810.87,
+        "investmentIncome": 187021018.77,
+        "fairValueChanges": 47759102.43,
+        "creditImpairment": -1068789505.74,
+        "assetImpairment": -445914387.59,
+        "assetDisposalIncome": -14539975.31,
+        "operatingIncome": 14312246696.51,
+        "nonOperatingIncome": 63737582.35,
+        "nonOperatingExpenses": 32490638.86,
+        "profitBeforeTax": 14343493640.0,
+        "incomeTaxExpense": 1202471579.49,
+        "netIncome": 13141022060.51,
+        "attributableNetIncome": 11977327023.54,
+        "minorityInterest": 1163695036.97,
+        "operatingCashFlow": 13264092022.73,
+        "operatingCashInflows": 104471470619.92,
+        "operatingCashOutflows": 91207378597.19,
+        "sellingGeneralAndAdministrative": 15147157746.54
+      },
+      "valuesMinor": {
+        "revenue": "9249552511830",
+        "costOfRevenue": "5195385791221",
+        "taxesAndSurcharges": "69228592736",
+        "sellingExpenses": "1205121810262",
+        "administrativeExpenses": "309593964392",
+        "researchAndDevelopment": "1186401339227",
+        "financialExpenses": "-11481749316",
+        "otherIncome": "265368281087",
+        "investmentIncome": "18702101877",
+        "fairValueChanges": "4775910243",
+        "creditImpairment": "-106878950574",
+        "assetImpairment": "-44591438759",
+        "assetDisposalIncome": "-1453997531",
+        "operatingIncome": "1431224669651",
+        "nonOperatingIncome": "6373758235",
+        "nonOperatingExpenses": "3249063886",
+        "profitBeforeTax": "1434349364000",
+        "incomeTaxExpense": "120247157949",
+        "netIncome": "1314102206051",
+        "attributableNetIncome": "1197732702354",
+        "minorityInterest": "116369503697",
+        "operatingCashFlow": "1326409202273",
+        "operatingCashInflows": "10447147061992",
+        "operatingCashOutflows": "9120737859719",
+        "sellingGeneralAndAdministrative": "1514715774654"
+      },
+      "sources": {
+        "revenue": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "costOfRevenue": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "taxesAndSurcharges": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "sellingExpenses": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "administrativeExpenses": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "researchAndDevelopment": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "financialExpenses": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "otherIncome": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "investmentIncome": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "fairValueChanges": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "creditImpairment": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "assetImpairment": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "assetDisposalIncome": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "operatingIncome": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "nonOperatingIncome": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "nonOperatingExpenses": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "profitBeforeTax": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "incomeTaxExpense": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "netIncome": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "attributableNetIncome": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "minorityInterest": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "operatingCashFlow": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 153,
+            "section": "合并现金流量表",
+            "restated": false
+          }
+        ],
+        "operatingCashInflows": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 153,
+            "section": "合并现金流量表",
+            "restated": false
+          }
+        ],
+        "operatingCashOutflows": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 153,
+            "section": "合并现金流量表",
+            "restated": false
+          }
+        ],
+        "sellingGeneralAndAdministrative": [
+          {
+            "year": 2024,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ]
+      }
+    },
+    {
+      "year": 2025,
+      "periodStart": "2025-01-01",
+      "periodEnd": "2025-12-31",
+      "restated": false,
+      "values": {
+        "revenue": 92507796069.94,
+        "costOfRevenue": 50067436550.36,
+        "taxesAndSurcharges": 767498479.84,
+        "sellingExpenses": 12347888877.7,
+        "administrativeExpenses": 2994512052.02,
+        "researchAndDevelopment": 11752624736.8,
+        "financialExpenses": -525631319.14,
+        "otherIncome": 2840300144.79,
+        "investmentIncome": 247684884.36,
+        "fairValueChanges": -17915101.74,
+        "creditImpairment": -800561956.9,
+        "assetImpairment": -436805418.06,
+        "assetDisposalIncome": 26913929.91,
+        "operatingIncome": 16963083174.72,
+        "nonOperatingIncome": 80221086.73,
+        "nonOperatingExpenses": 29865822.83,
+        "profitBeforeTax": 17013438438.62,
+        "incomeTaxExpense": 1579783198.79,
+        "netIncome": 15433655239.83,
+        "attributableNetIncome": 14195371894.42,
+        "minorityInterest": 1238283345.41,
+        "operatingCashFlow": 25339411083.1,
+        "operatingCashInflows": 117094848774.11,
+        "operatingCashOutflows": 91755437691.01,
+        "sellingGeneralAndAdministrative": 15342400929.72
+      },
+      "valuesMinor": {
+        "revenue": "9250779606994",
+        "costOfRevenue": "5006743655036",
+        "taxesAndSurcharges": "76749847984",
+        "sellingExpenses": "1234788887770",
+        "administrativeExpenses": "299451205202",
+        "researchAndDevelopment": "1175262473680",
+        "financialExpenses": "-52563131914",
+        "otherIncome": "284030014479",
+        "investmentIncome": "24768488436",
+        "fairValueChanges": "-1791510174",
+        "creditImpairment": "-80056195690",
+        "assetImpairment": "-43680541806",
+        "assetDisposalIncome": "2691392991",
+        "operatingIncome": "1696308317472",
+        "nonOperatingIncome": "8022108673",
+        "nonOperatingExpenses": "2986582283",
+        "profitBeforeTax": "1701343843862",
+        "incomeTaxExpense": "157978319879",
+        "netIncome": "1543365523983",
+        "attributableNetIncome": "1419537189442",
+        "minorityInterest": "123828334541",
+        "operatingCashFlow": "2533941108310",
+        "operatingCashInflows": "11709484877411",
+        "operatingCashOutflows": "9175543769101",
+        "sellingGeneralAndAdministrative": "1534240092972"
+      },
+      "sources": {
+        "revenue": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "costOfRevenue": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "taxesAndSurcharges": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "sellingExpenses": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "administrativeExpenses": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "researchAndDevelopment": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "financialExpenses": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "otherIncome": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "investmentIncome": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "fairValueChanges": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "creditImpairment": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "assetImpairment": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "assetDisposalIncome": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "operatingIncome": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "nonOperatingIncome": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "nonOperatingExpenses": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "profitBeforeTax": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "incomeTaxExpense": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "netIncome": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "attributableNetIncome": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "minorityInterest": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ],
+        "operatingCashFlow": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 153,
+            "section": "合并现金流量表",
+            "restated": false
+          }
+        ],
+        "operatingCashInflows": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 153,
+            "section": "合并现金流量表",
+            "restated": false
+          }
+        ],
+        "operatingCashOutflows": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 153,
+            "section": "合并现金流量表",
+            "restated": false
+          }
+        ],
+        "sellingGeneralAndAdministrative": [
+          {
+            "year": 2025,
+            "documentId": "hikvision-2025",
+            "page": 151,
+            "section": "合并利润表",
+            "restated": false
+          }
+        ]
+      }
+    }
+  ]
+}

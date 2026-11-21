@@ -76,7 +76,7 @@
   margin-top: 7px;
 }
 .context-help-body a {
-  color: #a72b32;
+  color: var(--enterprise-link);
   text-decoration: underline;
   text-underline-offset: 3px;
 }

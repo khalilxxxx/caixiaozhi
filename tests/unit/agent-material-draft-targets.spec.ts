@@ -52,6 +52,61 @@ function fixture() {
 }
 
 describe('材料载入指定报销实例', () => {
+  it('普通餐饮费用弹层显示明确的待确认状态与用途问题', () => {
+    const { state } = fixture();
+    const file = {
+      id: 'file-meal',
+      name: '餐饮.pdf',
+      status: 'recognized',
+      batchId: 'batch-test',
+    };
+    const item = {
+      id: 'meal',
+      sourceFileId: file.id,
+      name: '团餐',
+      amount: 10000,
+      date: '2026-11-17',
+      group: 'daily',
+      category: '餐饮',
+      categoryId: null,
+      categoryHint: 'meal-purpose',
+      purpose: '员工用餐',
+      confirmed: false,
+    };
+    const workspace = {
+      state: {
+        data: { submissions: state, materials: { files: [file], items: [item], revision: 1 } },
+        tasks: [],
+        activeTask: null,
+      },
+    } as WorkspaceAPI;
+    const html = renderToStaticMarkup(createElement(
+      WorkspaceContext.Provider,
+      { value: workspace },
+      createElement(MaterialsPanel, {
+        panel: { kind: 'materials', title: 'AI 发票转费用', data: { fileId: file.id } },
+      }),
+    ));
+    expect(html).toContain('费用类型待确认');
+    expect(html.match(/请确认用餐用途/g)).toHaveLength(1);
+    expect(html).toContain('请选择费用类型</option>');
+  });
+
+  it.each([undefined, 'batch-20261111'])('从空报销单进入不展示已有样例批次（%s）', (id) => {
+    const { state } = fixture();
+    const api = {
+      state: { data: { submissions: state }, tasks: [], activeTask: null },
+    } as WorkspaceAPI;
+    const html = renderToStaticMarkup(createElement(WorkspaceContext.Provider, { value: api },
+      createElement(MaterialsPanel, { panel: {
+        kind: 'materials', id, title: 'AI 发票转费用', data: { draftId: 'personal-beijing' },
+      } }),
+    ));
+    expect(html).toContain('本单暂无票据');
+    expect(html).not.toContain('费用合计');
+    expect(html).toContain('上传票据');
+  });
+
   it('旧单已提交时，仍可载入明确选择的新实例', () => {
     const { state, incoming } = fixture();
     state.drafts.personal.status = 'awaiting_receipt';

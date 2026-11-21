@@ -58,16 +58,22 @@ export function writeToolState(state, storage = localStorage) {
 export function canReviewTool(app, user) {
   return !!app && !!user && ['business','technical','admin'].includes(user.role) && (app.pendingRevision || app).status !== 'draft';
 }
+const builtInFormats = {
+  reconcile: { input: '两份 CSV', output: '核对明细 CSV' },
+  convert: { input: '源表 CSV', output: '统一台账 CSV' },
+  report: { input: '费用明细 CSV', output: '费用报告 HTML' },
+};
 export function getToolCatalog(state) {
   const identity = USERS[state.persona] || USERS.finance;
   const items = state.apps.filter(app => canDiscover(app,identity) && (app.status === 'published' || canManage(app,identity)) || canReviewTool(app,identity)).map(app => ({
     id:app.id, name:app.name, description:app.description || '', category:app.category || '办公效率', icon:app.icon || 'code',
     version:app.version || '—', owner:app.maintainer || app.owner || '—', status:app.status,
     latestVersion:app.pendingRevision?.version || app.version || '—', latestStatus:app.pendingRevision?.status || app.status,
-    favorite:state.favorites.includes(app.id), canUse:canUse(app,identity), canManage:canManage(app,identity), canReview:canReviewTool(app,identity), canView:canDiscover(app,identity),
+    favorite:state.favorites.includes(app.id), createdByMe:app.owner===identity.name, formats:app.builtIn ? builtInFormats[app.id] : undefined,
+    canUse:canUse(app,identity), canManage:canManage(app,identity), canReview:canReviewTool(app,identity), canView:canDiscover(app,identity),
     updatedAt:app.pendingRevision?.submittedAt || app.updatedAt || app.publishedAt || app.submittedAt || app.createdAt || '', sourceLabel:'演示权限 · 浏览器本地保存',
   }));
-  items.unshift({id:'expense-summary',name:'CSV 费用汇总',description:'按费用类别汇总 CSV 明细，保存结果并导出汇总表。',category:'分析报告',icon:'chart',version:'1.0',owner:'财小智',status:'published',latestVersion:'1.0',latestStatus:'published',favorite:state.favorites.includes('expense-summary'),canUse:true,canManage:false,canReview:false,canView:true,updatedAt:'',sourceLabel:'服务端工具'});
+  items.unshift({id:'expense-summary',name:'CSV 费用汇总',description:'按费用类别汇总 CSV 明细，保存结果并导出汇总表。',category:'分析报告',icon:'chart',version:'1.0',owner:'财小智',status:'published',latestVersion:'1.0',latestStatus:'published',favorite:state.favorites.includes('expense-summary'),createdByMe:false,formats:{input:'费用明细 CSV',output:'分类汇总 CSV'},canUse:true,canManage:false,canReview:false,canView:true,updatedAt:'',sourceLabel:'服务端工具'});
   return {items,identity,canUpload:['author','admin'].includes(identity.role),canReview:['business','technical','admin'].includes(identity.role)};
 }
 export function toggleToolFavorite(id, storage = localStorage) {

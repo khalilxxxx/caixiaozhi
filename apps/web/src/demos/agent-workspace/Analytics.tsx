@@ -22,6 +22,7 @@ import {
 import reportStyles from './analytics-report.css?raw';
 import './analytics-skills.css';
 import './analytics-report.css';
+import { PublicFinancialsPage } from './PublicFinancials';
 export {
   DEFAULT_ANALYSIS_SCOPE,
   normalizeAnalysisScope,
@@ -669,6 +670,16 @@ export function AnalysisCard({ scope }: { scope?: Partial<AnalysisScope> }) {
   );
 }
 export function AnalysisPage() {
+  const [source, setSource] = useState<'public' | 'sample'>('public');
+  return <>
+    <div className="pf-source-switch" aria-label="分析数据来源">
+      <button aria-pressed={source === 'public'} onClick={() => setSource('public')}>公开财报</button>
+      <button aria-pressed={source === 'sample'} onClick={() => setSource('sample')}>报销费用 · 示例数据</button>
+    </div>
+    {source === 'public' ? <PublicFinancialsPage /> : <ExpenseAnalysisPage />}
+  </>;
+}
+function ExpenseAnalysisPage() {
   const w = useWorkspace(),
     [data, setData] = useSlice<AnalysisState>(
       'analysisWorkspace',

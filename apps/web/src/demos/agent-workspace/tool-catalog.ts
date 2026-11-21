@@ -15,6 +15,8 @@ export interface ToolCatalogItem {
   latestVersion: string;
   latestStatus: ToolStatus;
   favorite: boolean;
+  createdByMe: boolean;
+  formats?: { input: string; output: string };
   canUse: boolean;
   canManage: boolean;
   canReview: boolean;
@@ -79,9 +81,9 @@ export async function getToolDetail(id: string): Promise<ToolDetail | null> {
   const model = await loadModel();
   return model.getToolDetail(model.readToolState(), id);
 }
-export function useToolCatalog() {
+export function useToolCatalog(enabled = true) {
   const [snapshot, setSnapshot] = useState<CatalogSnapshot>({items: [], identity: null, canUpload: false, canReview: false});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState('');
   const refresh = useCallback(async () => {
     try {
@@ -93,6 +95,7 @@ export function useToolCatalog() {
     } finally { setLoading(false); }
   }, []);
   useEffect(() => {
+    if (!enabled) return;
     void refresh();
     const onStorage = (event: StorageEvent) => { if (!event.key || event.key === 'caixiaozhi-tool-center-v1') void refresh(); };
     const onChange = () => { void refresh(); };
@@ -102,7 +105,7 @@ export function useToolCatalog() {
       window.removeEventListener('storage', onStorage);
       window.removeEventListener('caixiaozhi-tool-catalog-change', onChange);
     };
-  }, [refresh]);
+  }, [refresh, enabled]);
   const toggleFavorite = useCallback(async (id: string) => {
     try {
       (await loadModel()).toggleToolFavorite(id);

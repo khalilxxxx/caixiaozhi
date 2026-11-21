@@ -1,0 +1,231 @@
+.hc-page {
+  --hc-ink: #1c2c42;
+  --hc-muted: #55677c;
+  --hc-line: #d9e2ea;
+  min-height: 100dvh;
+  color: var(--hc-ink);
+  background: #f4f7fa;
+}
+.hc-masthead,
+.hc-brand,
+.hc-masthead a,
+.hc-toolbar,
+.hc-toolbar label,
+.hc-document-heading,
+.hc-document-heading button {
+  display: flex;
+  align-items: center;
+}
+.hc-masthead {
+  min-height: 54px;
+  justify-content: space-between;
+  padding: 8px max(24px, calc((100vw - 736px) / 2));
+  border-bottom: 1px solid var(--hc-line);
+  background: white;
+}
+.hc-brand img {
+  width: 64px;
+  height: auto;
+}
+.hc-brand span {
+  margin-left: 13px;
+  padding-left: 13px;
+  border-left: 1px solid var(--hc-line);
+  color: var(--hc-muted);
+  font-size: 13px;
+}
+.hc-masthead a {
+  gap: 6px;
+  color: #365b7f;
+  text-decoration: none;
+  font-size: 13px;
+}
+.hc-masthead a:hover {
+  text-decoration: underline;
+}
+.hc-content {
+  max-width: 784px;
+  margin: 0 auto;
+  padding: 30px 24px 44px;
+}
+.hc-toolbar {
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.hc-toolbar h1 {
+  margin: 0;
+  font-size: clamp(23px, 2.5vw, 29px);
+  line-height: 1.35;
+  letter-spacing: -0.025em;
+}
+.hc-toolbar label {
+  gap: 8px;
+  font-size: 13px;
+  color: var(--hc-muted);
+}
+.hc-toolbar select {
+  max-width: 100%;
+  border: 1px solid #c6d3e0;
+  border-radius: 6px;
+  background: white;
+  color: var(--hc-ink);
+  padding: 6px 8px;
+}
+.hc-workbench {
+  display: grid;
+  gap: 20px;
+}
+.hc-switches {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.hc-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 84px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--hc-line);
+  border-radius: 12px;
+  background: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--hc-ink);
+}
+.hc-choice:hover {
+  border-color: #91abc2;
+}
+.hc-choice[aria-pressed='true'] {
+  border-color: #7597b8;
+  background: #edf4fa;
+}
+.hc-choice:focus-visible {
+  outline: 2px solid #38678f;
+  outline-offset: 2px;
+}
+.hc-choice svg {
+  width: 48px;
+  height: 48px;
+  flex: none;
+}
+.hc-surface {
+  min-width: 0;
+  color: var(--hc-ink);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+.hc-stage {
+  height: clamp(555px, calc(100dvh - 190px), 720px);
+  border: 1px solid #d2dde7;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.hc-surface > .wi-dossier {
+  flex: 1;
+}
+.hc-document-heading {
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 66px;
+  padding: 10px 16px;
+  flex: none;
+  border-bottom: 1px solid var(--hc-line);
+}
+.hc-document-heading > svg {
+  width: 34px;
+  height: 38px;
+  flex: none;
+}
+.hc-document-heading > div {
+  min-width: 0;
+}
+.hc-document-heading h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 650;
+}
+.hc-document-heading div > span {
+  font-size: 12px;
+  color: var(--hc-muted);
+  overflow-wrap: anywhere;
+}
+.hc-document-heading button {
+  margin-left: auto;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 5px 7px;
+  border-radius: 5px;
+  flex: none;
+  font-size: 12px;
+  color: #3d6082;
+}
+.hc-document-heading button:hover {
+  background: #edf3f8;
+}
+
+.hc-drawer {
+  position: fixed;
+  inset: 0 0 0 auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  width: min(736px, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  box-shadow: -12px 0 46px #25364b24;
+}
+.hc-drawer:not([open]) {
+  display: none;
+}
+.hc-drawer::backdrop {
+  background: #1a2d444d;
+}
+@media (max-width: 620px) {
+  .hc-masthead {
+    padding-inline: 14px;
+  }
+  .hc-content {
+    padding: 19px 12px 26px;
+  }
+  .hc-toolbar {
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .hc-toolbar label,
+  .hc-toolbar select {
+    font-size: 12px;
+  }
+  .hc-toolbar select {
+    padding: 5px;
+  }
+  .hc-switches {
+    gap: 6px;
+  }
+  .hc-choice {
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    padding: 7px 3px;
+    min-height: 72px;
+    font-size: 13px;
+  }
+  .hc-choice svg {
+    width: 36px;
+    height: 36px;
+  }
+  .hc-document-heading {
+    padding-inline: 12px;
+  }
+  .hc-stage {
+    height: min(650px, 80dvh);
+  }
+}

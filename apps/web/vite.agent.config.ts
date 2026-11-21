@@ -12,7 +12,10 @@ export default defineConfig({
     outDir: 'dist-agent',
     emptyOutDir: true,
     rollupOptions: {
-      input: fileURLToPath(new URL('./agent.html', import.meta.url)),
+      input: {
+        agent: fileURLToPath(new URL('./agent.html', import.meta.url)),
+        approvalAssistant: fileURLToPath(new URL('./approval-assistant.html', import.meta.url)),
+      },
     },
   },
 });

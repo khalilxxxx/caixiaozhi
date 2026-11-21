@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>能力中心与轻应用的产品决策 · 财小智</title>
+  <style>
+    :root { --ink:#253a34; --muted:#53665e; --green:#17644f; --line:#d1dcd5; --pale:#edf4ed; --paper:#fff; }
+    * { box-sizing:border-box; }
+    html { background:#f3f5f1; }
+    body { margin:0; color:var(--ink); font:16px/1.8 "PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif; }
+    main,.top { width:min(900px,calc(100% - 40px)); margin-inline:auto; }
+    .top { display:flex; align-items:center; justify-content:space-between; min-height:64px; gap:16px; }
+    .top a,.top button { display:inline-flex; align-items:center; color:var(--green); font:inherit; font-size:14px; min-height:44px; }
+    .top a { text-decoration:none; gap:.5em; }
+    .top a:hover,.top button:hover { text-decoration:underline; }
+    .top button { padding:0 14px; border:1px solid var(--line); border-radius:6px; background:var(--paper); cursor:pointer; }
+    main { padding:42px clamp(20px,6vw,70px) 36px; background:var(--paper); border:1px solid var(--line); margin-bottom:44px; border-top:4px solid var(--green); }
+    header { padding-bottom:22px; }
+    .meta { margin:0; font-size:14px; color:var(--muted); }
+    h1,h2,h3,p { margin:0; }
+    h1 { margin:8px 0 14px; font-size:clamp(29px,4vw,42px); line-height:1.28; letter-spacing:.01em; }
+    h2 { margin-bottom:10px; font-size:23px; line-height:1.48; }
+    h3 { font-size:17px; line-height:1.6; margin:16px 0 3px; }
+    p+p { margin-top:9px; }
+    strong { font-weight:650; }
+    section { border-top:1px solid var(--line); padding:22px 0 24px; }
+    .decision { padding:15px 19px; border-left:3px solid var(--green); background:var(--pale); }
+    .case { margin:15px 0 0; padding-left:15px; border-left:2px solid var(--line); color:var(--muted); }
+    .references { margin:10px 0 0; font-size:14px; color:var(--muted); }
+    a { color:#155944; text-underline-offset:3px; }
+    a:focus-visible,button:focus-visible { outline:3px solid #967a30; outline-offset:3px; }
+    table { width:100%; margin:10px 0 14px; border-collapse:collapse; text-align:left; font-size:16px; }
+    th,td { vertical-align:top; padding:8px 9px; border-bottom:1px solid var(--line); }
+    thead { background:#f2f5f1; }
+    tbody th { font-weight:600; width:24%; }
+    ul { margin:7px 0 0; padding-inline-start:1.3em; }
+    li+li { margin-top:6px; }
+    footer { color:var(--muted); border-top:1px solid var(--line); padding-top:14px; }
+    footer p { font-size:14px; }
+    @media(max-width:560px) {
+      .top,main { width:calc(100% - 20px); }
+      main { padding:24px 16px; margin-bottom:12px; }
+      .top { min-height:54px; padding-inline:4px; }
+      h2 { font-size:21px; }
+      .decision { padding:12px; }
+      th,td { padding:8px 5px; }
+    }
+    @page { size:A4; margin:16mm 19mm; }
+    @media print {
+      html,body,main { background:#fff; }
+      .top { display:none; }
+      main { width:100%; padding:0; border:0; margin:0; }
+      body { font-size:10.5pt; line-height:1.55; }
+      header { padding-bottom:12px; }
+      h1 { font-size:24pt; }
+      h2 { font-size:15pt; margin-bottom:5px; }
+      h3 { font-size:11pt; margin:9px 0 2px; }
+      section { padding:11px 0; }
+      h1,h2,h3 { break-after:avoid; }
+      p,li { orphans:2; widows:2; }
+      table { font-size:10pt; }
+      tr,.decision,.case { break-inside:avoid; }
+      footer p,.meta,.references { font-size:9pt; }
+      a { color:inherit; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="top" aria-label="文档操作">
+    <a href="index.html#hub"><span aria-hidden="true">←</span> 返回能力中心</a>
+    <button type="button" onclick="window.print()">打印决策稿</button>
+  </nav>
+  <main>
+    <header>
+      <p class="meta">财小智 · 产品决策稿　<time datetime="2026-11-21">2026 年 11 月 21 日</time></p>
+      <h1>能力中心与轻应用</h1>
+      <p class="decision">财小智主界面采用两个入口。用户在“能力中心”查找专家团、技能和连接器，在“轻应用”打开计算器或上传自己的 HTML 应用。主界面可打开对应原型。</p>
+    </header>
+
+    <section aria-labelledby="entries">
+      <h2 id="entries">两个入口分别办理什么事？</h2>
+      <table>
+        <thead><tr><th scope="col">入口</th><th scope="col">用户操作</th><th scope="col">交付结果</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">能力中心</th><td>在同一目录搜索，或按专家团、技能、连接器筛选。用户可向专家团描述任务，也可直接打开单项技能或查看连接器权限。</td><td>核验发现、可回查的依据、实际使用的技能与连接器，以及受限事项。</td></tr>
+          <tr><th scope="row">轻应用</th><td>在新标签页打开费用分摊计算器，输入总额与部门权重。个人应用可从本机上传。</td><td>分摊到分的费用明细。上传成功的应用可从本浏览器的“我的应用”再次打开。</td></tr>
+        </tbody>
+      </table>
+      <p>专家团适合一次请求包含多项核验的场景。用户已知要做的检查时，可以直接从目录打开单项技能。要了解数据是否可用时，可以查看连接器的当前身份、业务范围和权限。</p>
+    </section>
+
+    <section aria-labelledby="experts">
+      <h2 id="experts">财务核验专家团如何选择能力？</h2>
+      <p>“财务核验专家团”面向用户呈现为一个智能体。任务交给它后，它会在材料完整性检查、差旅标准核对、供应商主体核验三项技能中选择本次所需的能力，再按当前身份读取报销单据、差旅制度库和企查查中的相应数据。用户只需说明核验目标并提供业务对象。</p>
+      <table>
+        <thead><tr><th scope="col">用户的任务</th><th scope="col">实际使用</th><th scope="col">结果</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">只核对住宿标准</th><td>差旅标准核对，读取报销单据和差旅制度库。</td><td>北京示例单每晚 580 元，2 晚合计高于每晚 500 元的标准 160 元。可查看住宿发票与示例制度。</td></tr>
+          <tr><th scope="row">预审整张报销单</th><td>材料完整性检查和差旅标准核对，共用同一份报销单据，并读取差旅制度库。</td><td>逐项列出材料和住宿的核对结果。北京示例单还缺网约车电子行程单。</td></tr>
+          <tr><th scope="row">核对附件和供应商主体</th><td>材料完整性检查读取报销单据。供应商主体核验按身份使用企查查。</td><td>员工得到附件核对结果，供应商查询标为受限。财务复核员可同时得到所选供应商的登记名称和经营状态。</td></tr>
+        </tbody>
+      </table>
+      <p>结果记录实际用过的技能和数据来源。缺少核验对象时提示补充，受到权限限制时说明原因，其余具备条件的检查可以继续。当前原型用本地规则选择任务分支，用合成单据、制度、供应商快照和示例身份演示核验过程。</p>
+    </section>
+
+    <section aria-labelledby="experience">
+      <h2 id="experience">与腾讯 WorkBuddy 的“专家团”有何不同？</h2>
+      <p>腾讯官方文档将专家、技能和连接器放在同一管理入口。专家按任务选配技能与外部服务，技能市场支持安装、上传和创建，连接器可以预先授权或在执行时连接。官方“报销单合规预审”案例将材料核对、制度比对和证据列示组合为一项技能。</p>
+      <p>腾讯的专家团由团长拆解任务，交给多个专家并行处理，最后整合交付。财小智沿用统一目录和按任务调用能力的思路，以一个智能体组合多项技能与数据连接。这里的“团”指同一财务核验入口具备的能力组合，原型中的实际执行单元是被选中的核验规则。</p>
+      <p class="references">腾讯官方文档　<a href="https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Expert-Center">专家与专家团</a> · <a href="https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Skills-Market">技能市场</a> · <a href="https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Connector">连接器</a> · <a href="https://www.workbuddy.cn/enterprise/solutions/role-finance/scenes/expense-claim-compliance-precheck">报销单合规预审案例</a> · <a href="https://open.workbuddy.cn/docs/expert">专家包规范</a> · <a href="https://open.workbuddy.cn/docs/expert-team">专家团开发文档</a></p>
+    </section>
+
+    <section aria-labelledby="publishing">
+      <h2 id="publishing">目前能上传什么，正式接入还需要什么？</h2>
+      <p><strong>个人轻应用。</strong>作者填写应用名称和版本，选择单个自包含 HTML 文件。完成文件校验后，应用保存到本机浏览器，重新打开时在独立标签页的隔离区域运行。清除该站点的浏览器数据会移除已保存的应用。</p>
+      <p><strong>企业数据连接。</strong>原型中的企查查结果来自合成快照。正式接入仍需配置企业 MCP 服务、组织授权和服务端逐次判权，区分无权限、资料缺失和服务故障，并记录实际调用。</p>
+      <p><strong>组织分发。</strong>面向同事共享需要云端托管、作者和版本记录、审核、可见范围校验及撤回机制。这些属于正式发布链路。当前的“保存到本地”仅在当前浏览器的相应演示身份下生效。</p>
+    </section>
+    <footer>
+      <p>可从独立原型打开 <a href="index.html#hub">能力中心</a>、<a href="index.html#team">财务核验专家团</a> 或 <a href="index.html#apps">轻应用</a>。</p>
+    </footer>
+  </main>
+</body>
+</html>

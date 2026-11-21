@@ -148,10 +148,31 @@ export function rebaseWorkspaceValue(
   }
   return structuredClone(after);
 }
+
+function rebaseWorkspace(before: WorkspaceState, after: WorkspaceState, remote: WorkspaceState) {
+  const result = rebaseWorkspaceValue(before, after, remote) as WorkspaceState;
+  const previous = before.data.submissions;
+  const next = after.data.submissions;
+  const latest = remote.data.submissions;
+  if (!previous || !next?.edits || !latest || equal(previous.edits, next.edits)) return result;
+
+  // Draft edits are full form copies. Rebase the user's field changes against
+  // the effective draft so a freshly saved tool result can clear an old edit
+  // without losing fields or rows the user did not touch.
+  for (const [id, edit] of Object.entries(next.edits)) {
+    if (!object(edit) || equal(previous.edits?.[id], edit)) continue;
+    const base = previous.edits?.[id] ?? previous.drafts?.[id];
+    const current = latest.edits?.[id] ?? latest.drafts?.[id];
+    if (!object(base) || !object(current)) continue;
+    const rebased = rebaseWorkspaceValue(base, { ...base, ...edit }, current);
+    result.data.submissions.edits[id] = rebased;
+  }
+  return result;
+}
+
 function optimisticState() {
   return pending.reduce(
-    (state, op) =>
-      rebaseWorkspaceValue(op.before, op.after, state) as WorkspaceState,
+    (state, op) => rebaseWorkspace(op.before, op.after, state),
     server.state,
   );
 }
@@ -272,9 +293,9 @@ export async function flushWorkspace(): Promise<void> {
       const after = pending
         .slice(0, count)
         .reduce(
-          (state, op) => rebaseWorkspaceValue(op.before, op.after, state),
+          (state, op) => rebaseWorkspace(op.before, op.after, state),
           server.state,
-        ) as WorkspaceState;
+        );
       const patch = workspacePatch(server.state, after);
       if (!Object.keys(patch).length) {
         pending.splice(0, count);

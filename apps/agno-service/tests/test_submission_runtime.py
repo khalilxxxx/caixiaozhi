@@ -33,7 +33,7 @@ def test_submission_calendar_uses_shanghai_day_and_calendar_weeks(instant, expec
     assert agent_runtime.submission_calendar(instant) == expected
 
 
-def execute_submission(tmp_path, monkeypatch, message, journey, setup=None):
+def execute_submission(tmp_path, monkeypatch, message, journey, setup=None, *, expected_status='completed'):
     """只替换远程推理；持久化、业务默认、校验和运行事件全部执行真实代码。"""
     import config
     from store import Store
@@ -66,7 +66,7 @@ def execute_submission(tmp_path, monkeypatch, message, journey, setup=None):
     }))
     store.create_run('submission-run', 'submission-test', {'message': message, 'refs': [], 'capability': 'submission'})
     asyncio.run(agent_runtime.Runtime(store, Business(store)).execute('submission-run'))
-    assert store.run('submission-run')['status'] == 'completed', store.events('submission-run')
+    assert store.run('submission-run')['status'] == expected_status, store.events('submission-run')
     return store, observed
 
 
@@ -158,6 +158,82 @@ def test_runtime_sparse_change_preserves_manual_fields_and_unknown_return_date(t
     assert draft['legs'][1]['departureDate'] == ''
     assert draft['legs'][1]['arrivalDate'] == ''
     assert any(issue['path'].endswith('departureDate') for issue in observed['result']['check']['issues'])
+
+
+@pytest.mark.parametrize(('container', 'retry'), [('drafts', True), ('edits', True), ('edits', False)])
+def test_runtime_rejects_stale_patch_after_manual_changes(tmp_path, monkeypatch, container, retry):
+    store = None
+
+    def setup(workspace):
+        nonlocal store
+        store = workspace
+        Business(workspace).update_draft('travel', {'legs': [
+            {'id': 'go', 'arrivalCity': '上海', 'transport': '火车-二等座'},
+        ]})
+
+    async def journey(tools, instructions):
+        get, update = tools['get_submission_draft'], tools['update_submission_draft']
+        before = (await get('travel'))['draft']
+        manual = {'travel': {
+            'legs': [{'id': 'go', 'transport': '火车-一等座'}, {'id': 'manual-stop', 'arrivalCity': '北京'}],
+        }}
+        store.patch({'baseRevision': store.snapshot()['revision'], 'data': {'submissions': {container: manual}}})
+        changed = Business(store).get_draft('travel')['draft']
+        if container == 'edits':
+            assert changed['version'] == before['version']
+        stale = await update('travel', {'legs': [{**before['legs'][0], 'departureDate': '2026-11-19'}]})
+        assert stale.get('code') == 'STALE_DRAFT', stale
+        assert Business(store).get_draft('travel')['draft'] == changed
+        if container == 'edits':
+            assert store.get_state()['data']['submissions']['edits']['travel'] == changed
+
+        if not retry:
+            return stale
+        await get('travel')
+        return await update('travel', {'legs': [{'id': 'go', 'departureDate': '2026-11-19'}]})
+
+    store, observed = execute_submission(tmp_path, monkeypatch, '去程改为周四', journey, setup,
+                                         expected_status='completed' if retry else 'failed')
+    if not retry:
+        assistant = store.get_state()['tasks'][0]['messages'][-1]
+        assert assistant['text'] == observed['result']['error']
+        return
+    draft = observed['result']['draft']
+    assert [row['id'] for row in draft['legs']] == ['go', 'manual-stop']
+    assert draft['legs'][0]['transport'] == '火车-一等座'
+    assert draft['legs'][0]['departureDate'] == '2026-11-19'
+    assert draft['legs'][1]['arrivalCity'] == '北京'
+    assert store.get_state()['data']['submissions']['drafts']['travel'] == draft
+
+
+def test_runtime_row_patch_requires_explicit_deletion_by_id(tmp_path, monkeypatch):
+    def setup(store):
+        Business(store).update_draft('expense', {
+            'legs': [{'id': 'go', 'arrivalCity': '上海'}, {'id': 'stop', 'arrivalCity': '北京'}],
+            'expenses': [{'id': 'fee', 'reason': '人工确认的交通费用'}],
+            'activities': [{'id': 'visit', 'description': '客户拜访'}, {'id': 'review', 'description': '项目评审'}],
+        })
+
+    async def journey(tools, instructions):
+        await tools['get_submission_draft']('expense')
+        update = tools['update_submission_draft']
+        changed = await update('expense', {
+            'legs': [{'id': 'go', 'departureDate': '2026-11-19'}],
+            'expenses': [],
+            'activities': [{'id': 'visit', 'description': '客户签约'}],
+        })
+        assert [row['id'] for row in changed['draft']['legs']] == ['go', 'stop']
+        assert [row['id'] for row in changed['draft']['expenses']] == ['fee']
+        assert [row['id'] for row in changed['draft']['activities']] == ['visit', 'review']
+        assert changed['draft']['activities'][0]['description'] == '客户签约'
+        return await update('expense', {}, remove_rows={'legs': ['stop'], 'activities': ['review']})
+
+    _, observed = execute_submission(tmp_path, monkeypatch, '更新出发日期和活动，再移除第二段和项目评审', journey, setup)
+    draft = observed['result']['draft']
+    assert [row['id'] for row in draft['legs']] == ['go']
+    assert draft['legs'][0]['departureDate'] == '2026-11-19'
+    assert draft['expenses'][0]['reason'] == '人工确认的交通费用'
+    assert [row['id'] for row in draft['activities']] == ['visit']
 
 
 @pytest.mark.parametrize('draft_id', ['expense', 'personal'])

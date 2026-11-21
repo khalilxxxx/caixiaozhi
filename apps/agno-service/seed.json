@@ -119,6 +119,40 @@
         "synthetic": true
       },
       {
+        "key": "travel/travel_application/TA-20261113-015",
+        "source": {"id": "travel", "label": "差旅系统"},
+        "typeId": "travel_application",
+        "typeLabel": "差旅申请",
+        "id": "TA-20261113-015",
+        "applicantId": "local-linyue",
+        "title": "上海客户验收",
+        "sourceStatus": "已审批",
+        "status": "completed",
+        "phase": "closed",
+        "phaseLabel": "审批通过",
+        "updatedAt": "2026-11-13T15:42:00+08:00",
+        "summary": [
+          {"label": "行程", "value": "杭州 → 上海 → 杭州"},
+          {"label": "出差时间", "value": "11月17–18日 · 2天"}
+        ],
+        "details": [
+          {"label": "申请人", "value": "林悦"},
+          {"label": "所属部门", "value": "财务部"},
+          {"label": "所属公司", "value": "华川科技"},
+          {"label": "事由", "value": "上海客户产品验收及交付。"},
+          {"label": "数据来源", "value": "本地合成业务数据"}
+        ],
+        "steps": [
+          {"id": "travel-submit", "label": "提交申请", "status": "done", "actors": ["林悦"], "time": "11月13日 10:16"},
+          {"id": "travel-end", "label": "审批通过", "status": "done", "actors": ["张伟"], "time": "11月13日 15:42"}
+        ],
+        "legs": [
+          {"id": "ta-20261113-015-outbound", "departureCity": "杭州", "arrivalCity": "上海", "departureDate": "2026-11-17", "arrivalDate": "2026-11-17", "transport": "火车-二等座"},
+          {"id": "ta-20261113-015-return", "departureCity": "上海", "arrivalCity": "杭州", "departureDate": "2026-11-18", "arrivalDate": "2026-11-18", "transport": "火车-二等座", "isReturn": true}
+        ],
+        "synthetic": true
+      },
+      {
         "source": {
           "id": "expense",
           "label": "费用报销系统"
@@ -236,6 +270,122 @@
             ],
             "time": "11月16日 10:05 起",
             "note": "当前等待本人处理；重新提交后，以源系统确定的流程为准。"
+          }
+        ],
+        "version": 1,
+        "expenses": [
+          {
+            "id": "EX-20261116-018-expense-1",
+            "categoryId": "long-distance",
+            "categoryName": "长途交通费",
+            "name": "杭州东至北京南高铁",
+            "reason": "前往北京拜访客户。",
+            "date": "2026-11-05",
+            "amountCents": 62600,
+            "currency": "CNY",
+            "transport": "高铁",
+            "sourceFileId": "EX-20261116-018-file-1"
+          },
+          {
+            "id": "EX-20261116-018-expense-2",
+            "categoryId": "taxi",
+            "categoryName": "出租车",
+            "name": "北京南站至客户园区",
+            "reason": "抵京后从车站前往客户现场。",
+            "date": "2026-11-05",
+            "amountCents": 12800,
+            "currency": "CNY",
+            "transport": "出租车",
+            "city": "北京",
+            "sourceFileId": "EX-20261116-018-file-2"
+          },
+          {
+            "id": "EX-20261116-018-expense-3",
+            "categoryId": "other-printing",
+            "categoryName": "印刷费",
+            "name": "客户交流资料印刷",
+            "reason": "印制现场讨论使用的产品资料。",
+            "date": "2026-11-06",
+            "amountCents": 9600,
+            "currency": "CNY",
+            "sourceFileId": "EX-20261116-018-file-3"
+          },
+          {
+            "id": "EX-20261116-018-expense-4",
+            "categoryId": "hotel",
+            "categoryName": "住宿费",
+            "name": "北京出差住宿",
+            "reason": "客户现场拜访期间住宿，住宿发票待补。",
+            "date": "2026-11-07",
+            "amountCents": 128000,
+            "currency": "CNY",
+            "city": "北京",
+            "nights": 2,
+            "rooms": 1,
+            "checkIn": "2026-11-05",
+            "checkOut": "2026-11-07"
+          },
+          {
+            "id": "EX-20261116-018-expense-5",
+            "categoryId": "taxi",
+            "categoryName": "出租车",
+            "name": "客户园区至北京南站",
+            "reason": "拜访结束后从客户园区前往车站。",
+            "date": "2026-11-07",
+            "amountCents": 10400,
+            "currency": "CNY",
+            "transport": "出租车",
+            "city": "北京",
+            "sourceFileId": "EX-20261116-018-file-4"
+          },
+          {
+            "id": "EX-20261116-018-expense-6",
+            "categoryId": "long-distance",
+            "categoryName": "长途交通费",
+            "name": "北京南至杭州东高铁",
+            "reason": "客户拜访结束后返回杭州。",
+            "date": "2026-11-07",
+            "amountCents": 62600,
+            "currency": "CNY",
+            "transport": "高铁",
+            "sourceFileId": "EX-20261116-018-file-5"
+          }
+        ],
+        "files": [
+          {
+            "id": "EX-20261116-018-file-1",
+            "name": "杭州东至北京南高铁发票.webp",
+            "type": "image/webp",
+            "size": 42178,
+            "kind": "invoice"
+          },
+          {
+            "id": "EX-20261116-018-file-2",
+            "name": "北京南站至客户园区发票.webp",
+            "type": "image/webp",
+            "size": 41152,
+            "kind": "invoice"
+          },
+          {
+            "id": "EX-20261116-018-file-3",
+            "name": "客户交流资料印刷发票.webp",
+            "type": "image/webp",
+            "size": 41054,
+            "kind": "invoice"
+          },
+          {
+            "id": "EX-20261116-018-file-4",
+            "name": "客户园区至北京南站发票.webp",
+            "type": "image/webp",
+            "size": 40892,
+            "kind": "invoice"
+          },
+          {
+            "id": "EX-20261116-018-file-5",
+            "name": "北京南至杭州东高铁发票.webp",
+            "type": "image/webp",
+            "size": 42194,
+            "kind": "invoice"
           }
         ],
         "key": "expense/expense_claim/EX-20261116-018",
@@ -1311,9 +1461,12 @@
           "metric": "days",
           "effect": "warn",
           "enabled": false,
-          "version": 1,
-          "description": "申请天数超过5天时，审单时提醒我。",
-          "thresholdDays": 5
+          "version": 2,
+          "description": "差旅申请天数超过5天时，审单时提醒我。",
+          "thresholdDays": 5,
+          "documentTypes": [
+            "travel"
+          ]
         }
       ],
       "reviewedRules": [
@@ -1626,35 +1779,44 @@
           "metric": "days",
           "effect": "warn",
           "enabled": false,
-          "version": 1,
-          "description": "申请天数超过5天时，审单时提醒我。",
+          "version": 2,
+          "description": "差旅申请天数超过5天时，审单时提醒我。",
           "thresholdDays": 5,
           "category": "itinerary",
           "applicability": [
-            "OA办公系统",
+            "OA办公系统 · 差旅申请",
             "审单场景"
           ],
           "evidence": [
             {
-              "name": "申请天数",
-              "source": "OA申请 · 申请信息",
-              "purpose": "读取本次申请的天数"
+              "name": "出差天数",
+              "source": "差旅申请 · 行程",
+              "purpose": "核对去程至返程的日历天数"
             }
           ],
-          "output": "每张OA申请输出一条天数检查结果，列明申请天数与阈值。",
+          "output": "每张差旅申请输出一条天数检查结果，列明出差天数与阈值。",
           "missing": "必要字段或核对依据缺失时标记为“待核实”，列明缺失内容；补充后重新检查，不直接判为通过。",
-          "logic": "OA申请天数超过5天时，审单时提醒本人。",
+          "logic": "差旅申请天数超过5天时，审单时提醒本人。",
           "source": "本人维护",
-          "updatedAt": "2026/11/16 21:52",
+          "updatedAt": "2026-11-21T00:00:00+08:00",
           "revisions": [
             {
               "version": 1,
               "at": "2026/11/16 21:52",
               "summary": "载入现有规则",
               "logic": "OA申请天数超过5天时，审单时提醒本人。"
+            },
+            {
+              "version": 2,
+              "at": "2026-11-21T00:00:00+08:00",
+              "summary": "将出差天数提醒限定于差旅申请。",
+              "logic": "差旅申请天数超过5天时，审单时提醒本人。"
             }
           ],
-          "stage": "published"
+          "stage": "published",
+          "documentTypes": [
+            "travel"
+          ]
         }
       ],
       "drafts": {},
@@ -1828,6 +1990,7 @@
           "id": "rail",
           "name": "北京南 → 上海虹桥",
           "category": "交通",
+          "categoryId": "other-long-distance",
           "amount": 55200,
           "date": "2026-11-10",
           "purpose": "客户拜访往程高铁",
@@ -1839,6 +2002,7 @@
           "id": "hotel",
           "name": "上海静安商旅酒店",
           "category": "住宿",
+          "categoryId": "hotel",
           "amount": 65000,
           "date": "2026-11-10",
           "end": "2026-11-11",
@@ -1852,6 +2016,7 @@
           "id": "taxi",
           "name": "上海网约车行程",
           "category": "交通",
+          "categoryId": "taxi",
           "amount": 8000,
           "date": "2026-11-11",
           "purpose": "酒店至客户办公区",
@@ -1863,6 +2028,7 @@
           "id": "meal",
           "name": "外滩会客餐厅",
           "category": "餐饮",
+          "categoryId": "reception-meal-oa",
           "amount": 68000,
           "date": "2026-11-10",
           "purpose": "项目交流工作餐",
@@ -1875,6 +2041,7 @@
           "id": "reception",
           "name": "浦江商务餐厅",
           "category": "餐饮",
+          "categoryId": "reception-meal-oa",
           "amount": 92000,
           "date": "2026-11-11",
           "purpose": "客户接待用餐",
@@ -1887,6 +2054,7 @@
           "id": "office",
           "name": "晨光办公用品",
           "category": "办公",
+          "categoryId": "other-office",
           "amount": 8000,
           "date": "2026-11-11",
           "purpose": "",
@@ -1910,13 +2078,160 @@
         "invoiceUnique": true,
         "attachment": true,
         "stage": "待审批",
-        "version": 2,
+        "version": 3,
         "amountCents": 326000,
         "mealCents": 28000,
         "hotelNightCents": 78000,
         "categories": [
           "hotel",
           "meal"
+        ],
+        "synthetic": true,
+        "submittedAt": "2026-11-16T09:18:00+08:00",
+        "purpose": "赴上海拜访江湾零售项目组，复核门店试点报价并确认上线安排。",
+        "sourceLabel": "费用报销系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "林晓",
+            "status": "done",
+            "time": "2026-11-16T09:18:00+08:00"
+          },
+          {
+            "label": "财务审核",
+            "actor": "徐宁",
+            "status": "current",
+            "time": "2026-11-16T09:19:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "费用归属",
+            "value": "华东市场／零售试点"
+          },
+          {
+            "label": "收款人",
+            "value": "林晓"
+          }
+        ],
+        "documentType": "expense",
+        "applicationId": "TA-20261108-036",
+        "legs": [
+          {
+            "id": "leg-1",
+            "departureCity": "杭州",
+            "arrivalCity": "上海",
+            "departureDate": "2026-11-12",
+            "arrivalDate": "2026-11-12",
+            "transport": "高铁 · 二等座"
+          },
+          {
+            "id": "leg-2",
+            "departureCity": "上海",
+            "arrivalCity": "杭州",
+            "departureDate": "2026-11-14",
+            "arrivalDate": "2026-11-14",
+            "transport": "高铁 · 二等座"
+          }
+        ],
+        "files": [
+          {
+            "id": "BX-20261116-001-file-1",
+            "name": "静安商务酒店住宿发票.pdf",
+            "type": "application/pdf",
+            "size": 154819
+          },
+          {
+            "id": "BX-20261116-001-file-2",
+            "name": "沪杭往返电子客票.pdf",
+            "type": "application/pdf",
+            "size": 95332
+          },
+          {
+            "id": "BX-20261116-001-file-3",
+            "name": "客户工作餐发票.pdf",
+            "type": "application/pdf",
+            "size": 135786
+          },
+          {
+            "id": "BX-20261116-001-file-4",
+            "name": "网约车行程及发票.pdf",
+            "type": "application/pdf",
+            "size": 257304
+          },
+          {
+            "id": "BX-20261116-001-file-5",
+            "name": "客户现场会议室发票.pdf",
+            "type": "application/pdf",
+            "size": 148211
+          }
+        ],
+        "expenses": [
+          {
+            "id": "item-1",
+            "categoryId": "hotel",
+            "categoryName": "住宿费",
+            "name": "静安商务酒店",
+            "reason": "客户现场驻点，两晚单人住宿",
+            "date": "2026-11-14",
+            "currency": "CNY",
+            "amountCents": 156000,
+            "sourceFileId": "BX-20261116-001-file-1",
+            "city": "上海",
+            "checkIn": "2026-11-12",
+            "checkOut": "2026-11-14",
+            "rooms": 1,
+            "nights": 2
+          },
+          {
+            "id": "item-2",
+            "categoryId": "long-distance",
+            "categoryName": "长途交通费",
+            "name": "沪杭往返高铁",
+            "reason": "杭州往返上海拜访客户",
+            "date": "2026-11-14",
+            "currency": "CNY",
+            "amountCents": 14600,
+            "sourceFileId": "BX-20261116-001-file-2",
+            "transport": "高铁 · 二等座"
+          },
+          {
+            "id": "item-3",
+            "categoryId": "reception-meal-oa",
+            "categoryName": "餐饮费-OA",
+            "name": "客户现场工作餐",
+            "reason": "与江湾项目组共4人沟通试点报价",
+            "date": "2026-11-13",
+            "currency": "CNY",
+            "amountCents": 28000,
+            "sourceFileId": "BX-20261116-001-file-3",
+            "people": 4,
+            "oaId": "OA-20261110-039"
+          },
+          {
+            "id": "item-4",
+            "categoryId": "taxi",
+            "categoryName": "出租车",
+            "name": "市内接驳",
+            "reason": "虹桥站、酒店与客户现场之间往返",
+            "date": "2026-11-14",
+            "currency": "CNY",
+            "amountCents": 17400,
+            "sourceFileId": "BX-20261116-001-file-4",
+            "transport": "网约车"
+          },
+          {
+            "id": "item-5",
+            "categoryId": "other-conference",
+            "categoryName": "参会费",
+            "name": "上线评审会议室",
+            "reason": "租用上海试点评审会议室半日",
+            "date": "2026-11-13",
+            "currency": "CNY",
+            "amountCents": 110000,
+            "sourceFileId": "BX-20261116-001-file-5"
+          }
         ]
       },
       {
@@ -1930,11 +2245,81 @@
         "invoiceUnique": false,
         "attachment": true,
         "stage": "待审批",
-        "version": 1,
+        "version": 2,
         "amountCents": 186000,
         "mealCents": 68000,
         "categories": [
           "meal"
+        ],
+        "synthetic": true,
+        "submittedAt": "2026-11-16T10:32:00+08:00",
+        "purpose": "组织华东渠道客户交流会，与嘉联渠道团队5人讨论年度合作计划。",
+        "sourceLabel": "费用报销系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "陈澄",
+            "status": "done",
+            "time": "2026-11-16T10:32:00+08:00"
+          },
+          {
+            "label": "财务审核",
+            "actor": "徐宁",
+            "status": "current",
+            "time": "2026-11-16T10:33:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "费用归属",
+            "value": "华东渠道／客户活动"
+          },
+          {
+            "label": "收款人",
+            "value": "陈澄"
+          }
+        ],
+        "documentType": "personal",
+        "files": [
+          {
+            "id": "BX-20261116-002-file-1",
+            "name": "交流会餐饮发票（尾号6739）.pdf",
+            "type": "application/pdf",
+            "size": 164307
+          },
+          {
+            "id": "BX-20261116-002-file-2",
+            "name": "会场及设备租赁发票.pdf",
+            "type": "application/pdf",
+            "size": 184305
+          }
+        ],
+        "expenses": [
+          {
+            "id": "item-1",
+            "categoryId": "reception-meal-oa",
+            "categoryName": "餐饮费-OA",
+            "name": "交流会工作餐",
+            "reason": "嘉联渠道团队及我方共5人，讨论年度合作计划",
+            "date": "2026-11-13",
+            "currency": "CNY",
+            "amountCents": 68000,
+            "sourceFileId": "BX-20261116-002-file-1",
+            "people": 5,
+            "oaId": "OA-20261108-027"
+          },
+          {
+            "id": "item-2",
+            "categoryId": "other-conference",
+            "categoryName": "参会费",
+            "name": "客户交流会场",
+            "reason": "会议室及投影设备半日租赁",
+            "date": "2026-11-13",
+            "currency": "CNY",
+            "amountCents": 118000,
+            "sourceFileId": "BX-20261116-002-file-2"
+          }
         ]
       },
       {
@@ -1949,11 +2334,104 @@
         "invoiceUnique": true,
         "attachment": true,
         "stage": "待审批",
-        "version": 1,
+        "version": 2,
         "amountCents": 240000,
         "hotelNightCents": 56000,
         "categories": [
           "hotel"
+        ],
+        "synthetic": true,
+        "submittedAt": "2026-11-16T11:06:00+08:00",
+        "purpose": "赴北京完成北辰项目交付测试、整理缺陷清单并与客户签署验收纪要。",
+        "sourceLabel": "费用报销系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "周宁",
+            "status": "done",
+            "time": "2026-11-16T11:06:00+08:00"
+          },
+          {
+            "label": "部门负责人审批",
+            "actor": "顾海",
+            "status": "current",
+            "time": "2026-11-16T11:07:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "费用归属",
+            "value": "交付中心／北辰项目"
+          },
+          {
+            "label": "收款人",
+            "value": "周宁"
+          }
+        ],
+        "documentType": "expense",
+        "applicationId": "TA-20261104-011",
+        "legs": [
+          {
+            "id": "leg-1",
+            "departureCity": "杭州",
+            "arrivalCity": "北京",
+            "departureDate": "2026-11-10",
+            "arrivalDate": "2026-11-10",
+            "transport": "高铁 · 二等座"
+          },
+          {
+            "id": "leg-2",
+            "departureCity": "北京",
+            "arrivalCity": "杭州",
+            "departureDate": "2026-11-12",
+            "arrivalDate": "2026-11-12",
+            "transport": "高铁 · 二等座"
+          }
+        ],
+        "files": [
+          {
+            "id": "BX-20261116-003-file-1",
+            "name": "北京两晚住宿发票.pdf",
+            "type": "application/pdf",
+            "size": 178425
+          },
+          {
+            "id": "BX-20261116-003-file-2",
+            "name": "京杭往返电子客票.pdf",
+            "type": "application/pdf",
+            "size": 130419
+          }
+        ],
+        "expenses": [
+          {
+            "id": "item-1",
+            "categoryId": "hotel",
+            "categoryName": "住宿费",
+            "name": "中关村商务酒店",
+            "reason": "北辰交付测试期间两晚住宿",
+            "date": "2026-11-12",
+            "currency": "CNY",
+            "amountCents": 112000,
+            "sourceFileId": "BX-20261116-003-file-1",
+            "city": "北京",
+            "checkIn": "2026-11-10",
+            "checkOut": "2026-11-12",
+            "rooms": 1,
+            "nights": 2
+          },
+          {
+            "id": "item-2",
+            "categoryId": "long-distance",
+            "categoryName": "长途交通费",
+            "name": "京杭往返高铁",
+            "reason": "往返北京客户现场完成验收",
+            "date": "2026-11-12",
+            "currency": "CNY",
+            "amountCents": 128000,
+            "sourceFileId": "BX-20261116-003-file-2",
+            "transport": "高铁 · 二等座"
+          }
         ]
       },
       {
@@ -1967,11 +2445,70 @@
         "invoiceUnique": true,
         "attachment": true,
         "stage": "待审批",
-        "version": 1,
+        "version": 2,
         "amountCents": 168000,
         "mealCents": 168000,
         "categories": [
           "meal"
+        ],
+        "synthetic": true,
+        "submittedAt": "2026-11-16T13:42:00+08:00",
+        "purpose": "与嘉联渠道团队共8人进行商务午餐，商定冬季排期和门店配货计划。",
+        "sourceLabel": "费用报销系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "刘昕",
+            "status": "done",
+            "time": "2026-11-16T13:42:00+08:00"
+          },
+          {
+            "label": "费用复核",
+            "actor": "吴侠",
+            "status": "current",
+            "time": "2026-11-16T13:43:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "费用归属",
+            "value": "渠道销售／冬季订货会"
+          },
+          {
+            "label": "收款人",
+            "value": "刘昕"
+          }
+        ],
+        "documentType": "personal",
+        "files": [
+          {
+            "id": "BX-20261116-004-file-1",
+            "name": "渠道午餐发票.pdf",
+            "type": "application/pdf",
+            "size": 155648
+          },
+          {
+            "id": "BX-20261116-004-file-2",
+            "name": "订货会接待清单.xlsx",
+            "type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "size": 11894
+          }
+        ],
+        "expenses": [
+          {
+            "id": "item-1",
+            "categoryId": "reception-meal-oa",
+            "categoryName": "餐饮费-OA",
+            "name": "渠道客户商务午餐",
+            "reason": "嘉联渠道团队与我方共8人，确认门店配货计划",
+            "date": "2026-11-14",
+            "currency": "CNY",
+            "amountCents": 168000,
+            "sourceFileId": "BX-20261116-004-file-1",
+            "people": 8,
+            "oaId": "OA-20261112-035"
+          }
         ]
       },
       {
@@ -1985,9 +2522,79 @@
         "invoiceUnique": true,
         "attachment": true,
         "stage": "待审批",
-        "version": 1,
+        "version": 2,
         "amountCents": 68000,
-        "categories": []
+        "categories": [],
+        "synthetic": true,
+        "submittedAt": "2026-11-16T14:08:00+08:00",
+        "purpose": "由温州赴杭州测试现场排查终端故障，当日往返。",
+        "sourceLabel": "费用报销系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "沈一",
+            "status": "done",
+            "time": "2026-11-16T14:08:00+08:00"
+          },
+          {
+            "label": "部门负责人审批",
+            "actor": "郑明",
+            "status": "current",
+            "time": "2026-11-16T14:09:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "费用归属",
+            "value": "产品研发／终端适配"
+          },
+          {
+            "label": "收款人",
+            "value": "沈一"
+          }
+        ],
+        "documentType": "personal",
+        "files": [
+          {
+            "id": "BX-20261116-005-file-1",
+            "name": "温杭往返电子客票.pdf",
+            "type": "application/pdf",
+            "size": 111218
+          },
+          {
+            "id": "BX-20261116-005-file-2",
+            "name": "杭州接驳行程单.pdf",
+            "type": "application/pdf",
+            "size": 123440
+          }
+        ],
+        "expenses": [
+          {
+            "id": "item-1",
+            "categoryId": "long-distance",
+            "categoryName": "长途交通费",
+            "name": "温州往返杭州",
+            "reason": "前往测试中心开展设备排障",
+            "date": "2026-11-13",
+            "currency": "CNY",
+            "amountCents": 48600,
+            "sourceFileId": "BX-20261116-005-file-1",
+            "transport": "高铁 · 二等座"
+          },
+          {
+            "id": "item-2",
+            "categoryId": "taxi",
+            "categoryName": "出租车",
+            "name": "测试中心接驳",
+            "reason": "杭州东站往返测试中心",
+            "date": "2026-11-13",
+            "currency": "CNY",
+            "amountCents": 19400,
+            "sourceFileId": "BX-20261116-005-file-2",
+            "transport": "出租车"
+          }
+        ]
       },
       {
         "id": "BX-20261116-006",
@@ -2000,9 +2607,79 @@
         "invoiceUnique": true,
         "attachment": true,
         "stage": "待审批",
-        "version": 1,
+        "version": 2,
         "amountCents": 92000,
-        "categories": []
+        "categories": [],
+        "synthetic": true,
+        "submittedAt": "2026-11-16T15:27:00+08:00",
+        "purpose": "到合肥参加区域财务共享中心培训，报销城际交通及现场接驳。",
+        "sourceLabel": "费用报销系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "孙悦",
+            "status": "done",
+            "time": "2026-11-16T15:27:00+08:00"
+          },
+          {
+            "label": "财务审核",
+            "actor": "秦慧",
+            "status": "current",
+            "time": "2026-11-16T15:28:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "费用归属",
+            "value": "财务共享／员工培训"
+          },
+          {
+            "label": "收款人",
+            "value": "孙悦"
+          }
+        ],
+        "documentType": "personal",
+        "files": [
+          {
+            "id": "BX-20261116-006-file-1",
+            "name": "合肥培训往返车票.pdf",
+            "type": "application/pdf",
+            "size": 152386
+          },
+          {
+            "id": "BX-20261116-006-file-2",
+            "name": "培训接驳行程发票.pdf",
+            "type": "application/pdf",
+            "size": 106348
+          }
+        ],
+        "expenses": [
+          {
+            "id": "item-1",
+            "categoryId": "long-distance",
+            "categoryName": "长途交通费",
+            "name": "城际交通",
+            "reason": "往返合肥财务共享中心参加集中培训",
+            "date": "2026-11-14",
+            "currency": "CNY",
+            "amountCents": 76200,
+            "sourceFileId": "BX-20261116-006-file-1",
+            "transport": "高铁 · 二等座"
+          },
+          {
+            "id": "item-2",
+            "categoryId": "taxi",
+            "categoryName": "出租车",
+            "name": "共享中心接驳",
+            "reason": "合肥南站往返培训会场",
+            "date": "2026-11-14",
+            "currency": "CNY",
+            "amountCents": 15800,
+            "sourceFileId": "BX-20261116-006-file-2",
+            "transport": "网约车"
+          }
+        ]
       },
       {
         "id": "OA-20261116-017",
@@ -2015,8 +2692,60 @@
         "period": "11月18日 — 11月20日",
         "attachment": true,
         "stage": "待审批",
-        "version": 1,
-        "categories": []
+        "version": 2,
+        "categories": [],
+        "synthetic": true,
+        "submittedAt": "2026-11-16T09:42:00+08:00",
+        "purpose": "申请休年假3天，招聘进度和面试安排已交接给沈岚。",
+        "sourceLabel": "OA办公系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "赵佳",
+            "status": "done",
+            "time": "2026-11-16T09:42:00+08:00"
+          },
+          {
+            "label": "部门负责人审批",
+            "actor": "王喆",
+            "status": "current",
+            "time": "2026-11-16T09:43:00+08:00"
+          }
+        ],
+        "specificFields": [
+          {
+            "label": "假别",
+            "value": "带薪年休假"
+          },
+          {
+            "label": "开始时间",
+            "value": "2026-11-18 上午"
+          },
+          {
+            "label": "结束时间",
+            "value": "2026-11-20 下午"
+          },
+          {
+            "label": "申请时长",
+            "value": "3 个工作日"
+          },
+          {
+            "label": "本年度剩余额度（申请前）",
+            "value": "7 天"
+          },
+          {
+            "label": "工作交接人",
+            "value": "沈岚"
+          }
+        ],
+        "files": [
+          {
+            "id": "OA-20261116-017-file-1",
+            "name": "招聘工作交接清单.xlsx",
+            "type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "size": 18426
+          }
+        ]
       },
       {
         "id": "OA-20261116-021",
@@ -2029,8 +2758,555 @@
         "period": "11月23日 — 11月28日",
         "attachment": true,
         "stage": "待审批",
+        "version": 2,
+        "categories": [],
+        "synthetic": true,
+        "submittedAt": "2026-11-16T10:54:00+08:00",
+        "purpose": "赴南京中试仓完成物流盘点系统的切换演练，并组织仓储班组验收。",
+        "sourceLabel": "OA办公系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "许言",
+            "status": "done",
+            "time": "2026-11-16T10:54:00+08:00"
+          },
+          {
+            "label": "部门负责人审批",
+            "actor": "姚静",
+            "status": "current",
+            "time": "2026-11-16T10:55:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "费用归属",
+            "value": "运营中心／物流系统切换"
+          }
+        ],
+        "documentType": "travel",
+        "travelType": "普通差旅",
+        "amountCents": 420000,
+        "legs": [
+          {
+            "id": "leg-1",
+            "departureCity": "杭州",
+            "arrivalCity": "南京",
+            "departureDate": "2026-11-23",
+            "arrivalDate": "2026-11-23",
+            "transport": "高铁 · 二等座"
+          },
+          {
+            "id": "leg-2",
+            "departureCity": "南京",
+            "arrivalCity": "杭州",
+            "departureDate": "2026-11-28",
+            "arrivalDate": "2026-11-28",
+            "transport": "高铁 · 二等座"
+          }
+        ],
+        "activities": [
+          {
+            "id": "activity-1",
+            "oaNumber": "OA-20261112-027",
+            "description": "南京中试仓物流盘点系统上线与验收",
+            "effectiveDate": "2026-11-23",
+            "expiryDate": "2026-11-28",
+            "allocation": "100%"
+          }
+        ],
+        "files": [
+          {
+            "id": "OA-20261116-021-file-1",
+            "name": "南京中试仓上线计划.pdf",
+            "type": "application/pdf",
+            "size": 199478
+          }
+        ]
+      },
+      {
+        "id": "OA-20261119-022",
+        "title": "沪佛仓储系统巡检",
+        "system": "oa",
+        "kind": "差旅申请",
+        "person": "章晗",
+        "department": "供应链运营部",
+        "period": "12月1日 — 12月5日",
+        "attachment": true,
+        "stage": "待审批",
         "version": 1,
-        "categories": []
+        "categories": [],
+        "documentType": "travel",
+        "days": 5,
+        "amountCents": 486000,
+        "travelType": "普通差旅",
+        "synthetic": true,
+        "submittedAt": "2026-11-19T09:26:00+08:00",
+        "purpose": "在上海完成华东仓库存抽检，再赴佛山核对华南仓分拣流程并完成巡检记录。",
+        "sourceLabel": "OA办公系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "章晗",
+            "status": "done",
+            "time": "2026-11-19T09:26:00+08:00"
+          },
+          {
+            "label": "部门负责人审批",
+            "actor": "姚静",
+            "status": "current",
+            "time": "2026-11-19T09:27:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "费用归属",
+            "value": "供应链运营／跨仓巡检"
+          }
+        ],
+        "legs": [
+          {
+            "id": "leg-1",
+            "departureCity": "杭州",
+            "arrivalCity": "上海",
+            "departureDate": "2026-12-01",
+            "arrivalDate": "2026-12-01",
+            "transport": "高铁 · 二等座"
+          },
+          {
+            "id": "leg-2",
+            "departureCity": "上海",
+            "arrivalCity": "佛山",
+            "departureDate": "2026-12-03",
+            "arrivalDate": "2026-12-03",
+            "transport": "飞机 · 经济舱"
+          },
+          {
+            "id": "leg-3",
+            "departureCity": "佛山",
+            "arrivalCity": "杭州",
+            "departureDate": "2026-12-05",
+            "arrivalDate": "2026-12-05",
+            "transport": "飞机 · 经济舱"
+          }
+        ],
+        "activities": [
+          {
+            "id": "activity-1",
+            "oaNumber": "OA-20261117-041",
+            "description": "上海华东仓库存抽检",
+            "effectiveDate": "2026-12-01",
+            "expiryDate": "2026-12-02",
+            "allocation": "40%"
+          },
+          {
+            "id": "activity-2",
+            "oaNumber": "OA-20261117-042",
+            "description": "佛山华南仓分拣流程复核",
+            "effectiveDate": "2026-12-03",
+            "expiryDate": "2026-12-05",
+            "allocation": "60%"
+          }
+        ],
+        "files": [
+          {
+            "id": "OA-20261119-022-file-1",
+            "name": "跨仓巡检派工单.pdf",
+            "type": "application/pdf",
+            "size": 143752
+          }
+        ]
+      },
+      {
+        "id": "OA-20261120-023",
+        "title": "苏州产线联调驻场",
+        "system": "oa",
+        "kind": "差旅申请",
+        "person": "陆遥",
+        "department": "研发部",
+        "period": "11月24日 — 12月4日",
+        "attachment": true,
+        "stage": "待审批",
+        "version": 1,
+        "categories": [],
+        "documentType": "travel",
+        "days": 11,
+        "amountCents": 680000,
+        "travelType": "短期异地办公",
+        "synthetic": true,
+        "submittedAt": "2026-11-20T16:08:00+08:00",
+        "purpose": "驻苏州工业园区与制造团队联调产线接口，完成三轮压力测试后交付运行报告。",
+        "sourceLabel": "OA办公系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "陆遥",
+            "status": "done",
+            "time": "2026-11-20T16:08:00+08:00"
+          },
+          {
+            "label": "部门负责人审批",
+            "actor": "郑明",
+            "status": "current",
+            "time": "2026-11-20T16:09:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "费用归属",
+            "value": "产品研发／产线联调"
+          }
+        ],
+        "legs": [
+          {
+            "id": "leg-1",
+            "departureCity": "杭州",
+            "arrivalCity": "苏州",
+            "departureDate": "2026-11-24",
+            "arrivalDate": "2026-11-24",
+            "transport": "高铁 · 二等座"
+          },
+          {
+            "id": "leg-2",
+            "departureCity": "苏州",
+            "arrivalCity": "杭州",
+            "departureDate": "2026-12-04",
+            "arrivalDate": "2026-12-04",
+            "transport": "高铁 · 二等座"
+          }
+        ],
+        "activities": [
+          {
+            "id": "activity-1",
+            "oaNumber": "OA-20261118-019",
+            "description": "苏州产线接口联调与压力测试",
+            "effectiveDate": "2026-11-24",
+            "expiryDate": "2026-12-04",
+            "allocation": "100%"
+          }
+        ],
+        "files": [
+          {
+            "id": "OA-20261120-023-file-1",
+            "name": "苏州联调排期.xlsx",
+            "type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "size": 21846
+          }
+        ]
+      },
+      {
+        "id": "BX-20261118-007",
+        "title": "客户现场技术支持交通费",
+        "system": "expense",
+        "kind": "个人费用报销",
+        "person": "姜程",
+        "department": "技术支持部",
+        "period": "11月17日",
+        "attachment": true,
+        "stage": "待审批",
+        "version": 1,
+        "categories": [],
+        "documentType": "personal",
+        "amountCents": 2420,
+        "invoiceUnique": true,
+        "synthetic": true,
+        "submittedAt": "2026-11-18T08:56:00+08:00",
+        "purpose": "前往滨江客户机房排查终端通讯故障，申请报销当天市内公共交通费。",
+        "sourceLabel": "费用报销系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "姜程",
+            "status": "done",
+            "time": "2026-11-18T08:56:00+08:00"
+          },
+          {
+            "label": "财务审核",
+            "actor": "苏敏",
+            "status": "current",
+            "time": "2026-11-18T08:57:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "费用归属",
+            "value": "客户服务／终端支持"
+          },
+          {
+            "label": "收款人",
+            "value": "姜程"
+          }
+        ],
+        "files": [
+          {
+            "id": "BX-20261118-007-file-1",
+            "name": "杭州地铁电子发票.pdf",
+            "type": "application/pdf",
+            "size": 50925
+          },
+          {
+            "id": "BX-20261118-007-file-2",
+            "name": "公交电子客票.pdf",
+            "type": "application/pdf",
+            "size": 39082
+          }
+        ],
+        "expenses": [
+          {
+            "id": "item-1",
+            "categoryId": "metro",
+            "categoryName": "地铁",
+            "name": "地铁往返",
+            "reason": "办公室至客户机房，滨江站往返",
+            "date": "2026-11-17",
+            "currency": "CNY",
+            "amountCents": 1820,
+            "sourceFileId": "BX-20261118-007-file-1",
+            "transport": "地铁"
+          },
+          {
+            "id": "item-2",
+            "categoryId": "bus",
+            "categoryName": "公交车",
+            "name": "公交接驳",
+            "reason": "滨江地铁站至园区西门往返",
+            "date": "2026-11-17",
+            "currency": "CNY",
+            "amountCents": 600,
+            "sourceFileId": "BX-20261118-007-file-2",
+            "transport": "公交车"
+          }
+        ]
+      },
+      {
+        "id": "BX-20261120-008",
+        "title": "宁波设备验收差旅报销",
+        "system": "expense",
+        "kind": "差旅报销",
+        "person": "杜笙",
+        "department": "工程部",
+        "period": "11月17日 — 11月19日",
+        "attachment": true,
+        "stage": "待审批",
+        "version": 1,
+        "categories": [
+          "hotel"
+        ],
+        "documentType": "expense",
+        "applicationId": "TA-20261112-018",
+        "amountCents": 158400,
+        "invoiceUnique": true,
+        "hotelNightCents": 46000,
+        "nights": 2,
+        "synthetic": true,
+        "submittedAt": "2026-11-20T10:13:00+08:00",
+        "purpose": "赴宁波制造基地完成包装线设备的联机验收及操作交接。",
+        "sourceLabel": "费用报销系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "杜笙",
+            "status": "done",
+            "time": "2026-11-20T10:13:00+08:00"
+          },
+          {
+            "label": "财务审核",
+            "actor": "徐宁",
+            "status": "current",
+            "time": "2026-11-20T10:14:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "费用归属",
+            "value": "工程交付／包装线改造"
+          },
+          {
+            "label": "收款人",
+            "value": "杜笙"
+          }
+        ],
+        "legs": [
+          {
+            "id": "leg-1",
+            "departureCity": "杭州",
+            "arrivalCity": "宁波",
+            "departureDate": "2026-11-17",
+            "arrivalDate": "2026-11-17",
+            "transport": "高铁 · 二等座"
+          },
+          {
+            "id": "leg-2",
+            "departureCity": "宁波",
+            "arrivalCity": "杭州",
+            "departureDate": "2026-11-19",
+            "arrivalDate": "2026-11-19",
+            "transport": "高铁 · 二等座"
+          }
+        ],
+        "files": [
+          {
+            "id": "BX-20261120-008-file-1",
+            "name": "宁波驻点住宿发票.pdf",
+            "type": "application/pdf",
+            "size": 138997
+          },
+          {
+            "id": "BX-20261120-008-file-2",
+            "name": "甬杭往返电子客票.pdf",
+            "type": "application/pdf",
+            "size": 96727
+          },
+          {
+            "id": "BX-20261120-008-file-3",
+            "name": "制造基地接驳行程.pdf",
+            "type": "application/pdf",
+            "size": 78146
+          },
+          {
+            "id": "BX-20261120-008-file-4",
+            "name": "验收手册印制发票.pdf",
+            "type": "application/pdf",
+            "size": 103376
+          }
+        ],
+        "expenses": [
+          {
+            "id": "item-1",
+            "categoryId": "hotel",
+            "categoryName": "住宿费",
+            "name": "鄞州商务酒店",
+            "reason": "制造基地设备验收期间住宿",
+            "date": "2026-11-19",
+            "currency": "CNY",
+            "amountCents": 92000,
+            "sourceFileId": "BX-20261120-008-file-1",
+            "city": "宁波",
+            "checkIn": "2026-11-17",
+            "checkOut": "2026-11-19",
+            "rooms": 1,
+            "nights": 2
+          },
+          {
+            "id": "item-2",
+            "categoryId": "long-distance",
+            "categoryName": "长途交通费",
+            "name": "杭甬往返高铁",
+            "reason": "设备验收往返杭甬两地",
+            "date": "2026-11-19",
+            "currency": "CNY",
+            "amountCents": 14600,
+            "sourceFileId": "BX-20261120-008-file-2",
+            "transport": "高铁 · 二等座"
+          },
+          {
+            "id": "item-3",
+            "categoryId": "taxi",
+            "categoryName": "出租车",
+            "name": "现场接驳",
+            "reason": "酒店至制造基地往返",
+            "date": "2026-11-19",
+            "currency": "CNY",
+            "amountCents": 13800,
+            "sourceFileId": "BX-20261120-008-file-3",
+            "transport": "网约车"
+          },
+          {
+            "id": "item-4",
+            "categoryId": "other-printing",
+            "categoryName": "印刷费",
+            "name": "交接手册印制",
+            "reason": "印制包装线操作与验收交接手册",
+            "date": "2026-11-18",
+            "currency": "CNY",
+            "amountCents": 38000,
+            "sourceFileId": "BX-20261120-008-file-4"
+          }
+        ]
+      },
+      {
+        "id": "OA-20261119-024",
+        "title": "办公设备采购尾款",
+        "system": "oa",
+        "kind": "采购付款",
+        "person": "唐嘉",
+        "department": "行政部",
+        "period": "11月19日",
+        "attachment": true,
+        "stage": "待审批",
+        "version": 1,
+        "categories": [],
+        "amountCents": 2460000,
+        "synthetic": true,
+        "submittedAt": "2026-11-19T14:36:00+08:00",
+        "purpose": "会议区显示设备已到货并完成验收，按合同约定申请支付采购尾款。",
+        "sourceLabel": "OA办公系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "唐嘉",
+            "status": "done",
+            "time": "2026-11-19T14:36:00+08:00"
+          },
+          {
+            "label": "付款审核",
+            "actor": "秦慧",
+            "status": "current",
+            "time": "2026-11-19T14:37:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "收款单位",
+            "value": "杭州远澄办公设备有限公司"
+          },
+          {
+            "label": "采购合同",
+            "value": "HT-20260915-032"
+          },
+          {
+            "label": "采购订单",
+            "value": "PO-20261008-016"
+          },
+          {
+            "label": "合同含税金额",
+            "value": "¥82,000.00"
+          },
+          {
+            "label": "本次付款",
+            "value": "验收尾款 · 30%"
+          },
+          {
+            "label": "计划付款日",
+            "value": "2026-11-26"
+          }
+        ],
+        "files": [
+          {
+            "id": "OA-20261119-024-file-1",
+            "name": "会议区设备采购合同.pdf",
+            "type": "application/pdf",
+            "size": 528603
+          },
+          {
+            "id": "OA-20261119-024-file-2",
+            "name": "设备到货验收单.pdf",
+            "type": "application/pdf",
+            "size": 246997
+          },
+          {
+            "id": "OA-20261119-024-file-3",
+            "name": "增值税电子发票.pdf",
+            "type": "application/pdf",
+            "size": 150912
+          }
+        ]
       }
     ],
     "expenseCategories": [

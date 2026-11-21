@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react';
-import type { CapabilityId } from './capability-model';
+import type { CapabilityId, ExpertTeamId } from './capability-model';
 import type { ToolStep } from './run-progress-model';
+import type { WorkDocument } from './work-document-model';
 import type {
   ClarificationQuestion,
   QuestionAnswerInput,
@@ -15,6 +16,9 @@ export type PageId =
   | 'rules'
   | 'analysis'
   | 'skills'
+  | 'light-apps'
+  | 'todos'
+  | 'schedules'
   | 'knowledge'
   | 'files';
 export interface PanelSpec {
@@ -47,6 +51,8 @@ export interface ChatMessage {
   submissionPhase?: 'collecting' | 'ready';
   tools?: ToolStep[];
   runId?: string;
+  capability?: CapabilityId | null;
+  expertTeamName?: string | null;
   runStatus?: string;
   time?: string;
   createdAt?: number;
@@ -62,6 +68,7 @@ export interface Task {
   input: string;
   refs: ContextRef[];
   capability?: CapabilityId | null;
+  expertTeamName?: string | null;
   updated: string;
   activeRunId?: string | null;
 }
@@ -82,7 +89,9 @@ export interface WorkspaceAPI {
   closePanel: () => void;
   navigate: (page: PageId) => void;
   attach: (ref: ContextRef) => void;
+  discussAuditDocument: (doc: WorkDocument) => void;
   selectSkill: (ref: ContextRef) => void;
+  summonExpertTeam: (id: ExpertTeamId, prompt?: string, teamName?: string) => void;
   send: (text: string, refs?: ContextRef[]) => void;
   answerQuestion: (answer: QuestionAnswerInput) => Promise<void>;
   message: (text: string, cards?: ResultCard[]) => void;

@@ -122,6 +122,34 @@ describe('本地运行时并发保存', () => {
     expect(bodies[1].tasks[0].messages[0].id).toBe('assistant-run');
   });
 
+  it.each([false, true])('关联回执到达时保留并发输入与导入行程（既有编辑：%s）', async (hasEdit) => {
+    const client = await import('../../apps/web/src/demos/agent-workspace/runtime-client');
+    const initial = state();
+    const original = { id: 'expense', status: 'draft', version: 1, purpose: '', applicationId: '', legs: [] };
+    initial.data.submissions.drafts.expense = original;
+    if (hasEdit) initial.data.submissions.edits.expense = { ...original, purpose: '上次输入' };
+    const linked = { ...original, version: 2, applicationId: 'TA-1', legs: [{ id: 'imported' }] };
+    const updated = structuredClone(initial);
+    updated.data.submissions.drafts.expense = linked;
+    updated.data.submissions.edits = {};
+    client.acceptWorkspace({ state: initial, revision: 1 });
+    const submissions = structuredClone(initial.data.submissions);
+    submissions.edits.expense = { ...original, purpose: '关联时输入' };
+    client.saveWorkspace({ data: { submissions } });
+    client.acceptWorkspace({ state: updated, revision: 2 });
+
+    const bodies: any[] = [];
+    const fetcher = vi.fn(async (_url: string, options: RequestInit) => {
+      const patch = JSON.parse(String(options.body));
+      bodies.push(patch);
+      return response({ state: { ...updated, data: patch.data }, revision: 3 });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    await client.flushWorkspace();
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(bodies[0].data.submissions.edits.expense).toEqual({ ...linked, purpose: '关联时输入' });
+  });
+
   it('保存尚未返回时输入的新变更继续排队，不被首次回执覆盖', async () => {
     const client =
       await import('../../apps/web/src/demos/agent-workspace/runtime-client');

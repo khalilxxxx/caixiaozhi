@@ -46,6 +46,8 @@ export interface CatalogItem {
   latestStatus: string;
   updatedAt: string;
   favorite: boolean;
+  createdByMe: boolean;
+  formats?: { input: string; output: string };
   canView: boolean;
   canUse: boolean;
   canManage: boolean;
@@ -57,6 +59,7 @@ export interface CatalogItem {
 }
 export interface CatalogRoute {
   view: 'catalog' | 'manage';
+  scope: 'all' | 'mine';
   management: 'mine' | 'review';
   search: string;
   type: 'all' | 'skill' | 'tool';
@@ -67,6 +70,12 @@ export interface CatalogRoute {
 }
 export const currentVersion = (s: Skill) =>
   s.versions.find((v) => v.status === 'published') || s.versions[0]!;
+export function skillDocumentText(skill: Skill, version: SkillVersion): string {
+  const sources = version.file
+    ? [version.instructions, version.file.inspection?.instructions, version.file.text]
+    : [version.instructions, skill.instructions];
+  return sources.find((text) => text?.trim()) ?? '';
+}
 export const available = (s: Skill, v = currentVersion(s)) =>
   s.view &&
   s.call &&
@@ -108,6 +117,7 @@ export function skillCatalogItem(s: Skill): CatalogItem {
     latestStatus: latest?.status || 'draft',
     updatedAt: latest?.updated || '',
     favorite: s.favorite,
+    createdByMe: s.owner === '我',
     canView: s.view,
     canUse: available(s),
     availabilityState: available(s)
@@ -131,25 +141,24 @@ export function filterCatalog<T extends CatalogItem>(
   filters: CatalogRoute,
 ): T[] {
   const search = filters.search.trim().toLocaleLowerCase();
-  return items.filter(
-    (item) =>
-      (filters.view === 'catalog'
-        ? item.canView && item.status === 'published'
-        : filters.management === 'review'
-          ? item.canReview
-          : item.canManage) &&
+  return items.filter((item) => {
+    const visible = filters.view === 'manage'
+      ? (filters.management === 'review' ? item.canReview : item.canManage)
+      : item.canView && (filters.scope === 'mine' ? item.createdByMe && item.canManage : item.status === 'published');
+    return visible &&
       (filters.type === 'all' || item.type === filters.type) &&
       (filters.category === '全部分类' || item.category === filters.category) &&
       (!filters.favorites || item.favorite) &&
       `${item.name} ${item.description} ${item.category} ${item.searchText || ''}`
         .toLocaleLowerCase()
-        .includes(search),
-  );
+        .includes(search);
+  });
 }
 export function readCatalogRoute(hash: string): CatalogRoute {
   const params = new URLSearchParams(hash.split('?')[1] || '');
   return {
     view: params.get('view') === 'manage' ? 'manage' : 'catalog',
+    scope: params.get('scope') === 'mine' ? 'mine' : 'all',
     management: params.get('management') === 'review' ? 'review' : 'mine',
     search: params.get('q') || '',
     type:
@@ -164,9 +173,22 @@ export function readCatalogRoute(hash: string): CatalogRoute {
     action: params.get('action') || 'tool',
   };
 }
-export function writeCatalogRoute(state: CatalogRoute): string {
+export type CatalogArea = 'skills' | 'light-apps';
+
+export function catalogArea(hash: string): CatalogArea | null {
+  const [page, query] = hash.split('?');
+  if (page === '#light-apps') return 'light-apps';
+  if (page !== '#skills') return null;
+  const params = new URLSearchParams(query);
+  const appView = params.has('tool') || params.get('type') === 'tool' ||
+    params.get('tab') === 'tools' || ['upload', 'requests'].includes(params.get('action') || '');
+  return appView ? 'light-apps' : 'skills';
+}
+
+export function writeCatalogRoute(state: CatalogRoute, area: CatalogArea = 'skills'): string {
   const params = new URLSearchParams();
   if (state.view === 'manage') params.set('view', 'manage');
+  if (state.scope === 'mine') params.set('scope', 'mine');
   if (state.management === 'review') params.set('management', 'review');
   if (state.search) params.set('q', state.search);
   if (state.type !== 'all') params.set('type', state.type);
@@ -174,7 +196,7 @@ export function writeCatalogRoute(state: CatalogRoute): string {
   if (state.favorites) params.set('favorites', '1');
   if (state.toolId) params.set('tool', state.toolId);
   if (state.action !== 'tool') params.set('action', state.action);
-  return '#skills' + (params.size ? `?${params}` : '');
+  return '#' + area + (params.size ? `?${params}` : '');
 }
 export function reviewStage(
   v: SkillVersion,

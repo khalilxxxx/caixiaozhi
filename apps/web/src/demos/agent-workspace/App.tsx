@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type SetStateAction } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type SetStateAction } from 'react';
 import {
   api as runtimeApi,
   acceptWorkspace,
@@ -24,7 +24,9 @@ import {
   reduceRunEvent,
   type RunStream,
 } from './run-progress-model';
+import { isReimbursementPanel } from './reimbursement-batch';
 import { ContextHelp } from './ContextHelp';
+import { PublicFinancialsPanel, PublicFinancialReportPanel } from './PublicFinancials';
 import {
   readSkillDraftTarget,
   saveSkillDraftTarget,
@@ -52,24 +54,39 @@ import {
   type QuestionAnswerInput,
 } from './question-model';
 import {
-  conversationState,
+  recentConversationAlert,
   formatConversationTime,
   lastMessageTime,
   recentConversations,
 } from './conversation-model';
-import { getCapability, type CapabilityId } from './capability-model';
+import { useConversationReads } from './conversation-reads';
+import { NotificationCenter } from './NotificationCenter';
+import { useWorkspaceNotifications, type WorkspaceNotification } from './notification-center-model';
+import {
+  expertTeamRefs, getCapability, isExpertTeam, prepareExpertTeamDraft,
+  type CapabilityId, type ExpertTeamId,
+} from './capability-model';
 import { SkillPickerPanel } from './Skills';
+import { CapabilityCenter } from './CapabilityCenter';
+import { CatalogHeading } from './CatalogHeading';
+import { catalogArea } from './skills-catalog-model';
 import { ConversationHistory } from './ConversationHistory';
+import { ScheduledTasksPage } from './ScheduledTasks';
 import { TranslationPanel } from './TranslationPanel';
 import { SkillArtifactPanel } from './SkillArtifactPanel';
-import { Composer, Home, ChatPage, logo } from './Chat';
+import { Composer, Home, ChatPage } from './Chat';
 import { QuestionComposer, clearQuestionResponse } from './QuestionComposer';
-import { RulesPage, RulesPanel, AuditPanel } from './RulesSubmission';
+import { RulesPage, RulesPanel } from './RulesSubmission';
+import { AuditPanel } from './WorkInbox';
+import { findWorkDocument, workDocumentTitle, type WorkDocument } from './work-document-model';
+import { WorkDocumentIcon } from './WorkDocumentIcon';
 import { SubmissionPage, SubmissionPanel } from './SubmissionWorkspace';
 import {
   DocumentsPage,
   FilesPage,
   DocumentPanel,
+  DocumentPanelActions,
+  useDocumentPanelLookup,
   MaterialsPanel,
 } from './Documents';
 import {
@@ -91,13 +108,29 @@ import {
   RenamePanel,
 } from './Supporting';
 
-const frequentApps: PageId[] = ['skills', 'rules', 'analysis'];
+const workspaceApps: PageId[] = ['skills', 'light-apps', 'schedules'];
+const frequentApps: PageId[] = ['todos', 'rules', 'analysis'];
+const directoryOnlyApps = apps.filter((app) => !workspaceApps.includes(app.id) && !frequentApps.includes(app.id));
 const uid = () => crypto.randomUUID();
 const initial: WorkspaceState = { data: {}, tasks: [], activeTask: null };
+function BrandWordmark() {
+  return (
+    <img
+      className="brand-wordmark"
+      src="/agent-assets/caixiaozhi-wordmark.svg"
+      alt="财小智"
+      width={108}
+      height={28}
+      draggable={false}
+    />
+  );
+}
+
 function homeDraft(): {
   input?: string;
   refs?: ContextRef[];
   capability?: CapabilityId | null;
+  expertTeamName?: string | null;
 } {
   try {
     return JSON.parse(
@@ -115,7 +148,10 @@ const pageTitles: Record<PageId, string> = {
   submission: '智能提单',
   rules: '规则中心',
   analysis: '数据分析',
-  skills: '技能工具',
+  skills: '能力中心',
+  'light-apps': '轻应用',
+  todos: '我的工作',
+  schedules: '自动化',
   knowledge: '制度知识',
   files: '材料与文件',
 };
@@ -126,8 +162,10 @@ function readMode(): Mode {
     : 'assistant';
 }
 function readPage(): PageId {
+  const area = catalogArea(location.hash);
+  if (area) return area;
   const p = location.hash.slice(1).split('?')[0] as PageId;
-  return p in pageTitles ? p : 'home';
+  return Object.hasOwn(pageTitles, p) ? p : 'home';
 }
 function makeTask(title = '新会话'): Task {
   return {
@@ -148,15 +186,14 @@ export default function App() {
     [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>({
       state: 'loading',
     }),
-    [health, setHealth] = useState<{
-      modelConfigured: boolean;
-      model: string;
-      framework: string;
-    } | null>(null),
     [streams, setStreams] = useState<Record<string, RunStream>>({}),
     [page, setPage] = useState<PageId>(readPage),
     [mode, setModeState] = useState<Mode>(readMode),
     [panel, setPanel] = useState<PanelSpec | null>(() => {
+      const id = new URLSearchParams(location.search).get('review-document');
+      if (new URLSearchParams(location.search).has('review-layout') || (readPage() === 'todos' && id)) {
+        return readPage() === 'todos' && id ? { kind: 'audit', id, title: '待办单据' } : null;
+      }
       try {
         const saved = JSON.parse(
           sessionStorage.getItem('cx.agent.local.panel') ?? 'null',
@@ -169,6 +206,8 @@ export default function App() {
       }
     }),
     [mobileOpen, setMobileOpen] = useState(false),
+    [notificationsOpen, setNotificationsOpen] = useState(false),
+    [notificationRefreshFailed, setNotificationRefreshFailed] = useState(false),
     [toast, setToast] = useState(''),
     [homeInput, setHomeInput] = useState(() => homeDraft().input ?? ''),
     [homeRefs, setHomeRefs] = useState<ContextRef[]>(
@@ -176,6 +215,9 @@ export default function App() {
     ),
     [homeCapability, setHomeCapability] = useState<CapabilityId | null>(
       () => homeDraft().capability ?? null,
+    ),
+    [homeExpertTeamName, setHomeExpertTeamName] = useState<string | null>(
+      () => homeDraft().expertTeamName ?? null,
     ),
     [busyIds, setBusyIds] = useState<string[]>([]),
     [compact, setCompact] = useState(
@@ -202,6 +244,7 @@ export default function App() {
               {
                 id: `failure-${task.id}`,
                 role: 'assistant' as const,
+                runStatus: 'failed',
                 text: failure,
               },
             ]
@@ -212,13 +255,13 @@ export default function App() {
   const stateRef = useRef(savedState),
     panelRef = useRef(panel),
     draftTaskId = useRef<string | null>(
-      page === 'skills'
-        ? readSkillDraftTarget()
-        : page === 'home'
-          ? null
-          : state.activeTask,
+      page === 'home' ? null : readSkillDraftTarget(),
     ),
     dialog = useRef<HTMLDialogElement>(null),
+    notificationTrigger = useRef<HTMLButtonElement>(null),
+    mobileNavigationTrigger = useRef<HTMLButtonElement>(null),
+    notificationReturnScroll = useRef(0),
+    checkingNotifications = useRef(false),
     lastFocus = useRef<HTMLElement | null>(null),
     connections = useRef(
       new Map<string, { runId: string; source: EventSource }>(),
@@ -232,10 +275,11 @@ export default function App() {
   panelRef.current = panel;
   const active = state.tasks.find((t) => t.id === state.activeTask),
     chatVisible = page === 'chat' && active,
+    submissionSurface = panel?.kind === 'submission' || isReimbursementPanel(panel),
     inlinePanel =
       (mode === 'operations' ||
         panel?.kind === 'report' ||
-        panel?.kind === 'submission') &&
+        submissionSurface) &&
       page === 'chat' &&
       panel &&
       [
@@ -248,10 +292,24 @@ export default function App() {
         'rule',
         'skill',
       ].includes(panel.kind) &&
-      viewportWidth >= (panel.kind === 'submission' ? 1280 : 1100);
+      viewportWidth >= (submissionSurface ? 1280 : 1100);
   const attention = selectHomeTasks(state.tasks).attention;
   const attentionCount = attention.length;
   const conversations = recentConversations(state.tasks);
+  const readingTask = notificationsOpen ? undefined : chatVisible || undefined;
+  const { reads: readReplies, markRepliesRead } = useConversationReads(
+    ready,
+    state.tasks,
+    readingTask,
+  );
+  const notifications = useWorkspaceNotifications({
+    ready,
+    tasks: state.tasks,
+    data: state.data,
+    readReplies,
+    openTaskId: readingTask?.id,
+  });
+  const unreadNotifications = notifications.items.filter((item) => item.unread);
   useEffect(() => {
     const timer = window.setInterval(
       () => setConversationClock(Date.now()),
@@ -318,10 +376,11 @@ export default function App() {
           input: homeInput,
           refs: homeRefs,
           capability: homeCapability,
+          expertTeamName: homeExpertTeamName,
         }),
       );
     } catch {}
-  }, [homeInput, homeRefs, homeCapability]);
+  }, [homeInput, homeRefs, homeCapability, homeExpertTeamName]);
   useEffect(() => {
     if (!ready) return;
     if (!restoredPanel.current) {
@@ -343,20 +402,29 @@ export default function App() {
         connectRun(task.id, task.activeRunId);
   }, [ready, savedState.tasks]);
   useEffect(() => {
+    const url = new URL(location.href);
+    url.searchParams.delete('review-layout');
+    if (page === 'todos' && panel?.kind === 'audit' && panel.id && panel.id !== 'batch')
+      url.searchParams.set('review-document', panel.id);
+    else url.searchParams.delete('review-document');
+    if (url.href !== location.href) history.replaceState(history.state, '', url);
     try {
       sessionStorage.setItem('cx.agent.local.panel', JSON.stringify(panel));
     } catch {}
-  }, [panel]);
+  }, [panel, page]);
   useEffect(() => {
     const resized = () => setViewportWidth(window.innerWidth);
     window.addEventListener('resize', resized);
     return () => window.removeEventListener('resize', resized);
   }, []);
   useEffect(() => {
-    document.title = `财小智 · ${pageTitles[page]}`;
-  }, [page]);
+    document.title = `财小智 · ${notificationsOpen ? '消息中心' : pageTitles[page]}`;
+  }, [page, notificationsOpen]);
   useEffect(() => {
-    const hash = () => setPage(readPage());
+    const hash = () => {
+      setNotificationsOpen(false);
+      setPage(readPage());
+    };
     window.addEventListener('hashchange', hash);
     return () => window.removeEventListener('hashchange', hash);
   }, []);
@@ -367,17 +435,38 @@ export default function App() {
         if (panelRef.current) closePanel();
         navigate('history');
       }
-      if (e.key === 'Escape' && inlinePanel) closePanel();
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (notificationsOpen && !mobileOpen) {
+        e.preventDefault();
+        closeNotifications();
+      } else if (inlinePanel) closePanel();
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [inlinePanel, page, homeInput, homeRefs, homeCapability]);
+  }, [inlinePanel, page, homeInput, homeRefs, homeCapability, homeExpertTeamName, notificationsOpen, mobileOpen]);
+  useLayoutEffect(() => {
+    if (!notificationsOpen) return;
+    window.scrollTo(0, 0);
+    document.getElementById('notification-center-heading')?.focus({ preventScroll: true });
+  }, [notificationsOpen]);
+  useEffect(() => {
+    if (!ready) return;
+    const timer = window.setInterval(refreshNotifications, 60000);
+    document.addEventListener('visibilitychange', refreshNotifications);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshNotifications);
+    };
+  }, [ready]);
   useEffect(() => {
     const element = dialog.current;
-    if (ready && panel && !inlinePanel) {
-      if (element && !element.open) element.showModal();
+    if (ready && panel && !inlinePanel && !notificationsOpen) {
+      if (element && !element.open) {
+        element.showModal();
+        element.querySelector<HTMLElement>('.rl-caption h2, .dp-caption h2')?.focus({ preventScroll: true });
+      }
     } else if (element?.open) element.close();
-  }, [ready, panel, inlinePanel]);
+  }, [ready, panel, inlinePanel, notificationsOpen]);
   useEffect(() => {
     if (mode === 'operations' && page === 'home') {
       const t =
@@ -401,12 +490,6 @@ export default function App() {
     try {
       await flushWorkspace();
       await readWorkspace();
-      const value = await runtimeApi<{
-        modelConfigured: boolean;
-        model: string;
-        framework: string;
-      }>('/health');
-      if (mounted.current) setHealth(value);
     } catch (error) {
       if (mounted.current) {
         setRuntimeStatus({
@@ -420,6 +503,18 @@ export default function App() {
   async function refresh() {
     await flushWorkspace();
     await readWorkspace();
+  }
+  async function refreshNotifications() {
+    if (document.hidden || checkingNotifications.current) return;
+    checkingNotifications.current = true;
+    try {
+      await readWorkspace();
+      if (mounted.current) setNotificationRefreshFailed(false);
+    } catch {
+      if (mounted.current) setNotificationRefreshFailed(true);
+    } finally {
+      checkingNotifications.current = false;
+    }
   }
   function connectRun(taskId: string, runId: string, questionDraftId?: string) {
     if (connections.current.has(taskId)) return;
@@ -561,6 +656,12 @@ export default function App() {
     draftTaskId.current = id;
     saveSkillDraftTarget(id);
   }
+  function clearHomeDraft() {
+    setHomeInput('');
+    setHomeRefs([]);
+    setHomeCapability(null);
+    setHomeExpertTeamName(null);
+  }
   function preserveHomeDraft() {
     if (
       page !== 'home' ||
@@ -573,32 +674,69 @@ export default function App() {
     draft.input = homeInput;
     draft.refs = homeRefs;
     draft.capability = homeCapability;
+    draft.expertTeamName = homeExpertTeamName;
     setDraftTarget(draft.id);
     setState((current) => ({
       ...current,
       activeTask: draft.id,
       tasks: [draft, ...current.tasks],
     }));
-    setHomeInput('');
-    setHomeRefs([]);
-    setHomeCapability(null);
+    clearHomeDraft();
   }
-  function navigate(next: PageId) {
-    if (next !== 'home' && next !== 'chat' && next !== 'skills')
-      preserveHomeDraft();
-    if (next === 'skills') saveSkillDraftTarget(draftTaskId.current);
+  function navigate(next: PageId, hash: string = next) {
+    if (next === 'skills' || next === 'light-apps') saveSkillDraftTarget(draftTaskId.current);
+    else if (next !== 'home' && next !== 'chat') preserveHomeDraft();
     setPage(next);
+    setNotificationsOpen(false);
     setMobileOpen(false);
-    if (location.hash !== `#${next}`) location.hash = next;
+    if (location.hash !== `#${hash}`) location.hash = hash;
+  }
+  function closeNotifications() {
+    setNotificationsOpen(false);
+    setMobileOpen(false);
+    requestAnimationFrame(() => {
+      window.scrollTo(0, notificationReturnScroll.current);
+      (mobileNavigationTrigger.current ?? notificationTrigger.current)?.focus({ preventScroll: true });
+    });
+  }
+  function toggleNotifications() {
+    if (notificationsOpen) {
+      closeNotifications();
+      return;
+    }
+    notificationReturnScroll.current = window.scrollY;
+    setNotificationsOpen(true);
+    setMobileOpen(false);
+    void refreshNotifications();
+  }
+  function markNotificationReplies(items: WorkspaceNotification[]) {
+    const replies = new Map<string, string>();
+    for (const item of items) {
+      if (item.replyId) replies.set(item.taskId, item.replyId);
+    }
+    markRepliesRead(replies);
+  }
+  function markNotificationRead(id: string) {
+    const item = notifications.items.find((notification) => notification.id === id);
+    if (!item) return;
+    notifications.markRead(id);
+    markNotificationReplies([item]);
+  }
+  function openNotification(item: WorkspaceNotification) {
+    markNotificationRead(item.id);
+    selectTask(item.taskId);
+    requestAnimationFrame(() => {
+      document.getElementById('workspace-main')?.focus({ preventScroll: true });
+    });
   }
   function openPanel(next: PanelSpec) {
+    setNotificationsOpen(false);
     if (next.kind === 'tool') {
-      preserveHomeDraft();
       saveSkillDraftTarget(draftTaskId.current);
       setPanel(null);
-      setPage('skills');
+      setPage('light-apps');
       setMobileOpen(false);
-      location.hash = `skills?tab=tools&tool=expense-summary${next.id ? `&result=${encodeURIComponent(next.id)}` : ''}`;
+      location.hash = `light-apps?tool=expense-summary${next.id ? `&result=${encodeURIComponent(next.id)}` : ''}`;
       return;
     }
     if (!panelRef.current)
@@ -606,10 +744,21 @@ export default function App() {
     setPanel(next);
   }
   function closePanel() {
+    const workId = page === 'todos' && panel?.kind === 'audit' ? panel.id : null;
+    const trigger = lastFocus.current;
+    lastFocus.current = null;
     setPanel(null);
-    requestAnimationFrame(
-      () => lastFocus.current?.isConnected && lastFocus.current.focus(),
-    );
+    requestAnimationFrame(() => {
+      if (trigger?.isConnected && trigger !== document.body) {
+        trigger.focus();
+      } else if (workId) {
+        const row = document.querySelector<HTMLElement>(`[data-work-id="${CSS.escape(workId)}"]`);
+        const next = row
+          ?? document.querySelector<HTMLElement>('.wi-rows [data-work-id]')
+          ?? document.querySelector<HTMLElement>('.wi-filters [aria-pressed="true"]');
+        next?.focus();
+      }
+    });
   }
   function updateTask(id: string, fn: (task: Task) => Task) {
     setState((s) => ({
@@ -648,15 +797,49 @@ export default function App() {
   function newTask() {
     setDraftTarget(null);
     setState((s) => ({ ...s, activeTask: null }));
-    setHomeInput('');
-    setHomeRefs([]);
-    setHomeCapability(null);
+    clearHomeDraft();
     setPanel(null);
     navigate('home');
+  }
+  function discussAuditDocument(doc: WorkDocument) {
+    const title = workDocumentTitle(doc);
+    const ref: ContextRef = { kind: 'audit', id: doc.id, title };
+    const target = stateRef.current.tasks.find((task) => task.id === draftTaskId.current);
+    if (isExpertTeam(target ? target.capability : homeCapability)) {
+      attach(ref);
+      return;
+    }
+    preserveHomeDraft();
+    const id = 'work-document-' + doc.id;
+    setDraftTarget(id);
+    setState((current) => {
+      const existing = current.tasks.find((task) => task.id === id);
+      const task = existing ?? { ...makeTask(title), id };
+      const updated = {
+        ...task,
+        title: task.title === doc.title ? title : task.title,
+        refs: [...task.refs.filter((item) => item.kind !== 'audit'), ref],
+      };
+      return {
+        ...current,
+        activeTask: id,
+        tasks: existing
+          ? current.tasks.map((item) => item.id === id ? updated : item)
+          : [updated, ...current.tasks],
+      };
+    });
+    closePanel();
+    navigate('chat');
+    requestAnimationFrame(() => document.getElementById('message-input')?.focus());
   }
   function selectSkill(ref: ContextRef) {
     if (ref.kind !== 'skill') return;
     const targetId = draftTaskId.current;
+    const target = stateRef.current.tasks.find((task) => task.id === targetId);
+    if (isExpertTeam(target ? target.capability : homeCapability)) {
+      notify('请先退出当前专家团，再选择单项技能。');
+      return;
+    }
     const home = {
       input: homeInput,
       refs: homeRefs,
@@ -681,19 +864,51 @@ export default function App() {
       document.getElementById('message-input')?.focus(),
     );
   }
+  function teamSwitchBlocked(task?: Task) {
+    if (!task) return false;
+    if (task.activeRunId || starting.current.has(task.id) || connections.current.has(task.id)) {
+      notify('当前会话正在处理，请在本轮结束后切换。');
+      return true;
+    }
+    const question = pendingQuestion(task);
+    if (question && questionState(question, stateRef.current.data) === 'pending') {
+      notify('请先回答当前问题，或选择“暂不处理”后再切换。');
+      return true;
+    }
+    return false;
+  }
+  function summonExpertTeam(id: ExpertTeamId, prompt?: string, teamName?: string) {
+    const target = stateRef.current.tasks.find((task) => task.id === draftTaskId.current);
+    closePanel();
+    if (target) {
+      if (stateRef.current.activeTask !== target.id)
+        setState((s) => ({ ...s, activeTask: target.id }));
+      navigate('chat');
+      if (teamSwitchBlocked(target)) return;
+      updateTask(target.id, (task) => ({
+        ...task, ...prepareExpertTeamDraft(task, id, prompt, teamName),
+      }));
+    } else {
+      setDraftTarget(null);
+      const draft = prepareExpertTeamDraft({ input: homeInput, refs: homeRefs }, id, prompt, teamName);
+      setHomeInput(draft.input);
+      setHomeRefs(draft.refs);
+      setHomeCapability(id);
+      setHomeExpertTeamName(draft.expertTeamName);
+      navigate('home');
+    }
+    requestAnimationFrame(() => document.getElementById('message-input')?.focus());
+  }
   function attach(ref: ContextRef) {
+    function addReference(refs: ContextRef[], capability?: CapabilityId | null) {
+      const single = ref.kind === 'submission' || (ref.kind === 'audit' && isExpertTeam(capability));
+      return [...refs.filter((item) =>
+        item.kind !== ref.kind || (!single && item.id !== ref.id)
+      ), ref];
+    }
     if (page === 'home') {
-      setHomeRefs((current) => [
-        ...current.filter(
-          (item) =>
-            !(
-              item.kind === ref.kind &&
-              (ref.kind === 'submission' || item.id === ref.id)
-            ),
-        ),
-        ref,
-      ]);
-      if (ref.kind === 'submission') setHomeCapability('submission');
+      setHomeRefs((current) => addReference(current, homeCapability));
+      if (ref.kind === 'submission' && !isExpertTeam(homeCapability)) setHomeCapability('submission');
       closePanel();
       requestAnimationFrame(() =>
         document.getElementById('message-input')?.focus(),
@@ -703,30 +918,22 @@ export default function App() {
     }
     const freshTask = makeTask();
     const targetId = draftTaskId.current ?? freshTask.id;
+    const draftExisted = stateRef.current.tasks.some((task) => task.id === targetId);
     // Reserve the draft before React batches consecutive reference additions.
     setDraftTarget(targetId);
     setState((s) => {
       const existing = s.tasks.find((t) => t.id === targetId);
       const task = existing ?? { ...freshTask, id: targetId };
+      const selected = existing ? task.capability : homeCapability;
       const updated = {
         ...task,
         input: existing ? task.input : homeInput,
         capability:
-          ref.kind === 'submission'
+          ref.kind === 'submission' && !isExpertTeam(selected)
             ? ('submission' as const)
-            : existing
-              ? task.capability
-              : homeCapability,
-        refs: [
-          ...(existing ? task.refs : homeRefs).filter(
-            (r) =>
-              !(
-                r.kind === ref.kind &&
-                (ref.kind === 'submission' || r.id === ref.id)
-              ),
-          ),
-          ref,
-        ],
+            : selected,
+        expertTeamName: existing ? task.expertTeamName : homeExpertTeamName,
+        refs: addReference(existing ? task.refs : homeRefs, selected),
       };
       return {
         ...s,
@@ -736,9 +943,7 @@ export default function App() {
           : [updated, ...s.tasks],
       };
     });
-    setHomeInput('');
-    setHomeRefs([]);
-    setHomeCapability(null);
+    if (!draftExisted) clearHomeDraft();
     closePanel();
     navigate('chat');
     notify(`已引用「${ref.title}」`);
@@ -752,15 +957,15 @@ export default function App() {
       if (questionAnswer) throw new Error('服务尚未就绪，请稍后重试。');
       return;
     }
-    let task =
-      page === 'chat'
-        ? stateRef.current.tasks.find(
-            (t) => t.id === stateRef.current.activeTask,
-          )
-        : undefined;
+    const targetId = page === 'chat' ? stateRef.current.activeTask : draftTaskId.current;
+    const target = stateRef.current.tasks.find((task) => task.id === targetId);
+    let task = page === 'chat' || isExpertTeam(target?.capability) ? target : undefined;
+    const useHomeDraft = !task && (page === 'home' || (!target && isExpertTeam(homeCapability)));
     if (!task) {
       task = makeTask(text.slice(0, 24));
-      task.capability = page === 'home' ? homeCapability : null;
+      if (useHomeDraft) Object.assign(task, {
+        input: homeInput, refs: homeRefs, capability: homeCapability, expertTeamName: homeExpertTeamName,
+      });
       setState((current) => ({
         ...current,
         tasks: [task!, ...current.tasks],
@@ -768,20 +973,40 @@ export default function App() {
       }));
     }
     const id = task.id;
-    if (starting.current.has(id) || connections.current.has(id)) {
+    if (task.activeRunId || starting.current.has(id) || connections.current.has(id)) {
       if (questionAnswer) throw new Error('当前会话正在处理，请稍后回答。');
+      notify('当前会话正在处理，请稍后发送。');
       return;
     }
+    const selectedTeam = isExpertTeam(task.capability);
+    const question = pendingQuestion(task);
+    if (selectedTeam && explicitRefs && !questionAnswer && question &&
+        questionState(question, stateRef.current.data) === 'pending') {
+      closePanel();
+      selectTask(id);
+      notify('请先处理当前待回答的问题。');
+      return;
+    }
+    const preserveComposerDraft = selectedTeam && !!task.input && task.input !== text;
     starting.current.add(id);
     setRunFailures((old) => {
       const next = { ...old };
       delete next[id];
       return next;
     });
-    const baseRefs = explicitRefs ?? (page === 'chat' ? task.refs : homeRefs);
-    const answering = !!questionAnswer || !!pendingQuestion(task);
-    const openSubmission =
-      panelRef.current?.kind === 'submission' ? panelRef.current : null;
+    const composerRefs = task === target || useHomeDraft ? task.refs : homeRefs;
+    const workRef = composerRefs.find((ref) => ref.kind === 'audit' && id === 'work-document-' + ref.id);
+    const baseRefs = selectedTeam
+      ? expertTeamRefs(composerRefs, explicitRefs)
+      : explicitRefs && workRef && !explicitRefs.some((ref) => ref.kind === 'audit')
+        ? [workRef, ...explicitRefs]
+        : explicitRefs ?? composerRefs;
+    const answering = !!questionAnswer || !!question;
+    const activePanel = panelRef.current;
+    const openSubmission = activePanel?.kind === 'submission' ? activePanel :
+      activePanel && isReimbursementPanel(activePanel) ? {
+        id: String(activePanel.data!.draftId), title: '费用报销',
+      } : null;
     const refs =
       openSubmission && !explicitRefs && !answering
         ? [
@@ -793,7 +1018,7 @@ export default function App() {
             },
           ]
         : baseRefs;
-    const capability = answering
+    const capability = answering || selectedTeam
       ? task.capability
       : explicitRefs?.some((ref) => ref.kind === 'document')
         ? 'documents'
@@ -807,7 +1032,7 @@ export default function App() {
       title: ['新任务', '新会话'].includes(current.title)
         ? text.slice(0, 24)
         : current.title,
-      input: questionAnswer ? current.input : '',
+      input: questionAnswer || preserveComposerDraft ? current.input : '',
       capability,
       refs,
       updated: '刚刚',
@@ -821,9 +1046,9 @@ export default function App() {
               { id: uid(), role: 'user', text, createdAt: Date.now() },
             ],
     }));
-    setHomeInput('');
-    setHomeRefs([]);
-    setHomeCapability(null);
+    if (useHomeDraft) clearHomeDraft();
+    setDraftTarget(id);
+    if (stateRef.current.activeTask !== id) setState((s) => ({ ...s, activeTask: id }));
     navigate('chat');
     if (
       !answering &&
@@ -885,6 +1110,7 @@ export default function App() {
         message: text,
         refs,
         capability,
+        ...(preserveComposerDraft ? { preserveComposerDraft: true } : {}),
         ...(questionAnswer ? { questionAnswer } : {}),
       });
       if (result.workspace) acceptWorkspace(result.workspace);
@@ -911,7 +1137,7 @@ export default function App() {
         const receivedAnswer = current?.messages.at(-1)?.role === 'assistant';
         if (!receivedAnswer) {
           setRunFailures((old) => ({ ...old, [id]: (error as Error).message }));
-          if (!questionAnswer)
+          if (!questionAnswer && !preserveComposerDraft)
             updateTask(id, (value) => ({ ...value, input: text }));
         }
       }
@@ -1035,7 +1261,9 @@ export default function App() {
     closePanel,
     navigate,
     attach,
+    discussAuditDocument,
     selectSkill,
+    summonExpertTeam,
     send,
     answerQuestion,
     message,
@@ -1047,12 +1275,22 @@ export default function App() {
   };
   const currentInput = chatVisible ? active.input : homeInput,
     currentRefs = chatVisible ? active.refs : homeRefs,
+    currentTeamName = chatVisible ? active.expertTeamName : homeExpertTeamName,
     currentCapability =
       getCapability(chatVisible ? active.capability : homeCapability)?.id ??
       null;
   function selectCapability(capability: CapabilityId | null) {
-    if (chatVisible) updateTask(active.id, (task) => ({ ...task, capability }));
-    else setHomeCapability(capability);
+    if (isExpertTeam(capability)) {
+      summonExpertTeam(capability, undefined, currentCapability === capability ? currentTeamName ?? undefined : undefined);
+      return;
+    }
+    if (chatVisible) {
+      if (isExpertTeam(currentCapability) && teamSwitchBlocked(active)) return;
+      updateTask(active.id, (task) => ({ ...task, capability, expertTeamName: null }));
+    } else {
+      setHomeCapability(capability);
+      setHomeExpertTeamName(null);
+    }
     requestAnimationFrame(() =>
       document.getElementById('message-input')?.focus(),
     );
@@ -1096,6 +1334,7 @@ export default function App() {
     ) : (
       <Composer
         capability={currentCapability}
+        teamName={currentTeamName}
         onCapabilityChange={selectCapability}
         value={currentInput}
         onChange={(value) =>
@@ -1137,6 +1376,10 @@ export default function App() {
         compact={!!chatVisible}
       />
     );
+  const progressLookup = useDocumentPanelLookup(panel, state.data.documents ?? [], state.data.documentSources?.states ?? {}, ready);
+  const progressDoc = progressLookup.document;
+  const progressFooter = panel?.kind === 'document'
+    ? <DocumentPanelActions panel={panel} document={progressLookup.sourceId ? undefined : progressDoc} /> : null;
   const renderedPanel =
     ready && panel ? (
       panel.kind === 'artifact' ? (
@@ -1144,19 +1387,24 @@ export default function App() {
       ) : panel.kind === 'translation' ? (
         <TranslationPanel panel={panel} />
       ) : panel.kind === 'document' ? (
-        <DocumentPanel panel={panel} />
+        <DocumentPanel lookup={progressLookup} />
       ) : panel.kind === 'materials' ? (
         <MaterialsPanel panel={panel} />
       ) : panel.kind === 'submission' ? (
         <SubmissionPanel panel={panel} />
       ) : panel.kind === 'audit' ? (
-        <AuditPanel panel={panel} />
+        <AuditPanel
+          panel={panel}
+          fromInbox={page === 'todos'}
+        />
       ) : panel.kind === 'rule' ? (
         <RulesPanel panel={panel} />
       ) : panel.kind === 'analysis' ? (
-        <AnalysisPanel panel={panel} />
+        panel.data?.publicFinance ? <PublicFinancialsPanel panel={panel} /> : <AnalysisPanel panel={panel} />
       ) : panel.kind === 'report' ? (
-        <ReportPanel panel={panel} />
+        panel.data?.publicFinance || panel.id?.startsWith('public-report-')
+          ? <PublicFinancialReportPanel panel={panel} />
+          : <ReportPanel panel={panel} />
       ) : panel.kind === 'skill-picker' ? (
         <SkillPickerPanel />
       ) : panel.kind === 'skill' ? (
@@ -1193,10 +1441,53 @@ export default function App() {
         <Empty title="未找到相关内容" />
       )
     ) : null;
+  const isWorkDossier = panel?.kind === 'audit' && !!panel.id && !['batch', 'schedule'].includes(panel.id);
+  const workDoc: WorkDocument | undefined = isWorkDossier
+    ? findWorkDocument(state.data, panel.id!)
+    : undefined;
+  function sidebarApp(id: PageId) {
+    const app = apps.find((item) => item.id === id);
+    if (!app) return null;
+    const current = !notificationsOpen && page === id;
+    return (
+      <button
+        key={id}
+        type="button"
+        className={`nav-item ${current ? 'active' : ''}`}
+        aria-current={current ? 'page' : undefined}
+        title={app.label}
+        onClick={() => {
+          navigate(id, id === 'skills' ? 'skills?section=teams' : id);
+          closePanel();
+        }}
+      >
+        <Icon name={app.icon} size={17} />
+        <span>{app.label}</span>
+      </button>
+    );
+  }
+  const skillReader = panel?.kind === 'skill' && !panel.data?.toolId;
   const panelHeader = (
     <header className="panel-header">
-      <h2 id="panel-title">{panel?.title}</h2>
+      {workDoc ? (
+        <div className="rl-caption">
+          <WorkDocumentIcon doc={workDoc} />
+          <div>
+            <h2 id="panel-title" tabIndex={-1}>{workDocumentTitle(workDoc)}</h2>
+            <span>{workDoc.id}</span>
+          </div>
+        </div>
+      ) : progressDoc ? (
+        <div className="dp-caption">
+          <WorkDocumentIcon doc={progressDoc} />
+          <div>
+            <h2 id="panel-title" tabIndex={-1}>{progressDoc.title}</h2>
+            <small>{progressDoc.typeLabel} · {progressDoc.id}</small>
+          </div>
+        </div>
+      ) : <h2 id="panel-title">{skillReader ? '技能详情' : panel?.title}</h2>}
       <div>
+        {panel?.kind === 'document' && <ContextHelp />}
         <button className="icon-btn" aria-label="关闭详情" onClick={closePanel}>
           <Icon name="close" size={18} />
         </button>
@@ -1221,71 +1512,86 @@ export default function App() {
           aria-hidden={viewportWidth <= 640 && !mobileOpen ? true : undefined}
           className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`}
         >
-          <button className="brand" onClick={newTask} title="财小智">
-            <img src={logo} alt="" />
-            <span>财小智</span>
+          <button type="button" className="brand" onClick={newTask} title="财小智">
+            <BrandWordmark />
           </button>
-          <button className="new-task" onClick={newTask} title="新建会话">
-            <Icon name="plus" size={17} />
+          <button
+            type="button"
+            className="new-task new-chat-trigger"
+            onClick={newTask}
+            title="新建会话"
+          >
+            <Icon name="xiaozhi" size={21} />
             <span>新建会话</span>
           </button>
           <div className="sidebar-scroll">
             <nav className="nav-group sidebar-apps" aria-label="应用导航">
-              {frequentApps
-                .map((id) => apps.find((app) => app.id === id)!)
-                .filter(Boolean)
-                .map((app) => (
-                  <button
-                    key={app.id}
-                    className={`nav-item ${page === app.id ? 'active' : ''}`}
-                    onClick={() => {
-                      navigate(app.id);
-                      closePanel();
-                    }}
-                    title={app.label}
-                  >
-                    <Icon name={app.icon} size={17} />
-                    <span>{app.label}</span>
-                  </button>
-                ))}
-              <button
-                className={`nav-item sidebar-all-apps ${panel?.kind === 'apps' || apps.some((app) => app.id === page && !frequentApps.includes(app.id)) ? 'active' : ''}`}
-                onClick={() => {
-                  setMobileOpen(false);
-                  openPanel({ kind: 'apps', title: '全部工具' });
-                }}
-                title="全部工具"
-              >
-                <Icon name="grid" size={17} />
-                <span>全部工具</span>
-              </button>
+              <div className="nav-group" role="group" aria-label="工作区">
+                {workspaceApps.map(sidebarApp)}
+              </div>
+              <div className="nav-group sidebar-frequent-apps" role="group" aria-labelledby="frequent-apps-title">
+                <h2 id="frequent-apps-title" className="nav-label">常用应用</h2>
+                {frequentApps.map(sidebarApp)}
+                <button
+                  type="button"
+                  className={`nav-item sidebar-all-apps ${!notificationsOpen && (panel?.kind === 'apps' || directoryOnlyApps.some((app) => app.id === page)) ? 'active' : ''}`}
+                  aria-expanded={panel?.kind === 'apps'}
+                  onClick={() => {
+                    setMobileOpen(false);
+                    openPanel({ kind: 'apps', title: '全部工具' });
+                  }}
+                  title="全部工具"
+                >
+                  <Icon name="grid" size={17} />
+                  <span>全部工具</span>
+                </button>
+              </div>
             </nav>
             <div className="recent-navigation">
               <div className="nav-label recent-heading">
                 <span>最近会话</span>
                 <button
-                  className={`all-conversations ${page === 'history' ? 'active' : ''}`}
+                  className={`all-conversations ${!notificationsOpen && page === 'history' ? 'active' : ''}`}
+                  aria-current={!notificationsOpen && page === 'history' ? 'page' : undefined}
                   aria-label="全部对话"
                   onClick={() => navigate('history')}
                 >
-                  全部对话
+                  全部
                   <Icon name="chevron" size={12} />
                 </button>
               </div>
               <div className="conversation-list">
                 {conversations.map((task) => {
-                  const status = conversationState(task);
+                  const notice =
+                    readReplies &&
+                    recentConversationAlert(task, readReplies.get(task.id) ?? null);
+                  const noticeLabel = notice === 'error' ? '办理异常' : '有新消息';
                   const time = lastMessageTime(task);
+                  const current = !notificationsOpen && page === 'chat' && active?.id === task.id;
                   return (
                     <button
                       key={task.id}
-                      className={`recent-chat ${active?.id === task.id && page === 'chat' ? 'active' : ''}`}
+                      className={`recent-chat ${current ? 'active' : ''}`}
+                      aria-current={current ? 'page' : undefined}
                       onClick={() => selectTask(task.id)}
                       title={task.title}
                     >
                       <span className="recent-chat-title">
                         {task.title === '新任务' ? '新会话' : task.title}
                       </span>
+                      {notice && (
+                        <span
+                          className="recent-notice"
+                          data-kind={notice}
+                          role="img"
+                          title={noticeLabel}
+                          aria-label={noticeLabel}
+                        >
+                          {notice === 'error' && (
+                            <Icon name="error-circle" size={12} />
+                          )}
+                        </span>
+                      )}
                       {time !== null && (
                         <time
                           dateTime={new Date(time).toISOString()}
@@ -1294,13 +1600,6 @@ export default function App() {
                           {formatConversationTime(time).replace(/\s/g, '')}
                         </time>
                       )}
-                      <span
-                        className={`conversation-state ${status.tone}`}
-                        title={status.label}
-                        aria-label={status.label}
-                      >
-                        <Icon name={status.icon} size={14} />
-                      </span>
                     </button>
                   );
                 })}
@@ -1311,40 +1610,34 @@ export default function App() {
             </div>
           </div>
           <div className="sidebar-bottom">
-            <button
-              className={`runtime-status is-${runtimeStatus.state}`}
-              onClick={() => void connectRuntime()}
-              title={
-                runtimeStatus.message ||
-                (health
-                  ? `${health.framework} · ${health.model}`
-                  : '检查本地服务')
-              }
-            >
-              <span aria-hidden="true" />
-              {runtimeStatus.state === 'loading'
-                ? '正在连接'
-                : runtimeStatus.state === 'offline'
-                  ? '连接异常 · 重试'
-                  : runtimeStatus.state === 'saving'
-                    ? '正在保存'
-                    : health?.modelConfigured === false
-                      ? '模型未配置'
-                      : '本地服务已连接'}
-            </button>
             <div className="profile">
               <span className="avatar">吴</span>
               <div>
                 <strong>吴侠</strong>
                 <small>华川科技 · 财务部</small>
               </div>
+              <button
+                ref={notificationTrigger}
+                className="icon-btn notification-trigger"
+                type="button"
+                title="消息中心"
+                aria-label={unreadNotifications.length ? `消息中心，${unreadNotifications.length} 条未读` : '消息中心'}
+                aria-expanded={notificationsOpen}
+                aria-controls={notificationsOpen ? 'workspace-notifications' : undefined}
+                disabled={!ready}
+                onClick={toggleNotifications}
+              >
+                <Icon name="bell" size={18} />
+                {unreadNotifications.length > 0 && <span className="notification-trigger-dot" aria-hidden="true" />}
+              </button>
             </div>
           </div>
         </aside>
-        <main className="main-shell">
+        <main className="main-shell" id="workspace-main" tabIndex={-1}>
           {viewportWidth <= 640 && (
             <header className="mobile-topbar">
               <button
+                ref={mobileNavigationTrigger}
                 className="icon-btn"
                 aria-label="打开导航"
                 aria-controls="workspace-navigation"
@@ -1353,9 +1646,24 @@ export default function App() {
               >
                 <Icon name="layout" size={20} />
               </button>
-              <strong>财小智</strong>
+              <BrandWordmark />
             </header>
           )}
+          {notificationsOpen && (
+            <NotificationCenter
+              items={notifications.items}
+              onClose={closeNotifications}
+              onOpen={openNotification}
+              onMarkRead={markNotificationRead}
+              refreshFailed={notificationRefreshFailed}
+              onRefresh={refreshNotifications}
+              onMarkAllRead={() => {
+                notifications.markAllRead();
+                markNotificationReplies(unreadNotifications);
+              }}
+            />
+          )}
+          <div className="workspace-page" hidden={notificationsOpen}>
           {!ready ? (
             <div className="runtime-loading">
               <Empty
@@ -1379,11 +1687,12 @@ export default function App() {
                   <div className="section-heading">
                     <h2>任务队列</h2>
                     <button
-                      className="icon-btn"
+                      className="icon-btn new-chat-trigger"
                       aria-label="新建会话"
+                      title="新建会话"
                       onClick={newTask}
                     >
-                      <Icon name="plus" size={16} />
+                      <Icon name="xiaozhi" size={20} />
                     </button>
                   </div>
                   <div className="rail-filter">
@@ -1416,6 +1725,7 @@ export default function App() {
                     busy={busyIds.includes(active.id)}
                     activity={streams[active.id]?.activity}
                     phase={streams[active.id]?.phase}
+                    onStop={stop}
                     onRename={() =>
                       openPanel({ kind: 'rename', title: '重命名会话' })
                     }
@@ -1425,13 +1735,14 @@ export default function App() {
                     composer={composer}
                     onPrepare={prepareDraft}
                     capability={currentCapability}
+                    teamName={currentTeamName}
                     onCapabilityChange={selectCapability}
                   />
                 )}
               </div>
               {inlinePanel && (
                 <aside
-                  className={`inline-detail${panel.kind === 'report' ? ' report-detail' : ''}${panel.kind === 'submission' ? ' submission-detail' : ''}`}
+                  className={`inline-detail${skillReader ? ' skill-reader-inline' : ''}${panel.kind === 'report' ? ' report-detail' : ''}${submissionSurface ? ' submission-detail' : ''}`}
                   aria-labelledby="panel-title"
                 >
                   {panelHeader}
@@ -1445,23 +1756,28 @@ export default function App() {
                   >
                     {renderedPanel}
                   </div>
+                  {progressFooter}
                 </aside>
               )}
             </div>
           ) : (
-            <div className="page-container">
-              <div className="page-heading">
-                <h1>{pageTitles[page]}</h1>
-                {page === 'submission' && (
-                  <Button
-                    variant="ghost"
-                    icon="clock"
-                    onClick={() => navigate('documents')}
-                  >
-                    我的单据
-                  </Button>
-                )}
-              </div>
+            <div className={`page-container${page === 'todos' ? ' work-inbox-page' : page === 'documents' ? ' document-progress-page' : ''}`}>
+              {page === 'skills' || page === 'light-apps' || page === 'schedules' ? (
+                <CatalogHeading area={page} />
+              ) : page === 'documents' ? null : (
+                <div className="page-heading">
+                  <h1>{pageTitles[page]}</h1>
+                  {page === 'submission' && (
+                    <Button
+                      variant="ghost"
+                      icon="clock"
+                      onClick={() => navigate('documents')}
+                    >
+                      我的单据
+                    </Button>
+                  )}
+                </div>
+              )}
               {page === 'history' ? (
                 <ConversationHistory
                   tasks={state.tasks}
@@ -1478,17 +1794,32 @@ export default function App() {
               ) : page === 'analysis' ? (
                 <AnalysisPage />
               ) : page === 'skills' ? (
-                <SkillsPage />
+                <CapabilityCenter />
+              ) : page === 'light-apps' ? (
+                <SkillsPage area="light-apps" />
+              ) : page === 'schedules' ? (
+                <ScheduledTasksPage onOpenConversation={async (id) => {
+                  await flushWorkspace();
+                  const snapshot = await readWorkspace();
+                  if (!snapshot.state.tasks.some((task) => task.id === id))
+                    throw new Error('关联会话已不存在或不可查看。');
+                  selectTask(id);
+                }} />
+              ) : page === 'todos' ? (
+                <AuditPanel
+                  panel={{ kind: 'audit', id: 'batch', title: '我的工作' }}
+                />
               ) : page === 'knowledge' ? (
                 <KnowledgePage />
               ) : null}
             </div>
           )}
+          </div>
         </main>
-        {(!panel || inlinePanel) && (
+        {!notificationsOpen && (!panel || inlinePanel) && panel?.kind !== 'document' && !isWorkDossier && (
           <ContextHelp
             skillsContext={
-              page === 'skills' ||
+              page === 'skills' || page === 'light-apps' ||
               panel?.kind === 'skill' ||
               panel?.kind === 'governance'
             }
@@ -1496,7 +1827,7 @@ export default function App() {
         )}
         <dialog
           ref={dialog}
-          className={`detail-dialog${panel?.kind === 'submission' ? ' submission-dialog' : ''}${panel?.kind === 'report' ? ' report-dialog' : ''}${panel?.kind === 'analysis' ? ' analysis-dialog' : ''}${panel?.kind === 'translation' ? ' translation-dialog' : ''}${panel?.kind === 'governance' ? ' governance-dialog' : ''}`}
+          className={`detail-dialog${skillReader ? ' skill-reader-dialog' : ''}${submissionSurface ? ' submission-dialog' : ''}${panel?.kind === 'report' ? ' report-dialog' : ''}${panel?.kind === 'analysis' ? ' analysis-dialog' : ''}${panel?.kind === 'translation' ? ' translation-dialog' : ''}${panel?.kind === 'governance' ? ' governance-dialog' : ''}`}
           aria-labelledby="panel-title"
           onCancel={(e) => {
             e.preventDefault();
@@ -1522,10 +1853,11 @@ export default function App() {
               >
                 {renderedPanel}
               </div>
-              {panel && panel.kind !== 'help' && (
+              {progressFooter}
+              {panel && panel.kind !== 'help' && panel.kind !== 'document' && !isWorkDossier && (
                 <ContextHelp
                   skillsContext={
-                    page === 'skills' ||
+                    page === 'skills' || page === 'light-apps' ||
                     panel.kind === 'skill' ||
                     panel.kind === 'governance'
                   }

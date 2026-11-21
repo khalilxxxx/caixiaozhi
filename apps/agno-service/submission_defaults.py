@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import date
+from hashlib import sha256
 import json
 from pathlib import Path
 from uuid import uuid4
@@ -10,6 +11,7 @@ from uuid import uuid4
 
 LEG_FIELDS = 'id departureCity arrivalCity departureDate arrivalDate transport'.split()
 EXPENSE_FIELDS = 'id categoryId name currency amount reason reasonOption date tripId departureDate arrivalDate departureCity arrivalCity transport checkIn checkOut city rooms nights rental coResidents people quantity standard oaId'.split()
+DRAFT_ROW_COLLECTIONS = ('legs', 'expenses', 'activities')
 LABELS = {'applicant':'申请人', 'department':'部门', 'paymentCompany':'付款公司', 'travelType':'差旅类型',
           'departureCity':'出发城市', 'arrivalCity':'到达城市', 'transport':'交通方式', 'arrivalDate':'到达日期',
           'currency':'币种', 'rental':'是否租房'}
@@ -28,13 +30,70 @@ def submission_context(draft, config=None):
                      'rules': config['rules'], 'routes': config['routes'], 'config': config['policy']})
 
 
+def draft_snapshot_token(draft):
+    """编辑中的有效内容可以变化而不增加已保存版本。"""
+    content = json.dumps(draft, sort_keys=True, ensure_ascii=True, separators=(',', ':'))
+    return sha256(content.encode()).hexdigest()
+
+
+def reimbursement_number(submissions):
+    taken = {row.get('documentNumber') for row in submissions.get('drafts', {}).values()}
+    taken.update(row.get('businessId') for row in submissions.get('requests', []))
+    while True:
+        number = f'LOCAL-BX-{date.today():%Y%m%d}-{uuid4().hex[:12].upper()}'
+        if number not in taken:
+            return number
+
+
+def expand_agent_row_patch(previous, patch, remove_rows=None):
+    """把 Agent 的按行增改和明确删除转换为现有的完整集合格式。"""
+    if remove_rows is None:
+        remove_rows = {}
+    if not isinstance(remove_rows, dict) or set(remove_rows) - set(DRAFT_ROW_COLLECTIONS):
+        raise ValueError('删除行只支持行程、费用或活动集合。')
+    result = dict(patch)
+    for collection in DRAFT_ROW_COLLECTIONS:
+        if collection not in patch and collection not in remove_rows:
+            continue
+        existing = previous.get(collection, [])
+        existing_ids = {row['id'] for row in existing if row.get('id')}
+        remove = remove_rows.get(collection, [])
+        if (not isinstance(remove, list) or len(remove) > 100
+                or any(not isinstance(identifier, str) or identifier not in existing_ids for identifier in remove)):
+            raise ValueError('请提供当前草稿中要删除的稳定行标识。')
+        removed = set(remove)
+        updates, additions, seen = {}, [], set()
+        for row in patch.get(collection, []):
+            identifier = row.get('id')
+            if identifier is not None and not isinstance(identifier, str):
+                raise ValueError('行程、费用或活动标识须为文本。')
+            if identifier:
+                if identifier in seen or identifier in removed:
+                    raise ValueError('行标识须唯一，同一行只能修改或删除。')
+                seen.add(identifier)
+            if identifier in existing_ids:
+                updates[identifier] = row
+            else:
+                additions.append(row)
+        if collection in patch and existing_ids <= (seen | removed) and len(existing_ids) == len(existing):
+            # 调整顺序时可显式列出全部保留行；缺省行仍保留原顺序。
+            result[collection] = patch[collection]
+        else:
+            result[collection] = [
+                updates.get(row.get('id'), row) for row in existing if row.get('id') not in removed
+            ] + additions
+        if len(result[collection]) > 100:
+            raise ValueError(f'{collection}必须是最多100项的数组。')
+    return result
+
+
 def merge_draft_patch(previous, patch):
     """数组表示完整集合；已有项按稳定 ID 合并，省略字段不清除已有内容。"""
     if 'returnDatePending' in patch and not isinstance(patch['returnDatePending'], bool):
         raise ValueError('返程日期待定标志必须为布尔值。')
     result = deepcopy(previous)
     result.update({k: deepcopy(v) for k, v in patch.items() if k != 'autoFill'})
-    for collection in ('legs', 'expenses', 'activities'):
+    for collection in DRAFT_ROW_COLLECTIONS:
         if collection not in patch:
             continue
         rows = patch[collection]
@@ -223,6 +282,9 @@ def apply_submission_defaults(candidate, previous=None, config=None, adopt_defau
 
     for expense in draft.get('expenses', []):
         prefix = 'expenses.'+expense['id']+'.'
+        if expense.get('reimbursementBatchId') or 'receiptPrefill' in expense:
+            # 识别时缺失的币种和住宿事实须留给员工核对。
+            continue
         fill(prefix+'currency', config['policy']['currency'], 'default-currency', '本地表单默认', '未指定币种，默认人民币；按实际票据核对。')
         if expense.get('categoryId') in config['policy']['rentalCategoryIds']:
             fill(prefix+'rental', config['policy']['rental'], 'default-non-rental', '本地表单默认', '住宿费用未指定租房，默认非租房；按实际费用核对。')

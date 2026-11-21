@@ -5,12 +5,15 @@ import { useWorkspace } from './workspace';
 import { Badge, Icon, Button } from './ui';
 import { DocumentResults, materialBatchId } from './Documents';
 import { AnalysisCard } from './AnalyticsSkills';
+import { PublicFinancialCard } from './PublicFinancials';
 import { currentCard } from './card-model';
+import { withWorkDocumentTitle } from './work-document-model';
 import { getAuditSummary } from './RulesSubmission';
 import {
   capabilities,
   capabilityExamples,
   getCapability,
+  isExpertTeam,
   type CapabilityId,
 } from './capability-model';
 import { ComposerSkillPicker } from './Skills';
@@ -102,10 +105,12 @@ function HomeMascot() {
 function CapabilityControl({
   value,
   onChange,
+  teamName,
   more = false,
 }: {
   value: CapabilityId | null;
   onChange: (value: CapabilityId | null) => void;
+  teamName?: string | null;
   more?: boolean;
 }) {
   const [open, setOpen] = useState(false),
@@ -113,7 +118,7 @@ function CapabilityControl({
   const wrap = useRef<HTMLDivElement>(null),
     trigger = useRef<HTMLButtonElement>(null),
     search = useRef<HTMLInputElement>(null);
-  const selected = getCapability(value);
+  const selected = getCapability(value, teamName);
   const items = capabilities.filter(
     (item) =>
       (!more || !item.featured) &&
@@ -274,6 +279,7 @@ export function Composer({
   onUpload,
   compact = false,
   capability,
+  teamName,
   onCapabilityChange,
 }: {
   value: string;
@@ -287,9 +293,11 @@ export function Composer({
   onUpload: (files: FileList) => void;
   compact?: boolean;
   capability: CapabilityId | null;
+  teamName?: string | null;
   onCapabilityChange: (value: CapabilityId | null) => void;
 }) {
   const workspace = useWorkspace();
+  const expertTeam = isExpertTeam(capability) ? getCapability(capability, teamName) : undefined;
   const input = useRef<HTMLInputElement>(null),
     textarea = useRef<HTMLTextAreaElement>(null),
     skills = useRef<HTMLDivElement>(null),
@@ -297,7 +305,8 @@ export function Composer({
     skillSearch = useRef<HTMLInputElement>(null),
     [openMenu, setOpenMenu] = useState<'skills' | null>(null);
   const selectedSkills = refs.filter((ref) => ref.kind === 'skill');
-  const materialRefs = refs.filter((ref) => ref.kind !== 'skill');
+  const materialRefs = refs.filter((ref) => ref.kind !== 'skill')
+    .map((ref) => withWorkDocumentTitle(ref, workspace.state.data));
   const skillLabel =
     selectedSkills.length === 1
       ? selectedSkills[0]!.title
@@ -341,7 +350,7 @@ export function Composer({
     };
   }, [openMenu]);
   return (
-    <div className={`composer ${compact ? 'composer-compact' : ''}`}>
+    <div className={`composer ${compact ? 'composer-compact' : ''}`} data-expert-team={expertTeam?.id}>
       <div className="refs">
         {materialRefs.map((ref) => (
           <span className="ref-chip" key={`${ref.kind}/${ref.id}`}>
@@ -360,7 +369,7 @@ export function Composer({
         ))}
       </div>
       <label className="sr-only" htmlFor="message-input">
-        给财小智发送消息
+        给{expertTeam?.label ?? '财小智'}发送消息
       </label>
       <textarea
         ref={textarea}
@@ -368,7 +377,9 @@ export function Composer({
         rows={2}
         placeholder={
           getCapability(capability)?.placeholder ??
-          (compact ? '继续补充需求…' : '交给财小智，从一件事开始…')
+          (refs.some((ref) => ref.kind === 'audit' && ref.id !== 'batch')
+            ? '询问这张单据的明细、风险或审批进度…'
+            : compact ? '继续补充需求…' : '交给财小智，从一件事开始…')
         }
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -389,7 +400,7 @@ export function Composer({
             <Icon name="attach" size={15} />
             <span>上传文件</span>
           </button>
-          <div
+          {!expertTeam && <div
             className="composer-skills"
             ref={skills}
             onBlur={(event) => {
@@ -466,10 +477,11 @@ export function Composer({
                 />
               </div>
             )}
-          </div>
+          </div>}
           {(capability || compact) && (
             <CapabilityControl
               value={capability}
+              teamName={teamName}
               onChange={onCapabilityChange}
             />
           )}
@@ -547,10 +559,18 @@ export function Result({
         query={card.data?.query}
         documentId={card.data?.ref}
         documents={card.data?.items}
+        documentIds={card.data?.documentIds}
+        unavailableSources={card.data?.unavailableSources}
       />
     );
   if (card.kind === 'analysis')
-    return <AnalysisCard scope={card.data?.scope} />;
+    return card.data?.publicFinance
+      ? <PublicFinancialCard
+          year={card.data.year}
+          snapshot={card.data.snapshot}
+          datasetId={card.data.datasetId ?? (card.title.includes('苹果') ? 'sec-apple-2025-10k' : undefined)}
+        />
+      : <AnalysisCard scope={card.data?.scope} />;
   if (card.kind === 'clarify')
     return (
       <div className="clarify-options">
@@ -621,6 +641,7 @@ export function ChatPage({
   activity,
   phase,
   onRename,
+  onStop,
 }: {
   task: Task;
   composer: React.ReactNode;
@@ -628,6 +649,7 @@ export function ChatPage({
   activity?: string;
   phase?: string;
   onRename: () => void;
+  onStop: () => void;
 }) {
   const w = useWorkspace(),
     scroll = useRef<HTMLDivElement>(null),
@@ -671,6 +693,9 @@ export function ChatPage({
   const hasRunningMessage = task.messages.some(isRunningMessage);
   const latestSubmissions = latestSubmissionCards(task);
   const pending = pendingQuestion(task);
+  const activeTeam = isExpertTeam(task.capability)
+    ? getCapability(task.capability, task.expertTeamName)?.label
+    : undefined;
   const canResume =
     !busy &&
     !pending &&
@@ -681,7 +706,7 @@ export function ChatPage({
     kind === 'analysis'
       ? ['只看销售部', '换成9月', '生成报告']
       : kind === 'documents'
-        ? ['查看OA单据', '查看采购付款']
+        ? ['哪些单据还在审批中？', '哪些单据待我处理？']
         : kind === 'materials'
           ? ['生成报销草稿', '查看我的单据']
           : kind === 'audit'
@@ -694,6 +719,7 @@ export function ChatPage({
       <div className="chat-titlebar">
         <h1>{task.title}</h1>
         <div className="inline-actions">
+          {pending && activeTeam && <span className="chat-question-team">{activeTeam}</span>}
           {!busy && (
             <Badge
               tone={
@@ -738,6 +764,9 @@ export function ChatPage({
           {task.messages.map((message) => {
             const visibleCards = visibleMessageCards(message);
             const messageRunning = isRunningMessage(message);
+            const author = isExpertTeam(message.capability)
+              ? getCapability(message.capability, message.expertTeamName)?.label
+              : messageRunning ? activeTeam : undefined;
             const latestStatus =
               message.id === last?.id && !busy
                 ? pending
@@ -759,18 +788,19 @@ export function ChatPage({
             )
               return null;
             return (
-              <article className={`message ${message.role}`} key={message.id}>
+              <article className={`message ${message.role}`} key={message.id} data-team-author={author || undefined}>
                 {message.role === 'user' ? (
                   <div className="user-bubble">{message.text}</div>
                 ) : (
                   <div>
                     <div className="assistant-name">
                       <XiaozhiMark className="reply-mark" />
-                      <span>财小智</span>
+                      <span>{author ?? '财小智'}</span>
                     </div>
                     <RunProgress
                       steps={message.tools}
                       running={messageRunning}
+                      onStop={onStop}
                       status={latestStatus ?? message.runStatus}
                       activity={messageRunning ? activity : undefined}
                       phase={messageRunning ? phase : undefined}
@@ -828,12 +858,19 @@ export function ChatPage({
             );
           })}
           {busy && !hasRunningMessage && (
-            <article className="message assistant">
-              <div className="assistant-name">
-                <XiaozhiMark className="reply-mark" />
-                <span>财小智</span>
+            <article className="message assistant" data-team-author={activeTeam}>
+              <div>
+                <div className="assistant-name">
+                  <XiaozhiMark className="reply-mark" />
+                  <span>{activeTeam ?? '财小智'}</span>
+                </div>
+                <RunProgress
+                  running
+                  activity={activity}
+                  phase={phase}
+                  onStop={task.activeRunId ? onStop : undefined}
+                />
               </div>
-              <RunProgress running activity={activity} phase={phase} />
             </article>
           )}
           {canResume && (
@@ -982,31 +1019,35 @@ export function Home({
   composer,
   onPrepare,
   capability,
+  teamName,
   onCapabilityChange,
 }: {
   composer: React.ReactNode;
   onPrepare: (text: string) => void;
   capability: CapabilityId | null;
+  teamName?: string | null;
   onCapabilityChange: (value: CapabilityId | null) => void;
 }) {
   const [examples, setExamples] = useState(() =>
     capabilityExamples(capability),
   );
   useEffect(() => setExamples(capabilityExamples(capability)), [capability]);
+  const selected = getCapability(capability, teamName);
+  const expertTeam = isExpertTeam(capability);
   return (
     <div className="workspace-home">
       <div className="home-intro">
         <div className="home-greeting">
           <HomeMascot />
-          <h1>吴侠，今天想完成什么财务工作？</h1>
+          <h1>{expertTeam ? selected?.label : '吴侠，今天想完成什么财务工作？'}</h1>
         </div>
       </div>
       {composer}
       <div className="home-below">
         {!capability && <QuickActions onSelect={onCapabilityChange} />}
-        <section className="home-examples" aria-label="需求示例">
+        {examples.length > 0 && <section className="home-examples" aria-label="需求示例">
           <div className="home-examples-header">
-            <h2>{getCapability(capability)?.label ?? '从这些事开始'}</h2>
+            <h2>{expertTeam ? '任务示例' : selected?.label ?? '从这些事开始'}</h2>
             <button
               className="btn ghost"
               onClick={() =>
@@ -1028,11 +1069,11 @@ export function Home({
               >
                 <Icon name="chat" size={15} />
                 <span>{text}</span>
-                <Icon name="arrow" size={14} />
+                <Icon name="chevron" size={14} />
               </button>
             ))}
           </div>
-        </section>
+        </section>}
       </div>
     </div>
   );

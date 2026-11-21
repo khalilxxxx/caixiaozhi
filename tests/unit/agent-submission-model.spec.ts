@@ -850,6 +850,57 @@ describe('智能提单业务字段', () => {
     });
   });
 
+  it('材料的行程匹配仅应用到所匹配的草稿，跨草稿仍保留票据字段', () => {
+    const drafts = createInitialDrafts();
+    const leg = {
+      id: 'matching-leg',
+      departureDate: '2026-11-01',
+      arrivalDate: '',
+      departureCity: '上海',
+      arrivalCity: '杭州',
+      transport: '火车-二等座',
+    };
+    drafts.expense.legs = [leg];
+    drafts['another-expense'] = { ...drafts.expense, id: 'another-expense' };
+    const incoming: MaterialExpenseImport = {
+      ...batch,
+      items: [{
+        ...batch.items[2]!, categoryId: 'long-distance', tripId: leg.id,
+        matchedDraftId: 'expense', departureCity: '上海', arrivalCity: '杭州',
+        tripMode: '火车',
+      }],
+    };
+    const matching = importMaterialExpenses(drafts, incoming).expense.expenses[0];
+    const other = importMaterialExpenses(
+      drafts, { ...incoming, targetDraftIds: { expense: 'another-expense' } },
+    )['another-expense']?.expenses[0];
+    expect(matching).toMatchObject({ categoryId: 'long-distance', tripId: leg.id });
+    expect(other).toMatchObject({
+      categoryId: 'other-long-distance', tripId: '',
+      departureCity: '上海', arrivalCity: '杭州', departureDate: '2026-11-01',
+    });
+    drafts.expense.legs = [{ ...leg, departureDate: '2026-11-02' }];
+    expect(importMaterialExpenses(drafts, incoming).expense.expenses[0])
+      .toMatchObject({ categoryId: 'other-long-distance', tripId: '' });
+    drafts.expense.legs = [{ ...leg, transport: '飞机-经济舱' }];
+    expect(importMaterialExpenses(drafts, incoming).expense.expenses[0])
+      .toMatchObject({ categoryId: 'other-long-distance', tripId: '' });
+    drafts.expense.legs = [leg];
+    incoming.items.push({ ...incoming.items[0]!, id: 'second', sourceFileId: 'other-invoice' });
+    expect(importMaterialExpenses(drafts, incoming).expense.expenses.map((expense) => expense.tripId))
+      .toEqual(['', '']);
+  });
+
+  it('旧版普通餐饮导入时保留事实并等待明确选择费用类型', () => {
+    const incoming = { ...batch, items: [
+      { ...batch.items[1]!, oaId: undefined, name: '餐饮服务', purpose: '用餐' },
+    ] };
+    const data = importMaterialExpenses(createInitialDrafts(), incoming);
+    expect(data.personal.expenses[0]).toMatchObject({
+      amount: '680.00', categoryId: '', reason: '用餐',
+    });
+  });
+
   it('住宿可选房间数填写后也校验正整数', () => {
     const draft = personal();
     draft.expenses = [{ ...createBlankExpense('other-hotel'), rooms: 'abc' }];

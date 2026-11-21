@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>费用分摊计算器 · 财小智</title>
+  <link rel="stylesheet" href="tools.css">
+  <script src="tools.js" defer></script>
+</head>
+<body class="tools-standalone">
+  <header class="tools-window-bar">
+    <span class="tools-window-brand"><img src="brand.webp" alt="" width="35" height="29">财小智</span>
+    <span class="tools-bar-divider" aria-hidden="true"></span><span>轻应用</span>
+  </header>
+  <main class="tools-calculator">
+    <h1>费用分摊计算器</h1>
+    <div class="tools-calc-layout">
+      <form class="tools-calc-form tools-calc-panel" novalidate>
+        <h2>分摊设置</h2>
+        <label class="tools-field"><span class="tools-field-title">分摊总额（元）</span><span class="tools-amount-wrap"><span aria-hidden="true">¥</span><input class="tools-input" name="total" type="text" inputmode="decimal" maxlength="15" placeholder="0.00" autocomplete="off"></span></label>
+        <div class="tools-dept-heading"><h3>分摊部门</h3><button type="button" class="tools-btn tools-add-dept"><span aria-hidden="true">＋</span>添加部门</button></div>
+        <div class="tools-dept-labels" aria-hidden="true"><span>部门名称</span><span>权重</span></div>
+        <div class="tools-departments"></div>
+        <p class="tools-form-error" role="alert"></p>
+        <div class="tools-calc-actions"><button class="tools-btn tools-primary" type="submit">计算分摊</button></div>
+      </form>
+      <section class="tools-calc-panel" aria-labelledby="result-title">
+        <h2 id="result-title">分摊结果</h2>
+        <div class="tools-results" aria-live="polite"></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

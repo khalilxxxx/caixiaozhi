@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SkillsGuide } from './SkillsGuide';
+import { catalogArea } from './skills-catalog-model';
 import {
   useWorkspace,
   useSlice,
@@ -8,12 +9,15 @@ import {
 } from './workspace';
 import { Icon, Button, Badge, Field, Empty } from './ui';
 import type { GenericDocument } from '../document-query/document-model';
-export const apps: { id: PageId; label: string; icon: string }[] = [
+export const apps: { id: PageId; label: string; icon: string; keywords?: string[] }[] = [
   { id: 'submission', label: '智能提单', icon: 'file' },
   { id: 'documents', label: '单据进展', icon: 'clock' },
   { id: 'analysis', label: '数据分析', icon: 'chart' },
   { id: 'rules', label: '规则中心', icon: 'shield' },
-  { id: 'skills', label: '技能工具', icon: 'spark' },
+  { id: 'skills', label: '能力中心', icon: 'spark' },
+  { id: 'light-apps', label: '轻应用', icon: 'layout' },
+  { id: 'schedules', label: '自动化', icon: 'clock', keywords: ['定时任务', '定时预审'] },
+  { id: 'todos', label: '我的工作', icon: 'tasks' },
   { id: 'knowledge', label: '制度知识', icon: 'book' },
   { id: 'files', label: '材料与文件', icon: 'folder' },
 ];
@@ -202,10 +206,11 @@ export function AppsPanel() {
   const w = useWorkspace();
   const [query, setQuery] = useState('');
   const groups = [
-    { label: '业务应用', ids: ['submission', 'documents', 'analysis'] },
-    { label: '能力与资料', ids: ['rules', 'skills', 'knowledge', 'files'] },
+    { label: '业务应用', ids: ['todos', 'submission', 'documents', 'analysis'] },
+    { label: '能力与资料', ids: ['rules', 'skills', 'light-apps', 'schedules', 'knowledge', 'files'] },
   ];
-  const matches = apps.filter((app) => app.label.includes(query.trim()));
+  const term = query.trim();
+  const matches = apps.filter((app) => app.label.includes(term) || app.keywords?.some(word => word.includes(term)));
   return (
     <div className="app-directory-panel">
       <input
@@ -464,7 +469,50 @@ export function NotificationsPanel() {
   );
 }
 export function HelpPanel({ skillsContext = false, onClose, toolPanel }: { skillsContext?: boolean; onClose?: () => void; toolPanel?: { kind: string | null; toolId?: string } } = {}) {
-  if (skillsContext || location.hash.split('?')[0] === '#skills') return <SkillsGuide onClose={onClose} toolPanel={toolPanel} />;
+  const area = catalogArea(location.hash);
+  if (skillsContext || area) return <SkillsGuide area={area || 'skills'} onClose={onClose} toolPanel={toolPanel} />;
+  if (location.hash.split('?')[0] === '#schedules') return <>
+    <section className="help-section">
+      <h3>执行时间</h3>
+      <p>任务按北京时间执行。关闭浏览器后，电脑和本地服务仍需保持运行。错过计划时间超过 15 分钟时，运行记录会标记为「已错过」。</p>
+    </section>
+    <section className="help-section">
+      <h3>查看结果</h3>
+      <p>展开任务的「运行记录」可查看结果。遇到需要确认的事项，从该条记录打开会话即可继续处理。</p>
+    </section>
+  </>;
+  if (location.hash === '#todos') return <>
+    <section className="help-section">
+      <h3>核对待办单据</h3>
+      <ol>
+        <li>打开待办后，点选风险事项可定位关联费用。同一事项涉及多笔费用时，会一起标出。</li>
+        <li>费用报销单中，切换到“发票影像”可按关联费用找票。打开有影像的票据可以放大核对。</li>
+        <li>在“规则执行结果”中选择通过、警告或禁止，可核对对应规则的执行依据。</li>
+        <li>“查看单据”在新窗口打开原单。“加入对话”引用当前单据，可继续追问费用、行程和风险原因。</li>
+        <li>点“审批”选择同意或退回。提交后，办理结果和审批意见可在原单中查看。</li>
+      </ol>
+    </section>
+    <section className="help-section">
+      <h3>预审设置</h3>
+      <p>规则由规则中心管理。预审计划、执行时间与运行记录可在定时任务中查看。</p>
+      <a href="#schedules" onClick={onClose}>前往定时任务</a>
+    </section>
+  </>;
+  if (location.hash === '#analysis') return <>
+    <section className="help-section">
+      <h3>公开财报</h3>
+      <ol>
+        <li>选择年度，查看营收、归母净利润、经营现金流、成本费用与原始指标。</li>
+        <li>展开数据来源与计算口径，可核查巨潮资讯法定披露年报、逐年指标页码及数据版本。</li>
+        <li>生成报告后可在分析报告列表重开，下载 HTML 或三年指标 CSV。</li>
+        <li>使用“在对话中分析”继续查询，报告中的“继续分析”会引用已保存快照。</li>
+      </ol>
+    </section>
+    <section className="help-section">
+      <h3>数据覆盖</h3>
+      <p>公开财报采用海康威视法定披露年报中的 2023—2025 年度合并财务指标，金额以人民币计量，原值保留两位小数，图表按亿元展示。企业报销样例保留在“报销费用 · 示例数据”入口。</p>
+    </section>
+  </>;
   return (
     <>
       <section className="help-section">
@@ -531,7 +579,7 @@ export function HelpPanel({ skillsContext = false, onClose, toolPanel }: { skill
       <section className="help-section">
         <h3>会话与应用</h3>
         <p>
-          从侧栏打开技能工具、规则中心和数据分析，智能提单等入口收纳在「全部工具」。从「最近会话」继续处理已有事项，或打开「全部对话」搜索历史。
+          在「能力中心」选择会话技能、专家团和连接器，在「轻应用」打开独立应用，在「自动化」管理定时任务。「常用应用」收纳我的工作、规则中心、数据分析和全部工具。从「最近会话」继续处理已有事项。
         </p>
       </section>
       <section className="help-section">

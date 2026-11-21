@@ -1,0 +1,78 @@
+.ah-assessment {
+  --ah-level: #475d72;
+  --arc: #778a9d;
+  --track: #e1e8ef;
+  --card-muted: #526476;
+  min-width: 0;
+  padding: 13px 15px 14px;
+  border: 1px solid #d8e2e9;
+  border-radius: 10px;
+  background: #fff;
+  color: #25354a;
+  font-variant-numeric: tabular-nums;
+}
+.ah-assessment.tone-high {
+  --ah-level: #a44232;
+  --arc: #cc6e57;
+  --track: #f2e4de;
+}
+.ah-assessment.tone-medium {
+  --ah-level: #855c24;
+  --arc: #b88a43;
+  --track: #efe7d7;
+}
+.ah-assessment.tone-low {
+  --ah-level: #386b59;
+  --arc: #57917a;
+  --track: #dfeae4;
+}
+.ah-assessment-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ah-assessment h4,
+.ah-assessment h5 {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.ah-assessment h4 {
+  color: #536477;
+}
+.ah-assessment .ah-level {
+  display: block;
+  margin-top: 3px;
+  color: var(--ah-level);
+  font-size: 25px;
+  line-height: 1.2;
+  font-weight: 660;
+}
+.ah-assessment .ra-ring {
+  width: 58px;
+  height: 58px;
+}
+.ah-assessment .ra-ring b {
+  color: #25364a;
+  font-size: 20px;
+}
+.ah-assessment .ra-ring small {
+  font-size: 9px;
+}
+.ah-assessment p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #405266;
+  overflow-wrap: anywhere;
+}
+.ah-assessment .ah-advice {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid #e2e8ee;
+}
+.ah-assessment .ah-advice p {
+  margin-top: 3px;
+}

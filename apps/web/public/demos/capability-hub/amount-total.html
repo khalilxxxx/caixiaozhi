@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>报销金额合计</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f7f8fa;color:#21334a;font:16px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}main{max-width:560px;margin:8vh auto;padding:24px}h1{font-size:26px}label{display:block;margin-bottom:6px}textarea{width:100%;padding:10px;border:1px solid #98a8b9;border-radius:6px;font:inherit}button{display:block;margin:12px 0;background:#b4463a;border:0;color:#fff;border-radius:6px;padding:8px 15px;font:inherit;cursor:pointer}output{display:block;font-variant-numeric:tabular-nums}button:focus-visible,textarea:focus-visible{outline:2px solid #2473b5;outline-offset:2px}
+</style></head><body><main><h1>报销金额合计</h1><form><label for="amounts">每行输入一笔人民币金额（元）</label><textarea id="amounts" rows="5" placeholder="例如 580.00"></textarea><button type="submit">计算合计</button><output aria-live="polite"></output></form></main>
+<script>
+const amounts=document.querySelector('textarea');
+const result=document.querySelector('output');
+amounts.addEventListener('input',()=>{result.textContent=''});
+document.querySelector('form').addEventListener('submit',e=>{
+ e.preventDefault();
+ const lines=amounts.value.trim().split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ if(!lines.length){result.textContent='请至少输入一笔金额。';return}
+ let cents=0n;
+ for(const [i,line] of lines.entries()){
+  if(!/^\d{1,12}(?:\.\d{1,2})?$/.test(line)){result.textContent='第 '+(i+1)+' 笔金额格式有误，请输入非负金额，最多两位小数。';return}
+  const [yuan,fraction='']=line.split('.');
+  cents+=BigInt(yuan)*100n+BigInt(fraction.padEnd(2,'0'));
+ }
+ result.textContent=lines.length+' 笔合计 ¥'+(cents/100n).toLocaleString('zh-CN')+'.'+String(cents%100n).padStart(2,'0');
+});
+</script></body></html>

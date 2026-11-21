@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   available,
+  catalogArea,
   currentVersion,
   filterCatalog,
   readCatalogRoute,
   reviewStage,
   skillCatalogItem,
+  skillDocumentText,
   writeCatalogRoute,
   type Skill,
   type SkillVersion,
@@ -40,6 +42,34 @@ const skill: Skill = {
 };
 
 describe('统一技能工具目录', () => {
+  it('内置版本可共享技能正文，上传版本只读取本版的内容', () => {
+    const file = { name: 'SKILL.md', size: 200, type: 'text/markdown' };
+    expect(skillDocumentText(skill, published)).toBe(skill.instructions);
+    expect(skillDocumentText(skill, { ...published, file })).toBe('');
+    expect(skillDocumentText(skill, {
+      ...published, instructions: '  ', file: { ...file, text: '历史上传版本正文' },
+    })).toBe('历史上传版本正文');
+    expect(skillDocumentText(skill, {
+      ...published, instructions: '本版正文', file: { ...file, text: '原文件文本' },
+    })).toBe('本版正文');
+  });
+
+  it('分开两个目录，并将旧应用、上传和结果链接归入轻应用', () => {
+    expect(catalogArea('#skills?section=teams')).toBe('skills');
+    expect(catalogArea('#skills?section=connectors')).toBe('skills');
+    expect(catalogArea('#skills?view=manage&type=skill')).toBe('skills');
+    for (const hash of [
+      '#light-apps', '#skills?tab=tools', '#skills?type=tool',
+      '#skills?view=manage&action=upload', '#skills?action=requests',
+      '#skills?tool=expense-summary&result=r1',
+    ]) expect(catalogArea(hash)).toBe('light-apps');
+    const route = readCatalogRoute('#skills?tool=reconcile&q=费用');
+    const next = writeCatalogRoute(route, 'light-apps');
+    expect(catalogArea(next)).toBe('light-apps');
+    expect(readCatalogRoute(next)).toEqual(route);
+    expect(catalogArea('#documents')).toBeNull();
+  });
+
   it('区分只读资料、无使用权限与包检查阻断的可用状态', () => {
     expect(
       skillCatalogItem({
@@ -112,6 +142,23 @@ describe('统一技能工具目录', () => {
     expect(
       filterCatalog(items, readCatalogRoute('#skills')).map((item) => item.id),
     ).toEqual(['report', 'read-only']);
+  });
+
+  it('我创建的仅展示本人可查看和维护的条目，包含本人的草稿和待审核版本', () => {
+    const draft = skillCatalogItem({
+      ...skill, id: 'draft', versions: [{ ...published, status: 'draft' }],
+    });
+    const items = [
+      skillCatalogItem(skill), draft,
+      { ...draft, id: 'review', status: 'review' },
+      { ...draft, id: 'others', createdByMe: false, canManage: true },
+      { ...draft, id: 'hidden', canView: false },
+      { ...draft, id: 'not-managed', canManage: false },
+    ];
+    const route = readCatalogRoute('#skills?scope=mine');
+    expect(filterCatalog(items, route).map(item => item.id)).toEqual(['report', 'draft', 'review']);
+    expect(readCatalogRoute(writeCatalogRoute(route)).scope).toBe('mine');
+    expect(filterCatalog(items, readCatalogRoute('#skills')).map(item => item.id)).toEqual(['report']);
   });
 
   it('技能与工具共用名称用途搜索、分类、类型和收藏筛选', () => {

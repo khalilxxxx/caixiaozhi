@@ -29,7 +29,7 @@ function openResult(id: string) {
   query.set('tool', 'expense-summary');
   query.set('action', 'tool');
   query.set('result', id);
-  location.hash = `skills?${query}`;
+  location.hash = `light-apps?${query}`;
 }
 
 export function ExpenseSummaryTool() {

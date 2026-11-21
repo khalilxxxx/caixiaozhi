@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>财小智 · 三版对话交互</title>
+  <link rel="stylesheet" href="./preview.css">
+</head>
+<body>
+  <header class="review-bar">
+    <div class="review-brand"><strong>对话交互</strong><span>方案预览</span></div>
+    <div class="variant-tabs" role="group" aria-label="切换交互方案">
+      <button data-variant="a" aria-pressed="true"><b>A</b><span>专业有温度</span></button>
+      <button data-variant="b" aria-pressed="false"><b>B</b><span>有陪伴感</span></button>
+      <button data-variant="c" aria-pressed="false"><b>C</b><span>极简高效</span></button>
+    </div>
+    <div class="review-controls">
+      <button id="playback" title="暂停预览">暂停</button>
+      <button id="replay">重新播放</button>
+      <label class="sr-only" for="jump">预览状态</label>
+      <select id="jump"><option value="0">思考中</option><option value="2">执行中</option><option value="3">待补充</option><option value="6">已完成</option><option value="failed">异常</option></select>
+    </div>
+  </header>
+
+  <div class="product-frame variant-a" id="product">
+    <aside class="sidebar">
+      <div class="brand"><img src="/agent-assets/caixiaozhi.png" alt=""><strong>财小智</strong></div>
+      <button class="new-chat" data-action="replay"><span data-icon="plus"></span>新建会话</button>
+      <div class="nav-items" aria-label="工作空间">
+        <span><i data-icon="spark"></i>技能工具</span>
+        <span><i data-icon="check"></i>待办清单</span>
+        <span><i data-icon="book"></i>规则中心</span>
+        <span><i data-icon="chart"></i>数据分析</span>
+      </div>
+      <div class="recent"><small>最近会话</small><div class="current-chat"><span>10月差旅费用分析</span><i id="sidebar-status" data-icon="clock"></i></div><div>差旅报销材料整理</div><div>查看我的单据进展</div></div>
+      <div class="profile"><span>吴</span><div><strong>吴侠</strong><small>销售部</small></div></div>
+    </aside>
+    <main class="chat-shell">
+      <header class="chat-header"><h1>10月差旅费用分析</h1><span class="data-label">示例数据</span></header>
+      <div class="thread" id="thread">
+        <div class="thread-inner">
+          <article class="user-message"><div class="user-bubble">帮我看看10月销售部的差旅费，和9月相比，主要增加在哪？</div><div class="attachment"><span data-icon="file"></span>销售部差旅明细.xlsx</div></article>
+          <div id="assistant"></div>
+        </div>
+      </div>
+      <div class="compose-wrap">
+        <section id="question" class="question" aria-label="补充信息" hidden>
+          <div class="question-top"><span class="question-count">需要你确认</span><button class="text-action" data-action="defer">稍后回答</button></div>
+          <h2>跨月出差的费用，按哪个月份归集？</h2>
+          <div class="question-options" role="group" aria-label="归集口径"><button data-answer="按出差月份" aria-pressed="false">按出差月份</button><button data-answer="按报销月份" aria-pressed="false">按报销月份</button></div>
+        </section>
+        <div class="composer" id="composer">
+          <label class="sr-only" for="draft">给财小智发送消息</label>
+          <textarea id="draft" rows="2" placeholder="继续补充需求…"></textarea>
+          <div class="composer-bottom"><div class="composer-actions"><button class="icon-button" data-action="attachment" aria-label="查看已附材料"><span data-icon="plus"></span></button><button class="skill-button" data-action="skill"><span data-icon="spark"></span>费用分析<span data-icon="down"></span></button></div><div class="send-area"><span id="input-hint"></span><button id="send" class="send-button" aria-label="停止当前任务"></button></div></div>
+        </div>
+        <div class="composer-foot"><span id="state-note"> </span><button class="help-button" data-action="help"><span data-icon="book"></span>使用指引</button></div>
+      </div>
+    </main>
+  </div>
+  <footer class="review-footer"><span id="variant-note"></span><span>本地示例过程 · 不调用业务接口</span></footer>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <dialog id="help-dialog"><div class="dialog-heading"><h2>使用指引</h2><button data-close="help-dialog" class="icon-button" aria-label="关闭使用指引">×</button></div><p>三版采用同一份示例任务。顶部切换方案时保留当前进度，便于比较同一个时刻。</p><ul><li>“重新播放”从分析任务开始，执行到问题时会停下来等你回答。</li><li>选择归集口径并发送，继续核对、整理和展示结果。</li><li>可展开工作记录、停止并继续、查看异常恢复，或从顶部直接切到某个状态。</li><li>输入草稿在方案切换与停止时保留。普通消息不会发往真实 Agent。</li></ul><p>金额、耗时和任务步骤是本地预览数据；没有读取文件、提交单据或生成真实财务结论。</p><div class="reference-links"><a href="https://support.claude.com/en/articles/8664678-change-the-model-effort-and-thinking-settings" target="_blank" rel="noreferrer">Claude 过程呈现</a><a href="https://learn.chatgpt.com/docs/changelog" target="_blank" rel="noreferrer">Codex 交互更新</a><a href="https://www.kimi.com/help/agent/agent-swarm" target="_blank" rel="noreferrer">Kimi 工作编排</a></div></dialog>
+  <dialog id="report-dialog"><div class="dialog-heading"><h2>10月销售部差旅费</h2><button data-close="report-dialog" class="icon-button" aria-label="关闭费用报告">×</button></div><p class="report-source">示例数据 · <span id="report-basis">按出差月份</span></p><div id="report-body"></div></dialog>
+  <script type="module" src="./preview.js"></script>
+</body>
+</html>

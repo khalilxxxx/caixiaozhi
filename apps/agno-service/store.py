@@ -9,7 +9,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from rule_catalog import migrate_rules
 from rule_service import validate_semantic_rule
-from submission_defaults import apply_submission_defaults, merge_draft_patch
+from submission_defaults import apply_submission_defaults, merge_draft_patch, reimbursement_number
 from clarification_service import expire_questions, pending_question
 
 
@@ -19,6 +19,23 @@ def now():
 
 def encode(value):
     return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+
+
+def migrate_reimbursement_numbers(data):
+    submissions = data.get('submissions', {})
+    accepted = {r.get('draftId'): r.get('businessId') for r in submissions.get('requests', [])}
+    changed = False
+    for key, draft in submissions.get('drafts', {}).items():
+        if (draft.get('type') or key) not in ('personal', 'expense'):
+            continue
+        if not draft.get('documentNumber'):
+            draft['documentNumber'] = accepted.get(key) or reimbursement_number(submissions)
+            changed = True
+        edit = submissions.get('edits', {}).get(key)
+        if edit is not None and edit.get('documentNumber') != draft['documentNumber']:
+            edit['documentNumber'] = draft['documentNumber']
+            changed = True
+    return changed
 
 
 def finish_message_steps(message, run_status):
@@ -34,6 +51,112 @@ def finish_message_steps(message, run_status):
                     durationMs=max(0, finished - started) if isinstance(started, (int, float)) else 0)
         changed.append(copy.deepcopy(step))
     return changed
+
+
+def migrate_travel_application_fixture(data, seeded_data):
+    """给已有本机演示工作区补入新样例，保留已持久化的单据状态。"""
+    key = 'travel/travel_application/TA-20261113-015'
+    fixture = next((doc for doc in seeded_data.get('documents', []) if doc.get('key') == key), None)
+    if fixture is None:
+        return False
+    documents = data.get('documents')
+    if not isinstance(documents, list) or any(doc.get('key') == key for doc in documents):
+        return False
+    documents.append(copy.deepcopy(fixture))
+    return True
+
+
+def migrate_expense_progress_fixture(data, seeded_data):
+    """只为原始的北京拜访样例补入逐笔费用和影像，已修改或已删除的单据保留原状。"""
+    key = 'expense/expense_claim/EX-20261116-018'
+    new_fields = ('version', 'expenses', 'files')
+    fixture = next((doc for doc in seeded_data.get('documents', []) if doc.get('key') == key), None)
+    if not fixture or fixture.get('synthetic') is not True or any(field not in fixture for field in new_fields):
+        return False
+    documents = data.get('documents')
+    if not isinstance(documents, list):
+        return False
+    originals = [doc for doc in documents if isinstance(doc, dict) and doc.get('key') == key]
+    legacy = {field: value for field, value in fixture.items() if field not in new_fields}
+    if len(originals) != 1 or originals[0].get('synthetic') is not True or originals[0] != legacy:
+        return False
+    originals[0].update({field: copy.deepcopy(fixture[field]) for field in new_fields})
+    return True
+
+
+def migrate_work_document_fixtures(data, seeded_data):
+    """补齐本地示例的业务事实，并使修改前的审核快照失效。"""
+    previous_version = data.get('workDocumentFixtureVersion', 0)
+    if previous_version >= 2:
+        return False
+    fixtures = {doc['id']: doc for doc in seeded_data.get('auditDocuments', [])}
+    documents = data.get('auditDocuments')
+    if (not isinstance(data.get('rulesSubmission', {}).get('rules'), list)
+        or not isinstance(documents, list) or not any(doc.get('id') in fixtures for doc in documents)):
+        return False
+    scope_original_travel_reminder(data, seeded_data)
+    if previous_version == 1:
+        data['workDocumentFixtureVersion'] = 2
+        return True
+    added_ids = {
+        'OA-20261119-022', 'OA-20261120-023', 'BX-20261118-007',
+        'BX-20261120-008', 'OA-20261119-024',
+    }
+    existing_ids = {doc.get('id') for doc in documents}
+    affected_ids = []
+    for doc in documents:
+        fixture = fixtures.get(doc.get('id'))
+        if not fixture:
+            continue
+        # 新库数据已完整；历史库只更新仍与原始示例匹配的单据。
+        if doc == fixture:
+            affected_ids.append(doc['id'])
+        elif (doc.get('version') == fixture['version'] - 1
+              and all(value == fixture[key] for key, value in doc.items() if key in fixture and key != 'version')):
+            doc.update(copy.deepcopy(fixture))
+            affected_ids.append(doc['id'])
+    for doc_id, fixture in fixtures.items():
+        if doc_id in added_ids and doc_id not in existing_ids:
+            documents.append(copy.deepcopy(fixture))
+            affected_ids.append(doc_id)
+    # business 依赖 Store；仅在数据库与工作区都准备好后加载。
+    from business import review_work_examples
+    review_work_examples(data, affected_ids)
+    data['workDocumentFixtureVersion'] = 2
+    return True
+
+
+def scope_original_travel_reminder(data, seeded_data):
+    """保留本人的启停和自定义逻辑，给原版出差规则补上差旅申请范围。"""
+    centers = ('rulesSubmission', 'srsRuleCenterV1')
+    originals = [next((rule for rule in data.get(key, {}).get('rules', []) if rule.get('id') == 'P002'), {})
+                 for key in centers]
+    old_definition = {
+        'name': '长时间出差提醒', 'metric': 'days', 'thresholdDays': 5, 'description': '申请天数超过5天时，审单时提醒我。',
+        'system': 'oa', 'scope': 'review', 'origin': 'personal', 'effect': 'warn',
+    }
+    if any(rule.get('documentTypes') or any(rule.get(key) != value for key, value in old_definition.items())
+           for rule in originals):
+        return
+    old_detail = {
+        'logic': 'OA申请天数超过5天时，审单时提醒本人。',
+        'output': '每张OA申请输出一条天数检查结果，列明申请天数与阈值。',
+        'applicability': ['OA办公系统', '审单场景'],
+        'evidence': [{'name': '申请天数', 'source': 'OA申请 · 申请信息', 'purpose': '读取本次申请的天数'}],
+    }
+    if any(originals[1].get(key) != value for key, value in old_detail.items()):
+        return
+    for key, rule in zip(centers, originals):
+        updated = next(item for item in seeded_data[key]['rules'] if item['id'] == 'P002')
+        rule.update(documentTypes=['travel'], version=rule.get('version', 1) + 1, description=updated['description'])
+        if key == 'srsRuleCenterV1':
+            for field in ('logic', 'output', 'applicability', 'evidence'):
+                rule[field] = copy.deepcopy(updated[field])
+            rule['updatedAt'] = now()
+            rule.setdefault('revisions', []).append({
+                'version': rule['version'], 'at': rule['updatedAt'],
+                'summary': '将原有出差天数提醒限定于差旅申请。', 'logic': rule['logic'],
+            })
 
 
 def remove_invoice_verification(data):
@@ -199,21 +322,35 @@ class Store:
                 CREATE INDEX IF NOT EXISTS events_run ON events(run_id,id);
                 CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, metadata TEXT NOT NULL, storage_name TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS translations (file_id TEXT PRIMARY KEY REFERENCES files(id), result TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS reimbursement_batches (
+                    id TEXT PRIMARY KEY, draft_id TEXT NOT NULL, file_set TEXT NOT NULL, body TEXT NOT NULL,
+                    UNIQUE(draft_id, file_set)
+                );
             ''')
-            if seed is None:
+            default_seed = seed is None
+            if default_seed:
                 seed_path = Path(__file__).with_name('seed.json')
                 seed = json.loads(seed_path.read_text()) if seed_path.exists() else {'data': {}, 'tasks': [], 'activeTask': None}
             seed = copy.deepcopy(seed)
             remove_invoice_verification(seed.get('data', {}))
             migrate_rules(seed.get('data', {}))
-            db.execute('INSERT OR IGNORE INTO workspace VALUES(1,0,?)', (encode(seed),))
+            inserted = db.execute('INSERT OR IGNORE INTO workspace VALUES(1,0,?)', (encode(seed),)).rowcount == 1
             row = db.execute('SELECT revision,state FROM workspace WHERE id=1').fetchone()
             state = json.loads(row['state'])
             changed = remove_invoice_verification(state.get('data', {}))
             changed = migrate_rules(state.get('data', {})) or changed
+            changed = migrate_reimbursement_numbers(state.get('data', {})) or changed
+            if default_seed:
+                changed = migrate_travel_application_fixture(state.get('data', {}), seed.get('data', {})) or changed
+                changed = migrate_expense_progress_fixture(state.get('data', {}), seed.get('data', {})) or changed
+                changed = migrate_work_document_fixtures(state.get('data', {}), seed.get('data', {})) or changed
+                from work_decisions import migrate_approval_assignments
+                changed = migrate_approval_assignments(state.get('data', {}), seed.get('data', {})) or changed
             changed = expire_questions(state) or changed
             if changed:
-                db.execute('UPDATE workspace SET revision=?,state=? WHERE id=1', (row['revision'] + 1, encode(state)))
+                # 首次创建和初始演示数据同属一次事务，对外仍从版本 0 开始。
+                revision = row['revision'] if inserted else row['revision'] + 1
+                db.execute('UPDATE workspace SET revision=?,state=? WHERE id=1', (revision, encode(state)))
 
     def connect(self):
         db = sqlite3.connect(self.path, timeout=20)
@@ -230,14 +367,19 @@ class Store:
     def get_state(self):
         return self.snapshot()['state']
 
-    def mutate(self, fn):
+    def mutate(self, fn, *, only_if_changed=False):
+        return self.mutate_with_db(lambda state, db: fn(state), only_if_changed=only_if_changed)
+
+    def mutate_with_db(self, fn, *, only_if_changed=False):
         with self.lock, self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT revision,state FROM workspace WHERE id=1').fetchone()
             state = json.loads(row['state'])
-            result = fn(state)
+            result = fn(state, db)
             expire_questions(state)
-            db.execute('UPDATE workspace SET revision=?,state=? WHERE id=1', (row['revision'] + 1, encode(state)))
+            updated = encode(state)
+            if not only_if_changed or updated != row['state']:
+                db.execute('UPDATE workspace SET revision=?,state=? WHERE id=1', (row['revision'] + 1, updated))
             return copy.deepcopy(result)
 
     def patch(self, patch):
@@ -247,7 +389,9 @@ class Store:
             def apply(state):
                 updates = patch.get('data', {})
                 # Receipts and ledgers can only be written by business transactions.
-                protected = {'receipts', 'submissionLedger', 'documents', 'analysisRecords', 'auditDocuments', 'expenseCategories', 'policies', 'toolResults', 'ruleMigration'}
+                protected = {'receipts', 'submissionLedger', 'documents', 'analysisRecords', 'auditDocuments',
+                             'handledWorkDocuments', 'workDecisionLedger', 'workDecisionFixtureVersion',
+                             'workDocumentFixtureVersion', 'expenseCategories', 'policies', 'toolResults', 'ruleMigration', 'publicFinancialReports'}
                 for key, value in updates.items():
                     if key == 'submissions' and key in state['data']:
                         state['data'][key] = merge_submissions(state['data'][key], value)
@@ -282,7 +426,7 @@ class Store:
                             fresh['status'] = '已暂停'
                         state['tasks'].append(fresh)
                         continue
-                    for key in ('title', 'input', 'refs', 'capability', 'updated'):
+                    for key in ('title', 'input', 'refs', 'capability', 'expertTeamName', 'updated'):
                         if key in incoming:
                             current[key] = incoming[key]
                     known = {m['id'] for m in current.get('messages', [])}
@@ -379,6 +523,22 @@ class Store:
         with self.connect() as db:
             row = db.execute('SELECT metadata,storage_name FROM files WHERE id=?', (file_id,)).fetchone()
             return {'metadata': json.loads(row['metadata']), 'storage_name': row['storage_name']} if row else None
+
+    def save_material_recognition(self, file_id, outcome):
+        """识别事实属于上传原件；浏览器对材料工作区的人工修改保持独立。"""
+        with self.lock, self.connect() as db:
+            row = db.execute('SELECT metadata FROM files WHERE id=?', (file_id,)).fetchone()
+            if row is None:
+                raise KeyError(file_id)
+            metadata = json.loads(row['metadata'])
+            cached = metadata.get('materialRecognition', {})
+            if (cached.get('recognition', {}).get('schemaVersion') == outcome['recognition']['schemaVersion']
+                    and cached.get('extractionStatus') == 'extracted'
+                    and cached['recognition']['role'] != 'unknown'):
+                return cached
+            metadata['materialRecognition'] = outcome
+            db.execute('UPDATE files SET metadata=? WHERE id=?', (encode(metadata), file_id))
+            return outcome
 
     def list_files(self):
         with self.connect() as db:

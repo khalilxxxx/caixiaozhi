@@ -1,9 +1,12 @@
 import asyncio
 import copy
+import json
 import sqlite3
 from types import SimpleNamespace
 
+import httpx
 import pytest
+from agno.models.openai.like import OpenAILike
 from fastapi.testclient import TestClient
 
 from agent_runtime import Runtime
@@ -228,6 +231,63 @@ def test_ask_tool_persists_question_without_body_and_blocks_following_writes(tmp
     assert store.get_state()['data']['submissions']['drafts']['travel'] == original
     assert next(event['data'] for event in store.events('r') if event['kind'] == 'result')['question']['status'] == 'pending'
     assert question_from_runtime(Store(store.path))['status'] == 'pending'
+
+
+def test_rejected_question_can_be_corrected_in_the_same_run(tmp_path, monkeypatch):
+    import agent_runtime
+    import config
+
+    monkeypatch.setattr(config, 'DATA_DIR', tmp_path)
+    store = Store(tmp_path / 'question-retry.db')
+    user_message = '帮我处理一下出差的事'
+    title = '你想新建差旅申请，还是查询已提交单据？'
+
+    def prepare(state):
+        state['data']['submissions']['drafts']['travel']['status'] = 'awaiting_receipt'
+        state['tasks'].insert(0, {
+            'id': 't', 'activeRunId': 'r', 'refs': [],
+            'messages': [{'role': 'user', 'text': user_message}],
+        })
+
+    store.mutate(prepare)
+    store.create_run('r', 't', {'message': user_message, 'refs': []})
+    requests = []
+
+    def respond(request):
+        messages = json.loads(request.content)['messages']
+        requests.append(messages)
+        arguments = {'title': title}
+        if len(requests) == 1:
+            arguments['draft_id'] = 'travel'
+        tool_call = {
+            'index': 0, 'id': f'call-{len(requests)}', 'type': 'function',
+            'function': {'name': 'ask_user', 'arguments': json.dumps(arguments)},
+        }
+        chunk = {
+            'id': 'synthetic', 'object': 'chat.completion.chunk', 'created': 0, 'model': 'test-model',
+            'choices': [{'index': 0, 'delta': {'role': 'assistant', 'tool_calls': [tool_call]},
+                         'finish_reason': 'tool_calls'}],
+        }
+        return httpx.Response(200, headers={'content-type': 'text/event-stream'},
+                              text=f'data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n')
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            monkeypatch.setattr(agent_runtime, 'model', lambda: OpenAILike(
+                id='test-model', api_key='test-key', base_url='https://model.test/v1', http_client=client,
+            ))
+            await Runtime(store, Business(store)).execute('r')
+
+    asyncio.run(run())
+    assert store.run('r')['status'] == 'completed'
+    assert len(requests) == 2
+    assert any('不可编辑' in message['content'] for message in requests[1] if message['role'] == 'tool')
+    task = store.get_state()['tasks'][0]
+    assert task['status'] == '待你回答'
+    question = question_from_runtime(store)
+    assert question['status'] == 'pending' and question['title'] == title
+    assert 'draftId' not in question
+    assert store.get_state()['data']['submissions']['drafts']['travel']['status'] == 'awaiting_receipt'
 
 
 def question_from_runtime(store):

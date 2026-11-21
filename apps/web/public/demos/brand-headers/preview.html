@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>工作台预览 · 财小智</title>
+  <link rel="icon" href="/agent-assets/caixiaozhi.png">
+  <link rel="stylesheet" href="./preview.css">
+  <script type="module" src="./preview.js"></script>
+</head>
+<body class="preview-shell">
+  <header class="preview-bar">
+    <div class="preview-identity">
+      <a id="back-link" class="preview-back" href="./index.html#style-d">
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 4-6 6 6 6M3 10h14"/></svg>
+        <span>返回选样</span>
+      </a>
+      <span class="preview-title">工作台预览</span>
+    </div>
+    <div class="preview-controls">
+      <label class="preview-style"><span>款式</span>
+        <select id="style-select"></select>
+      </label>
+      <nav class="preview-areas" aria-label="预览页面">
+        <a href="?style=d&amp;area=hub" data-area="hub">能力中心</a>
+        <a href="?style=d&amp;area=apps" data-area="apps">轻应用</a>
+      </nav>
+    </div>
+  </header>
+  <main class="preview-main">
+    <iframe id="workspace" title="财小智工作台" src="about:blank"></iframe>
+    <div id="load-error" class="preview-error" hidden role="alert">
+      <p>工作台暂时无法加载</p>
+      <button id="retry" type="button">重新加载</button>
+    </div>
+  </main>
+</body>
+</html>

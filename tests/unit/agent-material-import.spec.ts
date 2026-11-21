@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildMaterialExpenseBatch,
+  draftMaterialFileIds,
   materialExpenseError,
   materialSelectionId,
   selectMaterialScope,
@@ -66,6 +67,19 @@ const meal: MaterialExpense = {
 };
 
 describe('材料费用导出', () => {
+  it('从报销单打开材料仅带入该单发票和已选文件，空单不显示其他单据的同批次材料', () => {
+    const scoped = (fileIds: string[]) => selectMaterialScope(
+      { files, items: [hotel, meal] },
+      { fileIds, batchId: 'batch-20261111' },
+    );
+    expect(scoped(draftMaterialFileIds(undefined, [])).files).toEqual([]);
+    const ids = draftMaterialFileIds({
+      materialIds: ['hotel-file'],
+      expenses: [{ sourceFileId: 'hotel-file', files: [{ id: 'hotel-file' }] }],
+    }, ['meal-file', 'meal-file']);
+    expect(scoped(ids).files.map((file) => file.id)).toEqual(['hotel-file', 'meal-file']);
+  });
+
   it('保留每笔费用用途、OA、分组和住宿期间，供对应草稿载入', () => {
     const batch = buildMaterialExpenseBatch({
       items: [hotel, meal],
@@ -226,5 +240,19 @@ describe('材料费用导出', () => {
         revision: 1,
       }).items,
     ).toEqual([]);
+  });
+
+  it('无明确招待依据的餐饮需确认用途，留下原金额且不生成招待明细', () => {
+    const item = {
+      ...meal,
+      categoryId: null,
+      categoryHint: 'meal-purpose' as const,
+      oaId: undefined,
+      purpose: '用餐',
+    };
+    expect(materialExpenseError(item)).toMatch(/团餐|用途/);
+    const batch = buildMaterialExpenseBatch({ items: [item], files, revision: 8 });
+    expect(batch.items).toEqual([]);
+    expect(item.amount).toBe(68000);
   });
 });

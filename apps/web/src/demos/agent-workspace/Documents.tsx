@@ -2,7 +2,6 @@ import { businessTime } from './time-format';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { documents as sourceDocuments } from '../document-query/fixtures';
 import {
-  presentDocument,
   type GenericDocument,
   type DocumentStatus,
 } from '../document-query/document-model';
@@ -11,6 +10,8 @@ import { Badge, Button, Empty, Field, Icon, Money, Section } from './ui';
 import {
   buildMaterialExpenseBatch,
   materialBatchId,
+  materialCategoryQuestion,
+  materialExpenseCategory,
   materialExpenseError,
   materialSelectionId,
   selectMaterialScope,
@@ -18,7 +19,16 @@ import {
   type MaterialFile,
 } from './material-import.js';
 import './documents.css';
-import { getDraftType, type MaterialExpenseImport, type SubmissionDraft } from './submission-model';
+import './document-progress-list.css';
+import { DocumentCard } from './DocumentProgressCard';
+import { progressDocumentHref } from './work-document-link';
+import { getDocumentProgress } from './document-progress';
+import { ApprovalNodeCard } from './ApprovalNodeCard';
+import { WorkDocumentDetails } from './WorkDocumentDetails';
+import { progressDossier, type ProgressDossierRecord } from './progress-dossier';
+import { isReimbursementPanel } from './reimbursement-batch';
+import { ReimbursementBatchPanel } from './ReimbursementBatchPanel';
+import { getDraftType, getExpenseCategories, type MaterialExpenseImport, type SubmissionDraft } from './submission-model';
 import { readSubmissionState, suggestMaterialDraftId } from './submission-state';
 import {
   acceptWorkspace,
@@ -72,28 +82,18 @@ const documentSourceOptions = (records: GenericDocument[]) => [
     records.map((document) => [document.source.id, document.source]),
   ).values(),
 ];
-const statusOptions: Array<[DocumentStatus | 'all', string]> = [
-  ['all', '全部状态'],
-  ['processing', '处理中'],
+const progressFilters = [
+  ['all', '全部'],
+  ['approval', '审批中'],
   ['needs_action', '待我处理'],
-  ['completed', '已完成'],
-];
-const toneFor = (status: DocumentStatus) =>
-  status === 'needs_action'
-    ? 'warning'
-    : status === 'completed'
-      ? 'success'
-      : status === 'processing'
-        ? 'blue'
-        : 'neutral';
-const iconFor: Record<string, string> = {
-  travel_application: 'plane',
-  expense_claim: 'wallet',
-  oa_leave: 'tasks',
-  payment_request: 'wallet',
-  contract_approval: 'file',
-  budget_transfer: 'chart',
-};
+  ['execution', '执行中'],
+  ['finished', '已结束'],
+] as const;
+type ProgressFilter = (typeof progressFilters)[number][0];
+function progressGroup(doc: GenericDocument) {
+  if (doc.status === 'completed' || doc.status === 'closed') return 'finished';
+  return doc.status === 'processing' ? doc.phase : doc.status;
+}
 
 export function findWorkspaceDocument(
   id?: string,
@@ -103,102 +103,13 @@ export function findWorkspaceDocument(
   return documents.find((d) => d.key === id || d.id === id || d.typeId === id);
 }
 
-function queryMatches(d: GenericDocument, query: string) {
-  const q = query.trim().toLowerCase();
-  if (!q || /全部|所有/.test(q)) return true;
-  const terms: Array<[RegExp, (doc: GenericDocument) => boolean]> = [
-    [/oa|请假|年假/, (doc) => doc.source.id === 'oa'],
-    [/采购|付款|支付|到账/, (doc) => doc.typeId === 'payment_request'],
-    [/报销|退回|补充/, (doc) => doc.typeId === 'expense_claim'],
-    [/合同|会签/, (doc) => doc.typeId === 'contract_approval'],
-    [/预算|调拨/, (doc) => doc.typeId === 'budget_transfer'],
-    [/差旅|出差|行程/, (doc) => doc.typeId === 'travel_application'],
-  ];
-  const type = terms.find(([pattern]) => pattern.test(q));
-  const places = ['上海', '北京', '杭州'].filter((place) => q.includes(place));
-  if (type || places.length)
-    return (
-      (!type || type[1](d)) &&
-      (!places.length ||
-        places.every((p) =>
-          [d.title, ...d.summary.map((f) => f.value)].join(' ').includes(p),
-        ))
-    );
-  const code = q.match(/(?:ta|ex|oa|pay|ct|bd)-[a-z0-9-]+/i)?.[0];
-  if (code) return d.id.toLowerCase().includes(code);
-  const direct = [d.title, d.id, d.typeLabel, d.source.label].some((value) =>
-    value.toLowerCase().includes(q),
-  );
-  return direct || /查询|进展|进度|单据|到哪|办理|状态/.test(q);
-}
-
-function DocumentCard({ document }: { document: GenericDocument }) {
-  const w = useWorkspace(),
-    p = presentDocument(document);
-  return (
-    <article className="dw-document-card">
-      <button
-        className="dw-document-main"
-        onClick={() =>
-          w.openPanel({
-            kind: 'document',
-            title: document.typeLabel,
-            id: document.key,
-          })
-        }
-      >
-        <span className="dw-document-icon">
-          <Icon name={iconFor[document.typeId]} size={19} />
-        </span>
-        <span className="dw-document-copy">
-          <span className="dw-document-title">
-            <strong>{document.title}</strong>
-            <Badge tone={toneFor(document.status)}>{p.displayStatus}</Badge>
-          </span>
-          <span className="dw-document-summary">
-            {p.cardSummary.map((f) => (
-              <span key={f.label}>
-                <span className="dw-sr">{f.label}：</span>
-                {f.value}
-              </span>
-            ))}
-          </span>
-          <span className="dw-document-current">
-            <span>{p.currentLabel}</span>
-            {p.estimateLabel && (
-              <span className="dw-estimate">
-                {document.estimate?.compactLabel ?? p.estimateLabel}
-              </span>
-            )}
-            <span className="dw-document-source">{document.source.label}</span>
-          </span>
-        </span>
-        <Icon name="chevron" size={15} className="dw-card-chevron" />
-      </button>
-      <button
-        className="dw-document-attach"
-        aria-label={`将${document.title}加入对话`}
-        title="加入对话"
-        onClick={() => {
-          w.attach({
-            kind: 'document',
-            id: document.key,
-            title: document.title,
-          });
-          w.navigate('chat');
-        }}
-      >
-        <Icon name="link" size={15} />
-      </button>
-    </article>
-  );
-}
-
 function SourceNotice({
   source = 'all',
+  sourceIds,
   detail = false,
 }: {
   source?: string;
+  sourceIds?: string[];
   detail?: boolean;
 }) {
   const w = useWorkspace();
@@ -208,7 +119,8 @@ function SourceNotice({
   const missing = sourceOptions.filter(
     (s) =>
       (source === 'all' || s.id === source) &&
-      ['unavailable', 'loading'].includes(sources.states[s.id] ?? 'ready'),
+      (!sourceIds || sourceIds.includes(s.id)) &&
+      (sources.states[s.id] ?? 'ready') !== 'ready',
   );
   if (!missing.length) return null;
   const retry = async () => {
@@ -247,48 +159,100 @@ export function DocumentResults({
   query = '',
   documentId,
   documents: returnedDocuments,
+  documentIds,
+  unavailableSources = [],
 }: {
   limit?: number;
   query?: string;
   documentId?: string;
   documents?: GenericDocument[];
+  documentIds?: string[];
+  unavailableSources?: string[];
 }) {
   const [sources] = useSlice('documentSources', documentSourcesInitial),
     [expanded, setExpanded] = useState(false);
-  useEffect(() => setExpanded(false), [query]);
   const w = useWorkspace();
   const records = (w.state.data.documents ?? []) as GenericDocument[];
+  const request = JSON.stringify({
+    query,
+    documentIds: documentIds ?? (documentId ? [documentId] : undefined),
+  });
+  const ready = (id: string) => (sources.states[id] ?? 'ready') === 'ready';
+  const recovered = unavailableSources.filter(ready).join(',');
+  const lookup = (!returnedDocuments && !documentId) || Boolean(recovered);
+  const [attempt, retryLookup] = useState(0);
+  const key = JSON.stringify([request, recovered, attempt]);
+  const [reply, setReply] = useState<{
+    key: string;
+    items?: GenericDocument[];
+    unavailableSources?: string[];
+    error?: boolean;
+  }>();
+  useEffect(() => setExpanded(false), [request]);
+  useEffect(() => {
+    if (!lookup) return;
+    let active = true;
+    api<{ items: GenericDocument[]; unavailableSources: string[] }>(
+      '/business/documents',
+      JSON.parse(request),
+    )
+      .then((result) => {
+        if (active) setReply({ ...result, key });
+      })
+      .catch(() => {
+        if (active) setReply({ key, error: true });
+      });
+    return () => {
+      active = false;
+    };
+  }, [lookup, key, request]);
+  const latest = lookup && reply?.key === key ? reply : undefined;
   const matches =
+    latest?.items ??
     returnedDocuments ??
-    records.filter((d) =>
-      documentId
-        ? d.key === documentId || d.id === documentId
-        : queryMatches(d, query),
-    );
-  const documents = matches.filter(
-    (d) =>
-      !['unavailable', 'loading'].includes(
-        sources.states[d.source.id] ?? 'ready',
-      ),
-  );
-  const source =
-    matches.length &&
-    matches.every((d) => d.source.id === matches[0]!.source.id)
-      ? matches[0]!.source.id
-      : 'all';
-  const unavailable = matches.some((d) =>
-    ['unavailable', 'loading'].includes(sources.states[d.source.id] ?? 'ready'),
-  );
+    records.filter((d) => d.key === documentId || d.id === documentId);
+  const documents = matches.filter((d) => ready(d.source.id));
+  const navigationIds = documents.map((doc) => doc.key);
+  const sourceIds = [
+    ...(latest?.unavailableSources ?? unavailableSources),
+    ...matches.map((d) => d.source.id),
+  ];
+  const unavailable = sourceIds.some((id) => !ready(id));
   return (
     <div className="dw-results">
-      <SourceNotice source={source} />
+      <SourceNotice sourceIds={sourceIds} />
+      {latest?.error && (
+        <div className="dw-source-notice" role="status">
+          单据进展查询失败
+          <Button
+            variant="ghost"
+            icon="refresh"
+            onClick={() => retryLookup(attempt + 1)}
+          >
+            重试
+          </Button>
+        </div>
+      )}
       <div className="dw-document-list">
         {(expanded ? documents : documents.slice(0, limit)).map((d) => (
-          <DocumentCard key={d.key} document={d} />
+          <DocumentCard
+            key={d.key}
+            document={d}
+            conversation
+            navigationIds={navigationIds}
+          />
         ))}
       </div>
-      {!documents.length && (
-        <Empty title={unavailable ? '等待来源返回结果' : '没有找到相关单据'} />
+      {!documents.length && !latest?.error && (
+        <Empty
+          title={
+            lookup && !latest
+              ? '正在查询单据进展…'
+              : unavailable
+                ? '等待来源返回结果'
+                : '没有找到相关单据'
+          }
+        />
       )}{' '}
       {!expanded && documents.length > limit && (
         <button className="dw-more" onClick={() => setExpanded(true)}>
@@ -300,70 +264,82 @@ export function DocumentResults({
 }
 
 export function DocumentsPage() {
-  const [source, setSource] = useState('all'),
-    [status, setStatus] = useState<DocumentStatus | 'all'>('all'),
-    [query, setQuery] = useState('');
+  const [source, setSource] = useState('all');
+  const [status, setStatus] = useState<ProgressFilter>('all');
+  const [query, setQuery] = useState('');
   const [sources] = useSlice('documentSources', documentSourcesInitial);
-  const w = useWorkspace();
-  const records = (w.state.data.documents ?? []) as GenericDocument[];
+  const records = (useWorkspace().state.data.documents ??
+    []) as GenericDocument[];
   const sourceOptions = documentSourceOptions(records);
-  const available = records.filter(
-    (d) =>
-      !['unavailable', 'loading'].includes(
-        sources.states[d.source.id] ?? 'ready',
-      ),
-  );
-  const result = available.filter(
-    (d) =>
-      (source === 'all' || d.source.id === source) &&
-      (status === 'all' || d.status === status) &&
-      (!query.trim() ||
-        [d.title, d.id, d.typeLabel, ...d.summary.map((f) => f.value)]
-          .join(' ')
-          .toLowerCase()
-          .includes(query.trim().toLowerCase())),
-  );
+  const isReady = (id: string) => (sources.states[id] ?? 'ready') === 'ready';
+  const available = records.filter((doc) => isReady(doc.source.id));
+  const pending = available.filter(
+    (doc) => doc.status === 'needs_action',
+  ).length;
+  const keyword = query.trim().toLowerCase();
+  const result = available
+    .filter((doc) => {
+      if (source !== 'all' && doc.source.id !== source) return false;
+      if (status !== 'all' && progressGroup(doc) !== status) return false;
+      if (!keyword) return true;
+      const { node, actors } = getDocumentProgress(doc);
+      return [
+        doc.title,
+        doc.id,
+        doc.typeLabel,
+        node,
+        ...actors,
+        ...doc.summary.map((f) => f.value),
+      ].some((value) => value.toLowerCase().includes(keyword));
+    })
+    .sort(
+      (a, b) =>
+        Number(b.status === 'needs_action') -
+        Number(a.status === 'needs_action'),
+    );
   const incomplete = sourceOptions.some(
-    (s) =>
-      (source === 'all' || s.id === source) &&
-      ['unavailable', 'loading'].includes(sources.states[s.id] ?? 'ready'),
+    (s) => (source === 'all' || s.id === source) && !isReady(s.id),
   );
+  const navigationIds = result.map((doc) => doc.key);
+  const count = source !== 'all' && incomplete ? '—' : result.length;
+  const reset = () => {
+    setSource('all');
+    setStatus('all');
+    setQuery('');
+  };
   return (
-    <div className="dw-page">
-      <div className="dw-toolbar">
-        <label className="dw-search">
-          <Icon name="search" size={17} />
-          <input
-            value={query}
-            aria-label="搜索单据"
-            placeholder="搜索单据名称、单号"
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          {query && (
-            <button onClick={() => setQuery('')} aria-label="清空搜索">
-              <Icon name="close" size={14} />
-            </button>
-          )}
-        </label>
-        <select
-          aria-label="来源系统"
-          value={source}
-          onChange={(e) => setSource(e.target.value)}
-        >
-          <option value="all">全部来源</option>
-          {sourceOptions.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="dw-filter-row">
-        <div className="dw-filters">
-          {statusOptions.map(([id, label]) => (
+    <div className="dw-page dp-page">
+      <header className="dp-hero">
+        <div>
+          <h1>单据进展</h1>
+          {pending > 0 ? (
             <button
+              type="button"
+              onClick={() => {
+                setSource('all');
+                setStatus('needs_action');
+                setQuery('');
+              }}
+            >
+              {pending} 张单据待我处理 <Icon name="arrow" size={15} />
+            </button>
+          ) : (
+            <p>当前可查 {available.length} 张单据</p>
+          )}
+        </div>
+        <img
+          src="/agent-assets/xiaozhi-approval-progress.webp"
+          alt=""
+          width="870"
+          height="348"
+        />
+      </header>
+      <div className="dp-toolbar">
+        <div className="dp-filters" aria-label="按办理状态筛选" role="group">
+          {progressFilters.map(([id, label]) => (
+            <button
+              type="button"
               key={id}
-              className={status === id ? 'active' : ''}
               aria-pressed={status === id}
               onClick={() => setStatus(id)}
             >
@@ -371,45 +347,231 @@ export function DocumentsPage() {
             </button>
           ))}
         </div>
-        <span>
-          {source !== 'all' && incomplete ? '—' : result.length} 张单据
-          {source === 'all' && incomplete ? ' · 部分来源未返回' : ''}
-        </span>
+        <div className="dp-query">
+          <label className="dw-search">
+            <Icon name="search" size={15} />
+            <input
+              value={query}
+              aria-label="搜索单据"
+              placeholder="单据名称、单号或处理人"
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                aria-label="清空搜索"
+              >
+                <Icon name="close" size={13} />
+              </button>
+            )}
+          </label>
+          <select
+            aria-label="来源系统"
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+          >
+            <option value="all">全部来源</option>
+            {sourceOptions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
       <SourceNotice source={source} />
-      <div className="dw-document-list">
-        {result.map((d) => (
-          <DocumentCard key={d.key} document={d} />
-        ))}
+      <div className="dp-ledger">
+        <div className="dp-list-head">
+          <span>
+            单据 <b aria-live="polite">{count} 张</b>
+          </span>
+          <span>当前环节 / 处理人</span>
+          <span>金额 / 时长</span>
+          <span>单据状态</span>
+        </div>
+        <div className="dw-document-list">
+          {result.map((doc) => (
+            <DocumentCard
+              key={doc.key}
+              document={doc}
+              navigationIds={navigationIds}
+            />
+          ))}
+        </div>
+        {!result.length && (
+          <Empty
+            title={
+              incomplete ? '暂无匹配结果，部分来源待返回' : '没有符合条件的单据'
+            }
+          >
+            {(source !== 'all' || status !== 'all' || keyword) && (
+              <Button variant="ghost" onClick={reset}>
+                清除筛选
+              </Button>
+            )}
+          </Empty>
+        )}
       </div>
-      {!result.length && (
-        <Empty title={incomplete ? '等待来源返回结果' : '没有符合条件的单据'}>
-          {!incomplete && (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setSource('all');
-                setStatus('all');
-                setQuery('');
-              }}
-            >
-              清除筛选
-            </Button>
-          )}
-        </Empty>
-      )}
     </div>
   );
 }
 
-export function DocumentPanel({ panel }: { panel: PanelSpec }) {
-  const w = useWorkspace(),
-    document = panel.id
-      ? findWorkspaceDocument(panel.id, w.state.data.documents ?? [])
-      : undefined;
-  const [sources] = useSlice('documentSources', documentSourcesInitial);
-  const [tab, setTab] = useState<'progress' | 'info'>('progress');
-  useEffect(() => setTab('progress'), [panel.id]);
+type ProgressLookup = {
+  document?: GenericDocument;
+  sourceId?: string;
+  loading?: boolean;
+  failed?: boolean;
+  retry?: () => void;
+};
+
+export function useDocumentPanelLookup(
+  panel: PanelSpec | null,
+  records: GenericDocument[],
+  states: Record<string, SourceState>,
+  ready: boolean,
+): ProgressLookup {
+  const id = ready && panel?.kind === 'document' ? panel.id : undefined;
+  const local = id ? findWorkspaceDocument(id, records) : undefined;
+  const remoteId = local ? undefined : id;
+  const [attempt, setAttempt] = useState(0);
+  const [response, setResponse] = useState<{
+    key: string;
+    result: ProgressLookup;
+  }>();
+  // A recovered source should refresh an open drawer, just as it refreshes its result card.
+  const key = JSON.stringify([remoteId, states, attempt]);
+  useEffect(() => {
+    if (!remoteId) {
+      setResponse(undefined);
+      return;
+    }
+    let active = true;
+    api<{ items: GenericDocument[]; unavailableSources: string[] }>(
+      '/business/documents',
+      { documentIds: [remoteId] },
+    )
+      .then((reply) => {
+        if (active)
+          setResponse({
+            key,
+            result: {
+              document: reply.items.find(
+                (item) => item.key === remoteId || item.id === remoteId,
+              ),
+              sourceId: reply.unavailableSources[0],
+            },
+          });
+      })
+      .catch(() => {
+        if (active) setResponse({ key, result: { failed: true } });
+      });
+    return () => {
+      active = false;
+    };
+  }, [key, remoteId]);
+  if (local)
+    return {
+      document: local,
+      sourceId:
+        (states[local.source.id] ?? 'ready') === 'ready'
+          ? undefined
+          : local.source.id,
+    };
+  if (!remoteId || response?.key !== key) return { loading: !!remoteId };
+  return { ...response.result, retry: () => setAttempt((value) => value + 1) };
+}
+
+export function DocumentPanelActions({
+  panel,
+  document: doc,
+}: {
+  panel: PanelSpec;
+  document?: GenericDocument;
+}) {
+  const w = useWorkspace();
+  const ids: string[] = panel.data?.navigationIds ?? [];
+  const index = ids.indexOf(panel.id ?? '');
+  const switchTo = (id: string) =>
+    w.openPanel({
+      kind: 'document',
+      id,
+      title: '单据进展',
+      data: { navigationIds: ids },
+    });
+  return (
+    <footer className="dp-actions">
+      <Button
+        icon="link"
+        disabled={!doc}
+        onClick={() => {
+          if (!doc) return;
+          w.attach({ kind: 'document', id: doc.key, title: doc.title });
+        }}
+      >
+        加入对话
+      </Button>
+      <div className="dp-actions-right">
+        <div className="dp-pager" role="group" aria-label="切换单据">
+          <button
+            type="button"
+            disabled={index < 1}
+            onClick={() => switchTo(ids[index - 1]!)}
+          >
+            <Icon name="back" size={13} />
+            上一条
+          </button>
+          <button
+            type="button"
+            disabled={index < 0 || index >= ids.length - 1}
+            onClick={() => switchTo(ids[index + 1]!)}
+          >
+            下一条
+            <Icon name="chevron" size={13} />
+          </button>
+        </div>
+        {doc ? (
+          <a
+            className="btn primary"
+            href={progressDocumentHref(doc)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            查看详情
+            <Icon name="external" size={14} />
+          </a>
+        ) : (
+          <Button variant="primary" disabled>
+            查看详情
+          </Button>
+        )}
+      </div>
+    </footer>
+  );
+}
+
+export function DocumentPanel({ lookup }: { lookup: ProgressLookup }) {
+  const w = useWorkspace();
+  const { document, sourceId } = lookup;
+  if (lookup.loading)
+    return (
+      <div className="dw-panel" role="status">
+        正在读取单据…
+      </div>
+    );
+  if (lookup.failed)
+    return (
+      <Empty title="读取单据失败">
+        <Button onClick={lookup.retry}>重试</Button>
+      </Empty>
+    );
+  if (sourceId)
+    return (
+      <div className="dw-panel">
+        <SourceNotice source={sourceId} detail />
+        <Empty title="等待来源返回结果" />
+      </div>
+    );
   if (!document)
     return (
       <div className="dw-panel">
@@ -426,149 +588,22 @@ export function DocumentPanel({ panel }: { panel: PanelSpec }) {
         </Empty>
       </div>
     );
-  if ((sources.states[document.source.id] ?? 'ready') !== 'ready')
-    return (
-      <div className="dw-panel">
-        <SourceNotice source={document.source.id} detail />
-        <Empty title="等待来源返回结果" />
-      </div>
-    );
-  const p = presentDocument(document);
-  const attach = () => {
-    w.attach({ kind: 'document', id: document.key, title: document.title });
-    w.closePanel();
-    w.navigate('chat');
-  };
+  const dossier = progressDossier(document, w.state.data);
+  const origin =
+    document.details.find((item) => item.label === '数据来源')?.value ||
+    ((document as ProgressDossierRecord).synthetic ? '本地样例' : '');
   return (
-    <div className="dw-panel">
-      <div className="dw-panel-object">
-        <div>
-          <h3>{document.title}</h3>
-          <span>{document.id}</span>
-        </div>
-        <Badge tone={toneFor(document.status)}>{p.displayStatus}</Badge>
-      </div>
-      <div className="dw-panel-summary">
-        {p.cardSummary.map((f) => (
-          <div key={f.label}>
-            <span>{f.label}</span>
-            <strong>{f.value}</strong>
-          </div>
-        ))}
-      </div>
-      <div className="dw-panel-tabs">
-        <button
-          aria-pressed={tab === 'progress'}
-          className={tab === 'progress' ? 'active' : ''}
-          onClick={() => setTab('progress')}
-        >
-          办理进展
-        </button>
-        <button
-          aria-pressed={tab === 'info'}
-          className={tab === 'info' ? 'active' : ''}
-          onClick={() => setTab('info')}
-        >
-          单据信息
-        </button>
-      </div>
-      {tab === 'progress' ? (
-        <>
-          <div className="dw-current-status">
-            <Icon
-              name={
-                document.status === 'needs_action'
-                  ? 'alert'
-                  : document.status === 'completed'
-                    ? 'check'
-                    : 'clock'
-              }
-              size={19}
-            />
-            <div>
-              <strong>{p.currentLabel}</strong>
-              {document.current?.since && (
-                <span>
-                  自{' '}
-                  {new Date(document.current.since).toLocaleString('zh-CN', {
-                    month: 'numeric',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false,
-                  })}{' '}
-                  起
-                </span>
-              )}
-              {p.estimateLabel && <span>{p.estimateLabel}</span>}
-            </div>
-          </div>
-          {document.paymentStatus && (
-            <p className="dw-business-note">{document.paymentStatus}</p>
-          )}
-          <ol className="dw-timeline">
-            {document.steps.map((step) => (
-              <li key={step.id} className={`is-${step.status}`}>
-                <span className="dw-step-dot">
-                  {step.status === 'done' ? (
-                    <Icon name="check" size={12} />
-                  ) : step.status === 'returned' ? (
-                    <Icon name="back" size={12} />
-                  ) : null}
-                </span>
-                <div>
-                  <div className="dw-step-head">
-                    <strong>{step.label}</strong>
-                    <small>{step.time}</small>
-                  </div>
-                  {step.actors?.length ? (
-                    <span className="dw-step-actors">
-                      {step.actors.join('、')}
-                    </span>
-                  ) : null}
-                  {step.note && <p>{step.note}</p>}
-                </div>
-              </li>
-            ))}
-          </ol>
-          {p.estimateLabel && (
-            <details className="dw-estimate-basis">
-              <summary>预计时间依据</summary>
-              <p>{document.estimate?.basis}</p>
-            </details>
-          )}
-        </>
-      ) : (
-        <dl className="dw-details">
-          {document.details.map((f, i) => (
-            <div key={`${f.label}-${i}`}>
-              <dt>{f.label}</dt>
-              <dd>{f.value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+    <div className="dw-panel dp-dossier">
+      <ApprovalNodeCard document={document} />
+      <WorkDocumentDetails
+        document={dossier}
+        view="progress"
+        progressDocument={document}
+      />
       <div className="dw-source-line">
-        <span>{document.source.label}</span>
-        <span>本地模拟业务数据</span>
-      </div>
-      <div className="dw-panel-actions">
-        <Button icon="link" onClick={attach}>
-          加入对话
-        </Button>
-        <Button
-          variant="primary"
-          icon="chat"
-          onClick={() => {
-            w.closePanel();
-            w.send(`这张${document.typeLabel}现在需要我做什么？`, [
-              { kind: 'document', id: document.key, title: document.title },
-            ]);
-            w.navigate('chat');
-          }}
-        >
-          继续追问
-        </Button>
+        <span>
+          {[document.source.label, origin].filter(Boolean).join(' · ')}
+        </span>
       </div>
     </div>
   );
@@ -611,6 +646,7 @@ export const materialsInitial: MaterialsState = {
       id: 'rail',
       name: '北京南 → 上海虹桥',
       category: '交通',
+      categoryId: 'other-long-distance',
       amount: 55200,
       date: '2026-11-10',
       purpose: '客户拜访往程高铁',
@@ -622,6 +658,7 @@ export const materialsInitial: MaterialsState = {
       id: 'hotel',
       name: '上海静安商旅酒店',
       category: '住宿',
+      categoryId: 'hotel',
       amount: 65000,
       date: '2026-11-10',
       end: '2026-11-11',
@@ -635,6 +672,7 @@ export const materialsInitial: MaterialsState = {
       id: 'taxi',
       name: '上海网约车行程',
       category: '交通',
+      categoryId: 'taxi',
       amount: 8000,
       date: '2026-11-11',
       purpose: '酒店至客户办公区',
@@ -646,6 +684,7 @@ export const materialsInitial: MaterialsState = {
       id: 'meal',
       name: '外滩会客餐厅',
       category: '餐饮',
+      categoryId: 'reception-meal-oa',
       amount: 68000,
       date: '2026-11-10',
       purpose: '项目交流工作餐',
@@ -658,6 +697,7 @@ export const materialsInitial: MaterialsState = {
       id: 'reception',
       name: '浦江商务餐厅',
       category: '餐饮',
+      categoryId: 'reception-meal-oa',
       amount: 92000,
       date: '2026-11-11',
       purpose: '客户接待用餐',
@@ -670,6 +710,7 @@ export const materialsInitial: MaterialsState = {
       id: 'office',
       name: '晨光办公用品',
       category: '办公',
+      categoryId: 'other-office',
       amount: 8000,
       date: '2026-11-11',
       purpose: '',
@@ -758,7 +799,7 @@ function useMaterialExtraction() {
   const w = useWorkspace();
   const [extracting, setExtracting] = useState(false);
   const [notice, setNotice] = useState('');
-  const extract = async (fileIds: string[]) => {
+  const extract = async (fileIds: string[], draftId?: string) => {
     if (!fileIds.length || extracting) return;
     if (fileIds.length > 10) {
       setNotice('每次最多提取 10 份材料。');
@@ -772,7 +813,7 @@ function useMaterialExtraction() {
         workspace?: WorkspaceSnapshot;
         items: MaterialExpense[];
         files: MaterialFile[];
-      }>('/materials/extract', { fileIds });
+      }>('/materials/extract', { fileIds, draftId });
       if (result.workspace) acceptWorkspace(result.workspace);
       else await readWorkspace();
       const failures = result.files.filter(
@@ -944,6 +985,12 @@ function ExpenseEditor({
       item.amount === null ? '' : (item.amount / 100).toFixed(2),
     ),
     [error, setError] = useState('');
+  const category = materialExpenseCategory(edit);
+  const categoryQuestion = materialCategoryQuestion(edit);
+  const categoryError = !!categoryQuestion && error === categoryQuestion;
+  const lodgingDates = category?.template === 'T03' || category?.template === 'T09';
+  const routeDates = category?.template === 'T01' || category?.template === 'T08';
+  const categories = getExpenseCategories(edit.group === 'daily' ? 'personal' : 'expense');
   const save = () => {
     const parts = amount.trim().match(/^(\d+)(?:\.(\d{1,2}))?$/);
     const amountCents = parts
@@ -955,7 +1002,7 @@ function ExpenseEditor({
       setError(invalid);
       return;
     }
-    onSave({ ...next, confirmed: true, issue: undefined, issues: [] });
+    onSave({ ...next, confirmed: true, issue: undefined, issues: [], categoryHint: undefined });
   };
   return (
     <div className="dw-expense-editor">
@@ -975,22 +1022,6 @@ function ExpenseEditor({
             onChange={(event) => setAmount(event.target.value)}
           />
         </Field>
-        <Field label="费用类别">
-          <select
-            value={edit.category ?? ''}
-            onChange={(event) =>
-              setEdit((previous) => ({
-                ...previous,
-                category: event.target.value as MaterialExpense['category'],
-              }))
-            }
-          >
-            <option value="">请选择类别</option>
-            {['交通', '住宿', '餐饮', '办公'].map((category) => (
-              <option key={category}>{category}</option>
-            ))}
-          </select>
-        </Field>
         <Field label="费用归属">
           <select
             value={edit.group ?? ''}
@@ -1006,15 +1037,40 @@ function ExpenseEditor({
             <option value="daily">个人费用</option>
           </select>
         </Field>
-        <Field label={edit.category === '住宿' ? '入住日期' : '费用日期'}>
+        <Field label="费用类型">
+          <select
+            aria-label="费用类型"
+            aria-invalid={categoryError || undefined}
+            value={category?.id ?? ''}
+            onChange={(event) => {
+              const categoryId = event.target.value || null;
+              setError('');
+              setEdit((previous) => ({
+                ...previous,
+                categoryId,
+                oaId: categoryId === 'reception-meal-oa' ? previous.oaId : undefined,
+              }));
+            }}
+          >
+            <option value="">请选择费用类型</option>
+            {categories
+              .filter((option) => option.id !== 'long-distance' || !!edit.tripId)
+              .map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.group}／{option.label}
+                </option>
+              ))}
+          </select>
+        </Field>
+        <Field label={lodgingDates ? '入住日期' : routeDates ? '出发日期' : '费用日期'}>
           <input
             type="date"
             value={edit.date}
             onChange={(e) => setEdit((p) => ({ ...p, date: e.target.value }))}
           />
         </Field>
-        {edit.category === '住宿' ? (
-          <Field label="离店日期">
+        {(lodgingDates || routeDates) && (
+          <Field label={lodgingDates ? '离店日期' : '到达日期'}>
             <input
               type="date"
               min={edit.date}
@@ -1022,14 +1078,22 @@ function ExpenseEditor({
               onChange={(e) => setEdit((p) => ({ ...p, end: e.target.value }))}
             />
           </Field>
-        ) : null}
+        )}
       </div>
-      {edit.issue === 'date' && (
+      {categoryQuestion && (
+        <p
+          className={categoryError ? 'dw-error' : 'dw-field-note'}
+          role={categoryError ? 'alert' : undefined}
+        >
+          {categoryQuestion}
+        </p>
+      )}
+      {lodgingDates && edit.issue === 'date' && (
         <p className="dw-field-note">
           请核对实际入住与离店日期，开票日期不作为住宿日期。
         </p>
       )}
-      {(edit.issue === 'oa' || edit.oaId) && (
+      {category?.id === 'reception-meal-oa' && (
         <Field label="关联 OA 申请">
           <input
             value={edit.oaId ?? ''}
@@ -1046,7 +1110,7 @@ function ExpenseEditor({
           onChange={(e) => setEdit((p) => ({ ...p, purpose: e.target.value }))}
         />
       </Field>
-      {error && (
+      {error && error !== categoryQuestion && (
         <p className="dw-error" role="alert">
           {error}
         </p>
@@ -1062,18 +1126,21 @@ function ExpenseEditor({
 }
 
 export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
+  if (isReimbursementPanel(panel)) return <ReimbursementBatchPanel key={panel.data!.draftId} panel={panel} />;
+  return <MaterialLibraryPanel panel={panel} />;
+}
+
+function MaterialLibraryPanel({ panel }: { panel: PanelSpec }) {
   const w = useWorkspace(),
     [all, set] = useSlice('materials', materialsInitial);
+  const submissions = readSubmissionState(w.state.data);
   const s = selectMaterialScope(all, {
     fileIds: panel.data?.fileIds,
     fileId: panel.data?.fileId,
     batchId: panel.id,
   });
-  const batchId =
-    panel.data?.fileIds || panel.data?.fileId
-      ? materialSelectionId(s.files)
-      : (panel.id ?? materialSelectionId(s.files));
-  const submissions = readSubmissionState(w.state.data);
+  const batchId = panel.data?.fileIds || panel.data?.fileId
+    ? materialSelectionId(s.files) : (panel.id ?? materialSelectionId(s.files));
   const currentTask = w.state.tasks.find((task) => task.id === w.state.activeTask);
   const contextIds = [
     panel.data?.draftId,
@@ -1346,133 +1413,143 @@ export function MaterialsPanel({ panel }: { panel: PanelSpec }) {
                   filter === 'all' ||
                   ((!i.confirmed || !!materialExpenseError(i)) && !i.excluded),
               )
-              .map((item) => (
-                <div
-                  className={`dw-expense-item ${item.excluded ? 'is-excluded' : ''}`}
-                  key={item.id}
-                >
-                  <button
-                    className="dw-expense-head"
-                    onClick={() => setOpen(open === item.id ? null : item.id)}
-                    aria-expanded={open === item.id}
+              .map((item) => {
+                const category = materialExpenseCategory(item);
+                const confirmed = item.confirmed && !materialExpenseError(item);
+                return (
+                  <div
+                    className={`dw-expense-item ${item.excluded ? 'is-excluded' : ''}`}
+                    key={item.id}
                   >
-                    <span className="dw-expense-type">
-                      {item.category ?? '待分类'}
-                    </span>
-                    <span className="dw-expense-name">
-                      <strong>{item.name}</strong>
-                      <small>
-                        {item.excluded
-                          ? '本次不使用'
-                          : item.issue === 'date'
-                            ? '待核对住宿日期'
-                            : item.issue === 'oa'
-                              ? '待选择接待申请'
-                              : item.issue === 'purpose'
-                                ? '待填写实际用途'
-                                : item.date}
-                      </small>
-                    </span>
-                    <span className="dw-expense-number">
-                      {item.amount === null ? (
-                        '金额待填写'
-                      ) : (
-                        <Money value={item.amount} />
-                      )}
-                      <Badge
-                        tone={
-                          item.excluded
-                            ? 'neutral'
-                            : item.confirmed
-                              ? 'success'
-                              : 'warning'
-                        }
-                      >
-                        {item.excluded
-                          ? '已排除'
-                          : item.confirmed
-                            ? '已确认'
-                            : '待核对'}
-                      </Badge>
-                    </span>
-                    <Icon
-                      name={open === item.id ? 'down' : 'chevron'}
-                      size={14}
-                    />
-                  </button>
-                  {open === item.id && (
-                    <>
-                      <div className="dw-material-source">
-                        <Icon name="file" size={14} />
-                        <span>
-                          {
-                            s.files.find((f) => f.id === item.sourceFileId)
-                              ?.name
+                    <button
+                      className="dw-expense-head"
+                      onClick={() => setOpen(open === item.id ? null : item.id)}
+                      aria-expanded={open === item.id}
+                    >
+                      <span className="dw-expense-type">
+                        {category ? `${category.group}／${category.label}` : '费用类型待确认'}
+                      </span>
+                      <span className="dw-expense-name">
+                        <strong>{item.name}</strong>
+                        <small>
+                          {item.excluded
+                            ? '本次不使用'
+                            : !category
+                              ? '请核对票面和实际用途'
+                              : item.issue === 'date'
+                              ? (category.template === 'T03' || category.template === 'T09' ? '待核对住宿日期' : '待补费用日期')
+                              : item.issue === 'oa'
+                                ? '待选择接待申请'
+                                : item.issue === 'purpose'
+                                  ? '待填写实际用途'
+                                  : item.date}
+                        </small>
+                      </span>
+                      <span className="dw-expense-number">
+                        {item.amount === null ? (
+                          '金额待填写'
+                        ) : (
+                          <Money value={item.amount} />
+                        )}
+                        <Badge
+                          tone={
+                            item.excluded
+                              ? 'neutral'
+                              : confirmed
+                                ? 'success'
+                                : 'warning'
                           }
-                        </span>
-                        {item.sourceFileId.startsWith('file-') && (
-                          <a
-                            href={`/api/local/files/${encodeURIComponent(item.sourceFileId)}/download`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            打开原件
-                          </a>
-                        )}
-                        <button
-                          onClick={() => {
-                            mutateItem({ ...item, excluded: !item.excluded });
-                            setNotice('');
-                          }}
                         >
-                          {item.excluded ? '恢复使用' : '本次不使用'}
-                        </button>
-                      </div>
-                      {!item.excluded &&
-                        item.evidence &&
-                        Object.keys(item.evidence).length > 0 && (
-                          <details className="dw-material-evidence">
-                            <summary>提取依据</summary>
-                            <dl>
-                              {Object.entries(item.evidence).map(
-                                ([field, value]) => (
-                                  <div key={field}>
-                                    <dt>
-                                      {(
-                                        {
-                                          name: '费用名称',
-                                          amount: '金额',
-                                          category: '类别',
-                                          date: '日期',
-                                          end: '离店日期',
-                                          purpose: '事由',
-                                          group: '归属',
-                                        } as Record<string, string>
-                                      )[field] ?? field}
-                                    </dt>
-                                    <dd>{value}</dd>
-                                  </div>
-                                ),
-                              )}
-                            </dl>
-                          </details>
+                          {item.excluded
+                            ? '已排除'
+                            : confirmed
+                              ? '已确认'
+                              : '待核对'}
+                        </Badge>
+                      </span>
+                      <Icon
+                        name={open === item.id ? 'down' : 'chevron'}
+                        size={14}
+                      />
+                    </button>
+                    {open === item.id && (
+                      <>
+                        <div className="dw-material-source">
+                          <Icon name="file" size={14} />
+                          <span>
+                            {
+                              s.files.find((f) => f.id === item.sourceFileId)
+                                ?.name
+                            }
+                          </span>
+                          {item.sourceFileId.startsWith('file-') && (
+                            <a
+                              href={`/api/local/files/${encodeURIComponent(item.sourceFileId)}/download`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              打开原件
+                            </a>
+                          )}
+                          <button
+                            onClick={() => {
+                              mutateItem({ ...item, excluded: !item.excluded });
+                              setNotice('');
+                            }}
+                          >
+                            {item.excluded ? '恢复使用' : '本次不使用'}
+                          </button>
+                        </div>
+                        {!item.excluded &&
+                          item.evidence &&
+                          Object.keys(item.evidence).length > 0 && (
+                            <details className="dw-material-evidence">
+                              <summary>提取依据</summary>
+                              <dl>
+                                {Object.entries(item.evidence).map(
+                                  ([field, value]) => (
+                                    <div key={field}>
+                                      <dt>
+                                        {(
+                                          {
+                                            name: '费用名称',
+                                            amount: '金额',
+                                            category: '类别',
+                                            date: '日期',
+                                            end: '离店日期',
+                                            departureCity: '出发城市',
+                                            arrivalCity: '到达城市',
+                                            city: '住宿城市',
+                                            transport: '交通工具',
+                                            purpose: '事由',
+                                            group: '归属',
+                                          } as Record<string, string>
+                                        )[field] ?? field}
+                                      </dt>
+                                      <dd>{value}</dd>
+                                    </div>
+                                  ),
+                                )}
+                              </dl>
+                            </details>
+                          )}
+                        {!item.excluded && (
+                          <ExpenseEditor
+                            key={`${item.id}-${s.revision}`}
+                            item={item}
+                            onCancel={() => setOpen(null)}
+                            onSave={(next) => {
+                              mutateItem(next);
+                              setOpen(null);
+                              setNotice(`${next.name}已确认`);
+                            }}
+                          />
                         )}
-                      {!item.excluded && (
-                        <ExpenseEditor
-                          key={`${item.id}-${s.revision}`}
-                          item={item}
-                          onCancel={() => setOpen(null)}
-                          onSave={(next) => {
-                            mutateItem(next);
-                            setOpen(null);
-                            setNotice(`${next.name}已确认`);
-                          }}
-                        />
-                      )}
-                    </>
-                  )}
-                </div>
-              ))}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
           </div>
           {filter === 'needs' && !pending.length && (
             <div className="dw-inline-notice">

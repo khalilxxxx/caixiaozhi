@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f9fb">
+  <title>小智品牌横幅 · 财小智设计选样</title>
+  <link rel="icon" href="../capability-hub/brand.webp">
+  <link rel="stylesheet" href="./headers.css">
+  <link rel="stylesheet" href="./gallery.css">
+  <script type="module" src="./gallery.js"></script>
+</head>
+<body>
+  <a href="#samples" class="skip">跳到款式</a>
+  <header class="mast">
+    <div class="mast-inner">
+      <div class="brand"><img src="../capability-hub/brand.webp" alt=""><strong>财小智</strong><span class="separator" aria-hidden="true"></span><span>设计选样</span></div>
+      <div class="selection"><span id="selection-summary" aria-live="polite">尚未选择</span><button id="copy" type="button" disabled>复制选择</button></div>
+    </div>
+  </header>
+  <main class="sheet">
+    <div class="sheet-head">
+      <div><h1>小智品牌横幅</h1><p>为两个页面分别选一款，或放入工作台查看实际尺寸。</p></div>
+      <div class="filters" role="group" aria-label="对照范围">
+        <button type="button" data-scope="all" aria-pressed="true">双页对照</button>
+        <button type="button" data-scope="hub" aria-pressed="false">能力中心</button>
+        <button type="button" data-scope="apps" aria-pressed="false">轻应用</button>
+      </div>
+    </div>
+    <div id="samples" tabindex="-1">
+      <div id="current-styles"></div>
+      <details class="archive" id="archive">
+        <summary>上一轮款式 <span>A / B / C</span></summary>
+        <div id="previous-styles"></div>
+      </details>
+    </div>
+  </main>
+  <div class="feedback" id="feedback" role="status"></div>
+</body>
+</html>

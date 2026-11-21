@@ -27,7 +27,8 @@ export function ToolCenterEmbed({ route, onBack }: { route: string; onBack: () =
     };
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== location.origin || event.source !== frame.current?.contentWindow || event.data?.source !== 'caixiaozhi-tool-center') return;
-      if (event.data.type === 'back' || event.data.type === 'open-skills') onBackRef.current();
+      if (event.data.type === 'back') onBackRef.current();
+      if (event.data.type === 'open-skills') location.hash = 'skills';
       if (event.data.type === 'ready') { setLoading(false); sendViewport(); }
       if (event.data.type === 'height' && Number.isFinite(event.data.height)) {
         const top = frame.current?.getBoundingClientRect().top || 0;
@@ -40,7 +41,7 @@ export function ToolCenterEmbed({ route, onBack }: { route: string; onBack: () =
         query.set('action',action);
         if (encodedId) { try { query.set('tool',decodeURIComponent(encodedId)); } catch { return; } }
         else query.delete('tool');
-        location.hash = `skills?${query}`;
+        location.hash = `light-apps?${query}`;
       }
       if (event.data.type === 'state-change') window.dispatchEvent(new CustomEvent('caixiaozhi-tool-catalog-change'));
       if (event.data.type === 'panel-state') window.dispatchEvent(new CustomEvent('caixiaozhi-tool-panel-change',{detail:event.data}));

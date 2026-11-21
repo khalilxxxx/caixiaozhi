@@ -1,0 +1,190 @@
+.sf-reimbursement .sf-section {
+  margin-bottom: 18px;
+}
+
+.sf-reimbursement .sf-section > header {
+  margin-bottom: 8px;
+}
+
+.sf-reimbursement .sf-section:has(.sf-leg-list:empty) > header,
+.sf-reimbursement .sf-section:has(.sf-expense-list:empty) > header,
+.sf-reimbursement .sf-section > header:only-child {
+  margin-bottom: 0;
+}
+
+.sf-reimbursement .sf-expense-list:empty {
+  display: none;
+}
+
+.sf-reimbursement-party > summary,
+.sf-reimbursement .sf-editor-heading h3,
+.sf-reimbursement .sf-expense-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sf-reimbursement-party > summary {
+  min-height: 32px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.sf-reimbursement-party > summary::-webkit-details-marker {
+  display: none;
+}
+
+.sf-reimbursement-party > summary > strong {
+  color: #514b45;
+  font-weight: 500;
+}
+
+.sf-reimbursement-party > summary > span,
+.sf-reimbursement .sf-expense-source {
+  color: var(--sf-muted);
+}
+
+.sf-reimbursement-party[open] > summary > svg {
+  transform: rotate(180deg);
+}
+
+.sf-reimbursement-party > .sf-grid {
+  margin-top: 6px;
+}
+
+.sf-reimbursement .sf-expense-editor {
+  border: 0;
+  padding-top: 0;
+}
+
+.sf-reimbursement .sf-editor-heading h3 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.sf-reimbursement .sf-expense-source {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.sf-reimbursement .sf-expense-open {
+  padding-block: 10px;
+}
+
+.sf-reimbursement .sf-expense-copy > strong {
+  font-size: 13px;
+}
+
+.sf-reimbursement .sf-expense-metadata {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+.sf-reimbursement .sf-expense-metadata:empty {
+  display: none;
+}
+
+.sf-reimbursement .sf-expense-money {
+  flex-direction: row;
+  align-items: baseline;
+}
+
+.sf-reimbursement .sf-expense-files {
+  border-top: 1px solid var(--sf-line);
+  margin-top: 16px;
+}
+
+.sf-reimbursement .sf-expense-files .sf-files {
+  margin-top: 6px;
+}
+
+.sf-reimbursement .sf-document-files h4 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sf-reimbursement .sf-editor-actions {
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  z-index: 1;
+  border-top: 1px solid var(--sf-line);
+  padding-block: 10px;
+}
+
+.sf-application-results {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--sf-line);
+  border-radius: 8px;
+}
+
+.sf-application-results > li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.sf-application-results > li + li {
+  border-top: 1px solid var(--sf-line);
+}
+
+.sf-application-results li > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sf-application-results strong,
+.sf-application-results small {
+  display: block;
+}
+
+.sf-application-results small {
+  margin-top: 3px;
+  color: var(--sf-muted);
+}
+
+@media (max-width: 560px) {
+  .sf-reimbursement .sf-grid:has(> .sf-application-link) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 500px) {
+  .sf-reimbursement .sf-expense-tools {
+    gap: 2px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .sf-reimbursement .sf-expense-money {
+    flex-direction: column;
+    gap: 1px;
+    align-items: flex-end;
+  }
+}
+
+@media (max-width: 360px) {
+  .sf-reimbursement .sf-section > header:has(> .sf-expense-tools) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+  }
+
+  .sf-reimbursement .sf-section > header:has(> .sf-expense-tools) > h3 {
+    white-space: nowrap;
+  }
+
+  .sf-reimbursement .sf-expense-tools {
+    justify-content: flex-start;
+    gap: 8px;
+  }
+}

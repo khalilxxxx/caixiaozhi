@@ -19,20 +19,23 @@ export function ToolDetailPanel({ id }: { id: string }) {
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [id, catalog.items, catalog.identity]);
-  const open = (action: string) => {
+  const actionLink = (action: string) => {
     const query = new URLSearchParams(location.hash.split('?')[1] || '');
     query.set('tool', id);
     query.set('action', action);
-    workspace.closePanel();
-    workspace.navigate('skills');
+    query.delete('result');
     if (['manage','review','edit'].includes(action)) query.set('view','manage');
-    location.hash = `skills?${query}`;
+    return `#light-apps?${query}`;
+  };
+  const open = (action: string) => {
+    workspace.closePanel();
+    location.hash = actionLink(action);
   };
   if (loading) return <div className="tool-detail-state" role="status">正在加载工具详情…</div>;
   if (error) return <div className="tool-detail-state" role="alert">{error}</div>;
   if (!detail) return <div className="tool-detail-state">工具不存在，或当前账号没有查看权限。</div>;
   return <div className="tool-detail">
-    <div className="tool-detail-heading"><span className="tool-detail-icon"><Icon name={detail.icon} size={22}/></span><div><h2>{detail.name}</h2><span>工具 · v{detail.version} · {statusNames[detail.status]}</span></div></div>
+    <div className="tool-detail-heading"><span className="tool-detail-icon"><Icon name={detail.icon} size={22}/></span><div><h2>{detail.name}</h2><span>轻应用 · v{detail.version} · {statusNames[detail.status]}</span></div></div>
     <p className="tool-detail-description">{detail.description}</p>
     <dl className="tool-detail-fields">
       <div><dt>维护者</dt><dd>{detail.owner}</dd></div>
@@ -42,7 +45,7 @@ export function ToolDetailPanel({ id }: { id: string }) {
       <div><dt>结果保存</dt><dd>{detail.resultLabel}</dd></div>
     </dl>
     <div className="tool-detail-actions">
-      {detail.canUse ? <Button variant="primary" onClick={() => open('tool')}>打开工具<Icon name="arrow" size={14}/></Button> : detail.status === 'published' ? <Button variant="primary" onClick={() => open('request')}>申请使用</Button> : <span className="tool-detail-unavailable">{statusNames[detail.status]}，暂不可使用</span>}
+      {detail.canUse ? <a className="btn primary" href={actionLink('tool')} target="_blank" rel="noopener">打开轻应用<Icon name="arrow" size={14}/></a> : detail.status === 'published' ? <Button variant="primary" onClick={() => open('request')}>申请使用</Button> : <span className="tool-detail-unavailable">{statusNames[detail.status]}，暂不可使用</span>}
       <Button onClick={() => void catalog.toggleFavorite(id)}><Icon name="star" size={14}/>{detail.favorite ? '取消收藏' : '收藏'}</Button>
       {detail.status === 'published' && detail.id !== 'expense-summary' && <Button onClick={() => open('share')}>分享</Button>}
     </div>

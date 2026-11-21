@@ -1,0 +1,66 @@
+{
+  "dataset": {
+    "id": "sec-apple-2025-10k",
+    "version": "sha256-77acb4037846960c087d0cd76514e1b542aec5cb327d24206838d403505d7bf4",
+    "label": "苹果公司 2025 年 10-K",
+    "entity": "Apple Inc.",
+    "currency": "USD",
+    "displayUnit": "亿美元",
+    "years": [
+      2023,
+      2024,
+      2025
+    ],
+    "source": {
+      "provider": "SEC EDGAR",
+      "url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json",
+      "filingUrl": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm",
+      "accession": "0000320193-25-000079",
+      "filedAt": "2025-10-31",
+      "retrievedAt": "2026-11-17T09:05:59.824148+00:00",
+      "sha256": "f085735b4d08fb116ade18d24247ffabe11df8eb52eae6556b165831f15ef1ad"
+    }
+  },
+  "records": [
+    {
+      "year": 2023,
+      "periodStart": "2022-09-25",
+      "periodEnd": "2023-09-30",
+      "values": {
+        "revenue": 383285000000,
+        "costOfRevenue": 214137000000,
+        "researchAndDevelopment": 29915000000,
+        "sellingGeneralAndAdministrative": 24932000000,
+        "operatingIncome": 114301000000,
+        "netIncome": 96995000000
+      }
+    },
+    {
+      "year": 2024,
+      "periodStart": "2023-10-01",
+      "periodEnd": "2024-09-28",
+      "values": {
+        "revenue": 391035000000,
+        "costOfRevenue": 210352000000,
+        "researchAndDevelopment": 31370000000,
+        "sellingGeneralAndAdministrative": 26097000000,
+        "operatingIncome": 123216000000,
+        "netIncome": 93736000000
+      }
+    },
+    {
+      "year": 2025,
+      "periodStart": "2024-09-29",
+      "periodEnd": "2025-09-27",
+      "values": {
+        "revenue": 416161000000,
+        "costOfRevenue": 220960000000,
+        "researchAndDevelopment": 34550000000,
+        "sellingGeneralAndAdministrative": 27601000000,
+        "operatingIncome": 133050000000,
+        "netIncome": 112010000000
+      }
+    }
+  ],
+  "rawFile": "sec-apple-companyfacts-f085735b4d08fb116ade18d24247ffabe11df8eb52eae6556b165831f15ef1ad.json.gz"
+}

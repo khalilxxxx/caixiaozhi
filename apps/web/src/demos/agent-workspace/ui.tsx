@@ -18,6 +18,16 @@ export function Icon({
     chat: (
       <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-2 2V11.5a9.5 9.5 0 0 1 19 0Z" />
     ),
+    xiaozhi: (
+      <>
+        <path d="M4.2 10.1c0-2.3.4-4.6 1.3-6.6 1.8.4 3.6 1.7 5 3.4m3 0c1.4-1.7 3.2-3 5-3.4.9 2 1.3 4.3 1.3 6.6" />
+        <path d="M12 7.4c1.5 0 2.6-.6 4-.6 3.2 0 5.3 2.9 5.3 6.4 0 4.6-3.5 7.2-9.3 7.2s-9.3-2.6-9.3-7.2c0-3.5 2.1-6.4 5.3-6.4 1.4 0 2.5.6 4 .6Z" />
+        <g className="xiaozhi-icon-eyes" fill="currentColor" stroke="none">
+          <rect x="7.9" y="11" width="2.5" height="4.3" rx="1.25" />
+          <rect x="13.6" y="11" width="2.5" height="4.3" rx="1.25" />
+        </g>
+      </>
+    ),
     home: (
       <>
         <path d="m3 10 9-7 9 7v10H3Z" />
@@ -87,6 +97,7 @@ export function Icon({
         <path d="M6 8a6 6 0 0 1 12 0v7l2 3H4l2-3ZM10 21h4" />
       </>
     ),
+    external: <path d="M14 3h7v7m0-7L11 13m0-9H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-6" />,
     link: (
       <>
         <path d="m10 14 4-4m-5 7-2 2a4.2 4.2 0 0 1-6-6l4-4a4.2 4.2 0 0 1 6 0m2-2 2-2a4.2 4.2 0 0 1 6 6l-4 4a4.2 4.2 0 0 1-6 0" />
@@ -139,6 +150,12 @@ export function Icon({
       <>
         <path d="m12 3 10 18H2Z" />
         <path d="M12 9v5m0 3h.01" />
+      </>
+    ),
+    'error-circle': (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7.5v5m0 3h.01" />
       </>
     ),
     layout: (

@@ -1,0 +1,1044 @@
+{
+  "rules": {
+    "R001": {
+      "id": "R001",
+      "name": "发票重复报销校验",
+      "system": "expense",
+      "origin": "builtin",
+      "scope": "both",
+      "metric": "invoiceUnique",
+      "effect": "block",
+      "enabled": true,
+      "version": 2,
+      "description": "同一张发票不得重复用于费用报销。"
+    },
+    "R002": {
+      "id": "R002",
+      "name": "住宿费用标准",
+      "system": "expense",
+      "origin": "builtin",
+      "scope": "both",
+      "metric": "hotelNight",
+      "effect": "block",
+      "enabled": true,
+      "version": 3,
+      "description": "普通员工差旅住宿费用不超过600元/间夜。",
+      "thresholdMinor": 60000
+    },
+    "R004": {
+      "id": "R004",
+      "name": "费用附件完整性",
+      "system": "expense",
+      "origin": "builtin",
+      "scope": "both",
+      "metric": "attachment",
+      "effect": "block",
+      "enabled": true,
+      "version": 1,
+      "description": "报销单须包含对应的费用凭证。"
+    },
+    "P001": {
+      "id": "P001",
+      "name": "大额餐饮提醒",
+      "system": "expense",
+      "origin": "personal",
+      "scope": "review",
+      "metric": "meal",
+      "effect": "warn",
+      "enabled": true,
+      "version": 1,
+      "description": "餐饮费用合计超过1500元时，审单时提醒我。",
+      "thresholdMinor": 150000
+    },
+    "SEM-EXPENSE-001": {
+      "id": "SEM-EXPENSE-001",
+      "name": "业务招待高档消费风险",
+      "system": "expense",
+      "origin": "personal",
+      "scope": "both",
+      "metric": "semantic",
+      "effect": "warn",
+      "enabled": true,
+      "version": 2,
+      "description": "招待费用事由中涉及高档消费时，提单和审单时提醒本人。仅根据已提供的事由判断：明确描述已发生或计划安排高档酒水、奢侈食材、娱乐会所等高档消费时命中；未安排、不包含、已取消且不发生费用、引用禁止事项等否定或排除语境不命中；仅有餐厅名称、金额偏高、可能性或模糊套餐而无高档消费事实时证据不足。不得按关键词或编造金额阈值、企业禁令判断。"
+    },
+    "SEM-EXPENSE-002": {
+      "id": "SEM-EXPENSE-002",
+      "name": "费用用途与报销事由一致性",
+      "system": "expense",
+      "origin": "personal",
+      "scope": "both",
+      "metric": "semantic",
+      "effect": "warn",
+      "enabled": true,
+      "version": 2,
+      "description": "逐项对照费用用途和报销事由。明确费用用于私人事项或与本次业务目标不相容且无合理说明时命中；明细业务用途与事由一致，或有明确的合理业务关联时不命中；缺少具体费用用途、报销事由或关联依据时证据不足。仅文字不同不得认定用途不符。"
+    },
+    "SEM-EXPENSE-003": {
+      "id": "SEM-EXPENSE-003",
+      "name": "业务招待信息完整性",
+      "system": "expense",
+      "origin": "personal",
+      "scope": "both",
+      "metric": "semantic",
+      "effect": "warn",
+      "enabled": true,
+      "version": 2,
+      "description": "对确认属于业务招待的费用，检查是否明确记录招待对象、实际人数和业务目的；事由或明细明确缺失、留空或写待补充其中任一项时命中；三项在已提供信息中齐备时不命中；无法确认是否业务招待或相关资料尚未取得时证据不足。不得根据金额推算人数或虚构招待对象。"
+    },
+    "P-1": {
+      "id": "P-1",
+      "name": "个人规则 1",
+      "system": "expense",
+      "origin": "personal",
+      "scope": "review",
+      "metric": "semantic",
+      "effect": "warn",
+      "enabled": true,
+      "version": 1,
+      "description": "样板未收录这项个人规则的正文。"
+    },
+    "P-2": {
+      "id": "P-2",
+      "name": "个人规则 2",
+      "system": "expense",
+      "origin": "personal",
+      "scope": "review",
+      "metric": "semantic",
+      "effect": "warn",
+      "enabled": true,
+      "version": 1,
+      "description": "样板未收录这项个人规则的正文。"
+    },
+    "P-3": {
+      "id": "P-3",
+      "name": "个人规则 3",
+      "system": "expense",
+      "origin": "personal",
+      "scope": "review",
+      "metric": "semantic",
+      "effect": "warn",
+      "enabled": true,
+      "version": 1,
+      "description": "样板未收录这项个人规则的正文。"
+    },
+    "SEM-TRAVEL-001": {
+      "id": "SEM-TRAVEL-001",
+      "name": "差旅事由明确性",
+      "system": "oa",
+      "origin": "personal",
+      "scope": "both",
+      "metric": "semantic",
+      "effect": "warn",
+      "enabled": true,
+      "version": 2,
+      "description": "检查差旅事由是否明确说明业务事项、业务对象及本次出差要完成的任务。已提供事由但仅写出差、办事、拜访等笼统内容，且活动安排也无法补充业务目标时命中；具体对象、事项与任务齐备时不命中；事由或必要上下文未提供时证据不足。"
+    },
+    "SEM-TRAVEL-002": {
+      "id": "SEM-TRAVEL-002",
+      "name": "差旅私人活动风险",
+      "system": "oa",
+      "origin": "personal",
+      "scope": "both",
+      "metric": "semantic",
+      "effect": "warn",
+      "enabled": true,
+      "version": 2,
+      "description": "检查差旅申请的事由、行程和活动安排中是否明确包含私人旅游、探亲、个人购物或其他与业务无关的活动，并被纳入本次申请行程或费用。只有明确肯定的安排才命中；未安排旅游、取消探亲、私人活动自费且不计入申请等否定或排除说明不命中；仅有景点地名、可能性或未说明活动性质时证据不足，不得按关键词判断。"
+    },
+    "SEM-TRAVEL-003": {
+      "id": "SEM-TRAVEL-003",
+      "name": "行程与业务安排一致性",
+      "system": "oa",
+      "origin": "personal",
+      "scope": "both",
+      "metric": "semantic",
+      "effect": "warn",
+      "enabled": true,
+      "version": 1,
+      "description": "对照差旅出发到达城市和日期、业务事由及活动日期地点。明确出现业务活动地点与行程不符、活动日期完全不在到访日期内且无合理说明时命中；地点日期一致或明确合理解释变更时不命中；缺少行程或业务活动地点日期依据时证据不足，不得自行推测交通时间。"
+    }
+  },
+  "cases": [
+    {
+      "id": "hotel",
+      "label": "住宿超标",
+      "doc": {
+        "id": "BX-20261116-001",
+        "title": "上海客户拜访差旅报销",
+        "system": "expense",
+        "kind": "差旅报销",
+        "person": "林晓",
+        "department": "市场部",
+        "nights": 2,
+        "period": "11月12日 — 11月14日",
+        "invoiceUnique": true,
+        "attachment": true,
+        "stage": "待审批",
+        "version": 3,
+        "amountCents": 326000,
+        "mealCents": 28000,
+        "hotelNightCents": 78000,
+        "categories": [
+          "hotel",
+          "meal"
+        ],
+        "synthetic": true,
+        "submittedAt": "2026-11-16T09:18:00+08:00",
+        "purpose": "赴上海拜访江湾零售项目组，复核门店试点报价并确认上线安排。",
+        "sourceLabel": "费用报销系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "林晓",
+            "status": "done",
+            "time": "2026-11-16T09:18:00+08:00"
+          },
+          {
+            "label": "财务审核",
+            "actor": "徐宁",
+            "status": "current",
+            "time": "2026-11-16T09:19:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "费用归属",
+            "value": "华东市场／零售试点"
+          },
+          {
+            "label": "收款人",
+            "value": "林晓"
+          }
+        ],
+        "documentType": "expense",
+        "applicationId": "TA-20261108-036",
+        "legs": [
+          {
+            "id": "leg-1",
+            "departureCity": "杭州",
+            "arrivalCity": "上海",
+            "departureDate": "2026-11-12",
+            "arrivalDate": "2026-11-12",
+            "transport": "高铁 · 二等座"
+          },
+          {
+            "id": "leg-2",
+            "departureCity": "上海",
+            "arrivalCity": "杭州",
+            "departureDate": "2026-11-14",
+            "arrivalDate": "2026-11-14",
+            "transport": "高铁 · 二等座"
+          }
+        ],
+        "files": [
+          {
+            "id": "BX-20261116-001-file-1",
+            "name": "静安商务酒店住宿发票.pdf",
+            "type": "application/pdf",
+            "size": 154819
+          },
+          {
+            "id": "BX-20261116-001-file-2",
+            "name": "沪杭往返电子客票.pdf",
+            "type": "application/pdf",
+            "size": 95332
+          },
+          {
+            "id": "BX-20261116-001-file-3",
+            "name": "客户工作餐发票.pdf",
+            "type": "application/pdf",
+            "size": 135786
+          },
+          {
+            "id": "BX-20261116-001-file-4",
+            "name": "网约车行程及发票.pdf",
+            "type": "application/pdf",
+            "size": 257304
+          },
+          {
+            "id": "BX-20261116-001-file-5",
+            "name": "客户现场会议室发票.pdf",
+            "type": "application/pdf",
+            "size": 148211
+          }
+        ],
+        "expenses": [
+          {
+            "id": "item-1",
+            "categoryId": "hotel",
+            "categoryName": "住宿费",
+            "name": "静安商务酒店",
+            "reason": "客户现场驻点，两晚单人住宿",
+            "date": "2026-11-14",
+            "currency": "CNY",
+            "amountCents": 156000,
+            "sourceFileId": "BX-20261116-001-file-1",
+            "city": "上海",
+            "checkIn": "2026-11-12",
+            "checkOut": "2026-11-14",
+            "rooms": 1,
+            "nights": 2
+          },
+          {
+            "id": "item-2",
+            "categoryId": "long-distance",
+            "categoryName": "长途交通费",
+            "name": "沪杭往返高铁",
+            "reason": "杭州往返上海拜访客户",
+            "date": "2026-11-14",
+            "currency": "CNY",
+            "amountCents": 14600,
+            "sourceFileId": "BX-20261116-001-file-2",
+            "transport": "高铁 · 二等座"
+          },
+          {
+            "id": "item-3",
+            "categoryId": "reception-meal-oa",
+            "categoryName": "餐饮费-OA",
+            "name": "客户现场工作餐",
+            "reason": "与江湾项目组共4人沟通试点报价",
+            "date": "2026-11-13",
+            "currency": "CNY",
+            "amountCents": 28000,
+            "sourceFileId": "BX-20261116-001-file-3",
+            "people": 4,
+            "oaId": "OA-20261110-039"
+          },
+          {
+            "id": "item-4",
+            "categoryId": "taxi",
+            "categoryName": "出租车",
+            "name": "市内接驳",
+            "reason": "虹桥站、酒店与客户现场之间往返",
+            "date": "2026-11-14",
+            "currency": "CNY",
+            "amountCents": 17400,
+            "sourceFileId": "BX-20261116-001-file-4",
+            "transport": "网约车"
+          },
+          {
+            "id": "item-5",
+            "categoryId": "other-conference",
+            "categoryName": "参会费",
+            "name": "上线评审会议室",
+            "reason": "租用上海试点评审会议室半日",
+            "date": "2026-11-13",
+            "currency": "CNY",
+            "amountCents": 110000,
+            "sourceFileId": "BX-20261116-001-file-5"
+          }
+        ]
+      },
+      "checkedAt": "2026-11-20T17:26:03.271006+00:00",
+      "status": "attention",
+      "applicable": [
+        "R001",
+        "R002",
+        "R004",
+        "P001",
+        "SEM-EXPENSE-001",
+        "SEM-EXPENSE-002",
+        "SEM-EXPENSE-003",
+        "P-1",
+        "P-2",
+        "P-3"
+      ],
+      "passed": [
+        "R001",
+        "R004",
+        "P001",
+        "SEM-EXPENSE-001",
+        "SEM-EXPENSE-002",
+        "SEM-EXPENSE-003",
+        "P-1",
+        "P-2",
+        "P-3"
+      ],
+      "inapplicable": [],
+      "findings": [
+        {
+          "ruleId": "R002",
+          "state": "hit",
+          "actual": "¥780.00/间夜",
+          "expected": "普通员工差旅住宿费用不超过600元/间夜。",
+          "detail": "住宿单价为¥780.00/间夜，超过规则上限¥600.00/间夜。",
+          "evidence": [
+            {
+              "path": "hotelNightCents",
+              "quote": "78000"
+            }
+          ]
+        }
+      ],
+      "evaluations": [
+        {
+          "ruleId": "SEM-EXPENSE-001",
+          "state": "NOT_MATCHED",
+          "reason": "事由仅说明赴上海拜访项目组、复核试点报价及确认上线安排，未描述已发生或计划安排高档酒水、奢侈食材、娱乐会所等高档消费。",
+          "evidence": [
+            {
+              "path": "$.purpose",
+              "quote": "赴上海拜访江湾零售项目组，复核门店试点报价并确认上线安排。"
+            }
+          ]
+        },
+        {
+          "ruleId": "SEM-EXPENSE-002",
+          "state": "NOT_MATCHED",
+          "reason": "各费用明细用途均与赴上海拜访客户、现场沟通试点报价及评审的业务目标一致，未见用于私人事项或与业务不相容的消费。",
+          "evidence": [
+            {
+              "path": "$.purpose",
+              "quote": "赴上海拜访江湾零售项目组，复核门店试点报价并确认上线安排。"
+            },
+            {
+              "path": "$.expenses[0].reason",
+              "quote": "客户现场驻点，两晚单人住宿"
+            },
+            {
+              "path": "$.expenses[1].reason",
+              "quote": "杭州往返上海拜访客户"
+            },
+            {
+              "path": "$.expenses[2].reason",
+              "quote": "与江湾项目组共4人沟通试点报价"
+            },
+            {
+              "path": "$.expenses[3].reason",
+              "quote": "虹桥站、酒店与客户现场之间往返"
+            },
+            {
+              "path": "$.expenses[4].reason",
+              "quote": "租用上海试点评审会议室半日"
+            }
+          ]
+        },
+        {
+          "ruleId": "SEM-EXPENSE-003",
+          "state": "NOT_MATCHED",
+          "reason": "业务招待费用为客户工作餐，事由明确记载招待对象为江湾项目组、人数为4人、业务目的为沟通试点报价，三项齐备。",
+          "evidence": [
+            {
+              "path": "$.expenses[2].reason",
+              "quote": "与江湾项目组共4人沟通试点报价"
+            },
+            {
+              "path": "$.expenses[2].people",
+              "quote": "4"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mixed",
+      "label": "多项风险（合成）",
+      "doc": {
+        "id": "SAMPLE-BX-004",
+        "title": "宁波项目验收差旅报销",
+        "system": "expense",
+        "kind": "差旅报销",
+        "person": "周晴",
+        "department": "交付部",
+        "period": "11月15日 — 11月17日",
+        "stage": "样例待审",
+        "version": 1,
+        "documentType": "expense",
+        "categories": [
+          "hotel",
+          "meal"
+        ],
+        "synthetic": true,
+        "submittedAt": "2026-11-18T10:15:00+08:00",
+        "sourceLabel": "本地规则验证样例",
+        "paymentCompany": "华川科技有限公司",
+        "purpose": "赴宁波复核项目验收清单，并与客户交付组确认现场整改事项。",
+        "specificFields": [
+          {
+            "label": "待补凭证",
+            "value": "市内出租车行程单"
+          }
+        ],
+        "invoiceUnique": true,
+        "attachment": false,
+        "files": [
+          {
+            "id": "mixed-hotel",
+            "name": "江北商务酒店住宿发票.pdf",
+            "type": "application/pdf",
+            "size": 164205
+          },
+          {
+            "id": "mixed-meal",
+            "name": "验收工作餐发票及消费清单.pdf",
+            "type": "application/pdf",
+            "size": 236987
+          },
+          {
+            "id": "mixed-train",
+            "name": "杭甬高铁电子凭证.pdf",
+            "type": "application/pdf",
+            "size": 95036
+          }
+        ],
+        "expenses": [
+          {
+            "id": "mixed-exp-hotel",
+            "categoryId": "hotel",
+            "categoryName": "住宿费",
+            "name": "江北商务酒店",
+            "reason": "验收驻场两晚，每晚住宿费720元。",
+            "date": "2026-11-17",
+            "amountCents": 144000,
+            "currency": "CNY",
+            "rooms": 1,
+            "nights": 2,
+            "city": "宁波",
+            "checkIn": "2026-11-15",
+            "checkOut": "2026-11-17",
+            "sourceFileId": "mixed-hotel"
+          },
+          {
+            "id": "mixed-exp-meal",
+            "categoryId": "reception-meal-oa",
+            "categoryName": "餐饮费",
+            "name": "项目验收工作餐",
+            "reason": "与客户交付组共8人讨论项目现场验收事项。",
+            "date": "2026-11-16",
+            "amountCents": 168000,
+            "currency": "CNY",
+            "people": 8,
+            "sourceFileId": "mixed-meal"
+          },
+          {
+            "id": "mixed-exp-train",
+            "categoryId": "long-distance",
+            "categoryName": "长途交通费",
+            "name": "杭甬往返高铁",
+            "reason": "杭州至宁波项目驻场往返交通。",
+            "date": "2026-11-17",
+            "amountCents": 18600,
+            "currency": "CNY",
+            "transport": "高铁 · 二等座",
+            "sourceFileId": "mixed-train"
+          },
+          {
+            "id": "mixed-exp-taxi",
+            "categoryId": "taxi",
+            "categoryName": "市内交通费",
+            "name": "宁波市内出租车",
+            "reason": "从酒店前往验收现场，行程单待补。",
+            "date": "2026-11-16",
+            "amountCents": 5400,
+            "currency": "CNY"
+          }
+        ],
+        "amountCents": 336000,
+        "mealCents": 168000,
+        "nights": 2,
+        "hotelNightCents": 72000
+      },
+      "checkedAt": "2026-11-21T02:11:45.500286+00:00",
+      "status": "attention",
+      "applicable": [
+        "R001",
+        "R002",
+        "R004",
+        "P001"
+      ],
+      "passed": [
+        "R001"
+      ],
+      "inapplicable": [],
+      "findings": [
+        {
+          "ruleId": "R002",
+          "state": "hit",
+          "actual": "¥720.00/间夜",
+          "expected": "普通员工差旅住宿费用不超过600元/间夜。",
+          "detail": "住宿单价为¥720.00/间夜，超过规则上限¥600.00/间夜。",
+          "evidence": [
+            {
+              "path": "hotelNightCents",
+              "quote": "72000"
+            }
+          ]
+        },
+        {
+          "ruleId": "R004",
+          "state": "hit",
+          "actual": "必要材料不完整",
+          "expected": "报销单须包含对应的费用凭证。",
+          "detail": "单据缺少本项规则要求的证明材料。",
+          "evidence": [
+            {
+              "path": "attachment",
+              "quote": "false"
+            }
+          ]
+        },
+        {
+          "ruleId": "P001",
+          "state": "hit",
+          "actual": "¥1,680.00",
+          "expected": "餐饮费用合计超过1500元时，审单时提醒我。",
+          "detail": "餐饮合计为¥1,680.00，超过提醒阈值¥1,500.00。",
+          "evidence": [
+            {
+              "path": "mealCents",
+              "quote": "168000"
+            }
+          ]
+        }
+      ],
+      "evaluations": []
+    },
+    {
+      "id": "clear",
+      "label": "未发现异常",
+      "doc": {
+        "id": "OA-20261119-022",
+        "title": "沪佛仓储系统巡检",
+        "system": "oa",
+        "kind": "差旅申请",
+        "person": "章晗",
+        "department": "供应链运营部",
+        "period": "12月1日 — 12月5日",
+        "attachment": true,
+        "stage": "待审批",
+        "version": 1,
+        "categories": [],
+        "documentType": "travel",
+        "days": 5,
+        "amountCents": 486000,
+        "travelType": "普通差旅",
+        "synthetic": true,
+        "submittedAt": "2026-11-19T09:26:00+08:00",
+        "purpose": "在上海完成华东仓库存抽检，再赴佛山核对华南仓分拣流程并完成巡检记录。",
+        "sourceLabel": "OA办公系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "章晗",
+            "status": "done",
+            "time": "2026-11-19T09:26:00+08:00"
+          },
+          {
+            "label": "部门负责人审批",
+            "actor": "姚静",
+            "status": "current",
+            "time": "2026-11-19T09:27:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "费用归属",
+            "value": "供应链运营／跨仓巡检"
+          }
+        ],
+        "legs": [
+          {
+            "id": "leg-1",
+            "departureCity": "杭州",
+            "arrivalCity": "上海",
+            "departureDate": "2026-12-01",
+            "arrivalDate": "2026-12-01",
+            "transport": "高铁 · 二等座"
+          },
+          {
+            "id": "leg-2",
+            "departureCity": "上海",
+            "arrivalCity": "佛山",
+            "departureDate": "2026-12-03",
+            "arrivalDate": "2026-12-03",
+            "transport": "飞机 · 经济舱"
+          },
+          {
+            "id": "leg-3",
+            "departureCity": "佛山",
+            "arrivalCity": "杭州",
+            "departureDate": "2026-12-05",
+            "arrivalDate": "2026-12-05",
+            "transport": "飞机 · 经济舱"
+          }
+        ],
+        "activities": [
+          {
+            "id": "activity-1",
+            "oaNumber": "OA-20261117-041",
+            "description": "上海华东仓库存抽检",
+            "effectiveDate": "2026-12-01",
+            "expiryDate": "2026-12-02",
+            "allocation": "40%"
+          },
+          {
+            "id": "activity-2",
+            "oaNumber": "OA-20261117-042",
+            "description": "佛山华南仓分拣流程复核",
+            "effectiveDate": "2026-12-03",
+            "expiryDate": "2026-12-05",
+            "allocation": "60%"
+          }
+        ],
+        "files": [
+          {
+            "id": "OA-20261119-022-file-1",
+            "name": "跨仓巡检派工单.pdf",
+            "type": "application/pdf",
+            "size": 143752
+          }
+        ]
+      },
+      "checkedAt": "2026-11-20T17:26:08.751551+00:00",
+      "status": "clear",
+      "applicable": [
+        "SEM-TRAVEL-001",
+        "SEM-TRAVEL-002",
+        "SEM-TRAVEL-003"
+      ],
+      "passed": [
+        "SEM-TRAVEL-001",
+        "SEM-TRAVEL-002",
+        "SEM-TRAVEL-003"
+      ],
+      "inapplicable": [],
+      "findings": [],
+      "evaluations": [
+        {
+          "ruleId": "SEM-TRAVEL-001",
+          "state": "NOT_MATCHED",
+          "reason": "事由明确说明了业务对象（华东仓、华南仓）、业务事项（库存抽检、分拣流程核对）及需完成的任务（完成巡检记录），具体齐备，不属于笼统表述。",
+          "evidence": [
+            {
+              "path": "$.purpose",
+              "quote": "在上海完成华东仓库存抽检，再赴佛山核对华南仓分拣流程并完成巡检记录。"
+            }
+          ]
+        },
+        {
+          "ruleId": "SEM-TRAVEL-002",
+          "state": "NOT_MATCHED",
+          "reason": "事由、行程和活动安排均为仓库巡检业务内容，未出现私人旅游、探亲、个人购物或其他与业务无关的活动安排。",
+          "evidence": [
+            {
+              "path": "$.purpose",
+              "quote": "在上海完成华东仓库存抽检，再赴佛山核对华南仓分拣流程并完成巡检记录。"
+            },
+            {
+              "path": "$.activities[0].description",
+              "quote": "上海华东仓库存抽检"
+            },
+            {
+              "path": "$.activities[1].description",
+              "quote": "佛山华南仓分拣流程复核"
+            }
+          ]
+        },
+        {
+          "ruleId": "SEM-TRAVEL-003",
+          "state": "NOT_MATCHED",
+          "reason": "活动地点与行程到访城市一致，活动日期均落在对应到访日期范围内：上海活动与12月1日到达上海相符，佛山活动与12月3日到达、12月5日离开佛山相符。",
+          "evidence": [
+            {
+              "path": "$.legs[0].arrivalCity",
+              "quote": "上海"
+            },
+            {
+              "path": "$.legs[0].arrivalDate",
+              "quote": "2026-12-01"
+            },
+            {
+              "path": "$.activities[0].description",
+              "quote": "上海华东仓库存抽检"
+            },
+            {
+              "path": "$.activities[0].effectiveDate",
+              "quote": "2026-12-01"
+            },
+            {
+              "path": "$.legs[1].arrivalCity",
+              "quote": "佛山"
+            },
+            {
+              "path": "$.legs[1].arrivalDate",
+              "quote": "2026-12-03"
+            },
+            {
+              "path": "$.activities[1].description",
+              "quote": "佛山华南仓分拣流程复核"
+            },
+            {
+              "path": "$.activities[1].effectiveDate",
+              "quote": "2026-12-03"
+            },
+            {
+              "path": "$.activities[1].expiryDate",
+              "quote": "2026-12-05"
+            },
+            {
+              "path": "$.legs[2].departureCity",
+              "quote": "佛山"
+            },
+            {
+              "path": "$.legs[2].departureDate",
+              "quote": "2026-12-05"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "na",
+      "label": "无适用规则",
+      "doc": {
+        "id": "OA-20261116-017",
+        "title": "年休假申请",
+        "system": "oa",
+        "kind": "请假申请",
+        "person": "赵佳",
+        "department": "人力资源部",
+        "days": 3,
+        "period": "11月18日 — 11月20日",
+        "attachment": true,
+        "stage": "待审批",
+        "version": 2,
+        "categories": [],
+        "synthetic": true,
+        "submittedAt": "2026-11-16T09:42:00+08:00",
+        "purpose": "申请休年假3天，招聘进度和面试安排已交接给沈岚。",
+        "sourceLabel": "OA办公系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "赵佳",
+            "status": "done",
+            "time": "2026-11-16T09:42:00+08:00"
+          },
+          {
+            "label": "部门负责人审批",
+            "actor": "王喆",
+            "status": "current",
+            "time": "2026-11-16T09:43:00+08:00"
+          }
+        ],
+        "specificFields": [
+          {
+            "label": "假别",
+            "value": "带薪年休假"
+          },
+          {
+            "label": "开始时间",
+            "value": "2026-11-18 上午"
+          },
+          {
+            "label": "结束时间",
+            "value": "2026-11-20 下午"
+          },
+          {
+            "label": "申请时长",
+            "value": "3 个工作日"
+          },
+          {
+            "label": "本年度剩余额度（申请前）",
+            "value": "7 天"
+          },
+          {
+            "label": "工作交接人",
+            "value": "沈岚"
+          }
+        ],
+        "files": [
+          {
+            "id": "OA-20261116-017-file-1",
+            "name": "招聘工作交接清单.xlsx",
+            "type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "size": 18426
+          }
+        ]
+      },
+      "checkedAt": "2026-11-20T17:17:15.284823+00:00",
+      "status": "clear",
+      "applicable": [],
+      "passed": [],
+      "inapplicable": [
+        "SEM-TRAVEL-001",
+        "SEM-TRAVEL-002",
+        "SEM-TRAVEL-003"
+      ],
+      "findings": [],
+      "evaluations": []
+    },
+    {
+      "id": "reminder",
+      "label": "餐费超提醒额度",
+      "doc": {
+        "id": "BX-20261116-004",
+        "title": "渠道客户商务午餐",
+        "system": "expense",
+        "kind": "费用报销",
+        "person": "刘昕",
+        "department": "销售部",
+        "period": "11月14日",
+        "invoiceUnique": true,
+        "attachment": true,
+        "stage": "待审批",
+        "version": 2,
+        "amountCents": 168000,
+        "mealCents": 168000,
+        "categories": [
+          "meal"
+        ],
+        "synthetic": true,
+        "submittedAt": "2026-11-16T13:42:00+08:00",
+        "purpose": "与嘉联渠道团队共8人进行商务午餐，商定冬季排期和门店配货计划。",
+        "sourceLabel": "费用报销系统",
+        "steps": [
+          {
+            "label": "提交申请",
+            "actor": "刘昕",
+            "status": "done",
+            "time": "2026-11-16T13:42:00+08:00"
+          },
+          {
+            "label": "费用复核",
+            "actor": "吴侠",
+            "status": "current",
+            "time": "2026-11-16T13:43:00+08:00"
+          }
+        ],
+        "paymentCompany": "华川科技有限公司",
+        "specificFields": [
+          {
+            "label": "费用归属",
+            "value": "渠道销售／冬季订货会"
+          },
+          {
+            "label": "收款人",
+            "value": "刘昕"
+          }
+        ],
+        "documentType": "personal",
+        "files": [
+          {
+            "id": "BX-20261116-004-file-1",
+            "name": "渠道午餐发票.pdf",
+            "type": "application/pdf",
+            "size": 155648
+          },
+          {
+            "id": "BX-20261116-004-file-2",
+            "name": "订货会接待清单.xlsx",
+            "type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "size": 11894
+          }
+        ],
+        "expenses": [
+          {
+            "id": "item-1",
+            "categoryId": "reception-meal-oa",
+            "categoryName": "餐饮费-OA",
+            "name": "渠道客户商务午餐",
+            "reason": "嘉联渠道团队与我方共8人，确认门店配货计划",
+            "date": "2026-11-14",
+            "currency": "CNY",
+            "amountCents": 168000,
+            "sourceFileId": "BX-20261116-004-file-1",
+            "people": 8,
+            "oaId": "OA-20261112-035"
+          }
+        ]
+      },
+      "checkedAt": "2026-11-20T17:25:58.283376+00:00",
+      "status": "attention",
+      "applicable": [
+        "R001",
+        "R004",
+        "P001",
+        "SEM-EXPENSE-001",
+        "SEM-EXPENSE-002",
+        "SEM-EXPENSE-003",
+        "P-1",
+        "P-2",
+        "P-3"
+      ],
+      "passed": [
+        "R001",
+        "R004",
+        "SEM-EXPENSE-001",
+        "SEM-EXPENSE-002",
+        "SEM-EXPENSE-003",
+        "P-1",
+        "P-2",
+        "P-3"
+      ],
+      "inapplicable": [
+        "R002"
+      ],
+      "findings": [
+        {
+          "ruleId": "P001",
+          "state": "hit",
+          "actual": "¥1,680.00",
+          "expected": "餐饮费用合计超过1500元时，审单时提醒我。",
+          "detail": "餐饮合计为¥1,680.00，超过提醒阈值¥1,500.00。",
+          "evidence": [
+            {
+              "path": "mealCents",
+              "quote": "168000"
+            }
+          ]
+        }
+      ],
+      "evaluations": [
+        {
+          "ruleId": "SEM-EXPENSE-001",
+          "state": "NOT_MATCHED",
+          "reason": "事由仅描述商务午餐及商定排期、配货计划，未提及高档酒水、奢侈食材或娱乐会所等高档消费。",
+          "evidence": [
+            {
+              "path": "$.purpose",
+              "quote": "与嘉联渠道团队共8人进行商务午餐，商定冬季排期和门店配货计划。"
+            }
+          ]
+        },
+        {
+          "ruleId": "SEM-EXPENSE-002",
+          "state": "NOT_MATCHED",
+          "reason": "费用明细用途为渠道客户商务午餐、确认门店配货计划，与事由所述商务午餐及商定排期、配货计划一致，无私人事项。",
+          "evidence": [
+            {
+              "path": "$.purpose",
+              "quote": "与嘉联渠道团队共8人进行商务午餐，商定冬季排期和门店配货计划。"
+            },
+            {
+              "path": "$.expenses[0].reason",
+              "quote": "嘉联渠道团队与我方共8人，确认门店配货计划"
+            }
+          ]
+        },
+        {
+          "ruleId": "SEM-EXPENSE-003",
+          "state": "NOT_MATCHED",
+          "reason": "已明确记录招待对象为嘉联渠道团队、实际人数8人、业务目的为商定冬季排期和门店配货计划，三项齐备。",
+          "evidence": [
+            {
+              "path": "$.purpose",
+              "quote": "与嘉联渠道团队共8人进行商务午餐，商定冬季排期和门店配货计划。"
+            },
+            {
+              "path": "$.expenses[0].people",
+              "quote": "8"
+            },
+            {
+              "path": "$.expenses[0].reason",
+              "quote": "嘉联渠道团队与我方共8人，确认门店配货计划"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

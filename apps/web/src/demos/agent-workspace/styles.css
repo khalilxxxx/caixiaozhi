@@ -171,20 +171,20 @@ small {
   background: var(--primary);
   color: #fff;
 }
-.btn.primary:hover {
+.btn.primary:enabled:hover {
   background: #2459c2;
 }
 .btn.secondary {
   background: #fff;
   border: 1px solid #dce3ee;
 }
-.btn.secondary:hover {
+.btn.secondary:enabled:hover {
   background: #f3f6fb;
 }
 .btn.ghost {
   color: #52627b;
 }
-.btn.ghost:hover {
+.btn.ghost:enabled:hover {
   background: #eef2f8;
 }
 .btn.danger {
@@ -200,7 +200,7 @@ small {
   border-radius: 8px;
   flex-shrink: 0;
 }
-.icon-btn:hover {
+.icon-btn:enabled:hover {
   background: #edf1f7;
 }
 .badge {
@@ -375,11 +375,6 @@ small {
   font-weight: 650;
   letter-spacing: 0.02em;
   flex-shrink: 0;
-}
-.brand img {
-  width: 39px;
-  height: 39px;
-  object-fit: contain;
 }
 .brand small {
   display: none;
@@ -2145,10 +2140,6 @@ small {
 .mode-operations .brand {
   padding: 0;
   margin-bottom: 25px;
-}
-.mode-operations .brand img {
-  width: 42px;
-  height: 42px;
 }
 .mode-operations .brand > span,
 .mode-operations .new-task > span,

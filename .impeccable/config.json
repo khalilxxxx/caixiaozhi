@@ -11,6 +11,42 @@
         ],
         "createdAt": "2026-11-16T09:32:46.041Z",
         "reason": "用户明确请求 loading、thinking 动效方案；本文件是状态设计评审稿，默认暂停且只在主动播放后演示，不表示真实业务活跃。两处脉冲分别为思考三点和猫眼节奏。"
+      },
+      {
+        "rule": "pulsing-dot",
+        "value": "*",
+        "files": [
+          "apps/web/public/demos/conversation-comparison/index.html"
+        ],
+        "createdAt": "2026-11-17T09:21:17.772Z",
+        "reason": "设计判断：此页面仅为用户明确要求的三版交互预览；呼吸点随本地示例步骤改变，暂停、完成、页面隐藏及减少动效时停止，不代表真实业务运行。"
+      },
+      {
+        "rule": "overused-font",
+        "value": "geist",
+        "files": [
+          "apps/web/src/demos/agent-workspace/enterprise-theme.css"
+        ],
+        "createdAt": "2026-11-20T16:09:21.710Z",
+        "reason": "实现选择：用户要求参照 Stitch 稿统一字体。导出的财小智会话稿声明使用 Geist，主题沿用其西文与数字字形。"
+      },
+      {
+        "rule": "overused-font",
+        "value": "geist",
+        "files": [
+          "apps/web/public/demos/receipt-claim/styles.css"
+        ],
+        "createdAt": "2026-11-21T01:24:26.797Z",
+        "reason": "实现选择：财小智界面规范明确规定西文与数字使用 Geist。回单认领 Demo 沿用该规范，中文使用系统无衬线字体。"
+      },
+      {
+        "rule": "overused-font",
+        "value": "geist",
+        "files": [
+          "apps/web/src/demos/approval-assistant/preview.css"
+        ],
+        "createdAt": "2026-11-21T09:22:29.226Z",
+        "reason": "依据财小智工作台 DESIGN.md 的字体约定，审批助手样板的西文和数字使用项目自带的 Geist，中文使用系统无衬线字体。"
       }
     ]
   }

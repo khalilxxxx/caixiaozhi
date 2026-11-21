@@ -9,10 +9,12 @@ import json
 import re
 from pathlib import Path
 from uuid import uuid4
-from submission_defaults import apply_submission_defaults, merge_draft_patch, submission_context
+from document_search import search_documents
+from submission_defaults import apply_submission_defaults, draft_snapshot_token, expand_agent_row_patch, merge_draft_patch, reimbursement_number, submission_context
 
 SOURCE = '本地模拟业务数据'
 DRAFT_IDS = ('travel', 'expense', 'personal')
+APPROVED_TRAVEL_STATUSES = {'已审批', '已批准', '审批通过'}
 DATE_FIELDS = {'date', 'departureDate', 'arrivalDate', 'checkIn', 'checkOut'}
 EXPENSE_FIELDS = ('id categoryId name currency amount reason reasonOption date tripId departureDate arrivalDate departureCity arrivalCity transport checkIn checkOut city rooms nights rental coResidents people quantity standard oaId').split()
 LEG_FIELDS = ('id departureCity arrivalCity departureDate arrivalDate transport').split()
@@ -57,6 +59,38 @@ def is_date(value):
         return True
     except ValueError:
         return False
+
+
+def travel_application_legs(document):
+    """只使用申请中已经结构化且可核对的行程。"""
+    rows = document.get('legs')
+    if not isinstance(rows, list):
+        return []
+    legs = []
+    seen = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        leg = {field: row.get(field, '') for field in LEG_FIELDS}
+        if any(not isinstance(value, str) or len(value) > 8000 for value in leg.values()):
+            continue
+        if not all(leg[field].strip() for field in ('id', 'departureCity', 'arrivalCity')) or leg['id'] in seen:
+            continue
+        if any(leg[field] and not is_date(leg[field]) for field in ('departureDate', 'arrivalDate')):
+            continue
+        if leg['arrivalDate'] and leg['arrivalDate'] < leg['departureDate']:
+            continue
+        seen.add(leg['id'])
+        legs.append({**leg, **{flag: row[flag] for flag in ('isReturn', 'isOvernight') if isinstance(row.get(flag), bool)}})
+    return legs
+
+
+def travel_application_time(application):
+    try:
+        updated = datetime.fromisoformat(application['updatedAt'])
+    except (TypeError, ValueError):
+        return datetime.min.replace(tzinfo=timezone.utc)
+    return updated if updated.tzinfo is not None else updated.replace(tzinfo=timezone.utc)
 
 
 def card(kind, title, id=None, **kwargs):
@@ -113,27 +147,121 @@ def signature(rules):
     return json.dumps(values, ensure_ascii=False, separators=(',', ':'))
 
 
+METRIC_FIELDS = {'amount': 'amountCents', 'hotelNight': 'hotelNightCents', 'meal': 'mealCents',
+                 'days': 'days', 'attachment': 'attachment', 'invoiceUnique': 'invoiceUnique'}
+METRIC_NAMES = {'amount': '单据金额', 'hotelNight': '住宿单价', 'meal': '餐饮合计',
+                'days': '申请天数', 'attachment': '附件完整性', 'invoiceUnique': '发票重复核验结果'}
+
+
+def _metric_value(metric, value):
+    if metric == 'days':
+        return f'{value}天'
+    unit = '/间夜' if metric == 'hotelNight' else ''
+    return f'¥{Decimal(value) / 100:,.2f}{unit}'
+
+
+def _hit_finding(rule, value, threshold):
+    metric = rule['metric']
+    if metric == 'invoiceUnique':
+        actual, reason = '存在重复使用的发票', '发票核对记录显示，本单存在已用于其他报销单的发票。'
+    elif metric == 'attachment':
+        actual, reason = '必要材料不完整', '单据缺少本项规则要求的证明材料。'
+    else:
+        actual = _metric_value(metric, value)
+        limit = _metric_value(metric, threshold)
+        reason = f'{METRIC_NAMES[metric]}为{actual}，超过{"提醒阈值" if rule.get("origin") == "personal" else "规则上限"}{limit}。'
+    return {'rule': rule, 'state': 'hit', 'actual': actual, 'expected': rule.get('description', rule.get('name', '规则要求')),
+            'detail': reason, 'evidence': [{'path': METRIC_FIELDS[metric],
+                                            'quote': json.dumps(value, ensure_ascii=False) if isinstance(value, bool) else str(value)}]}
+
+
 def evaluate(document, rules):
     review = {'status':'clear','findings':[],'passed':[],'inapplicable':[],'applicable':[]}
-    value_fields = {'amount':'amountCents','hotelNight':'hotelNightCents','meal':'mealCents','days':'days','attachment':'attachment','invoiceUnique':'invoiceUnique'}
     for rule in rules:
         metric = rule.get('metric')
         if metric == 'validInvoice':
             continue
-        if (metric == 'hotelNight' and 'hotel' not in document.get('categories', [])) or (metric == 'meal' and 'meal' not in document.get('categories', [])):
+        if ((rule.get('documentTypes') and document.get('documentType') not in rule['documentTypes']) or
+            (metric == 'hotelNight' and 'hotel' not in document.get('categories', [])) or
+            (metric == 'meal' and 'meal' not in document.get('categories', []))):
             review['inapplicable'].append(rule)
             continue
         review['applicable'].append(rule)
-        value = document.get(value_fields.get(metric, ''))
+        value = document.get(METRIC_FIELDS.get(metric, ''))
         threshold = rule.get('thresholdDays' if metric == 'days' else 'thresholdMinor')
-        if value is None:
-            review['findings'].append({'rule':rule,'state':'unknown','actual':'尚未取得必要数据','expected':rule.get('description','补充资料后核验'),'detail':'缺少可靠的业务数据，请补全后重新检查。'})
+        numeric = metric in ('amount', 'meal', 'hotelNight', 'days')
+        missing = (value is None or (numeric and (isinstance(value, bool) or
+                   not isinstance(value, (int, float, Decimal)) or threshold is None)) or
+                   (metric in ('invoiceUnique', 'attachment') and not isinstance(value, bool)))
+        if missing:
+            name = METRIC_NAMES.get(metric, '必要业务数据')
+            review['findings'].append({'rule':rule,'state':'unknown','actual':f'尚未取得{name}','expected':rule.get('description','补充资料后核验'),'detail':f'当前单据缺少{name}，暂时无法判定。'})
         elif value is False or (threshold is not None and isinstance(value, (int, float, Decimal)) and not isinstance(value, bool) and value > threshold):
-            review['findings'].append({'rule':rule,'state':'hit','actual':str(value),'expected':rule.get('description','满足规则条件'),'detail':'达到个人提醒条件。' if rule.get('origin') == 'personal' else '未满足公司规则，请处理后重新检查。'})
+            review['findings'].append(_hit_finding(rule, value, threshold))
         else:
             review['passed'].append(rule)
     review['status'] = 'attention' if any(f['state']=='hit' for f in review['findings']) else 'unknown' if review['findings'] else 'clear'
     return review
+
+
+def audit_document_input(doc):
+    if doc.get('documentType'):
+        return doc
+    if doc['system'] == 'oa':
+        kind = 'travel' if doc.get('kind') in ('出差申请', '差旅申请') else 'other'
+    else:
+        kind = 'personal' if doc.get('kind') in ('费用报销', '个人费用报销') else 'expense'
+    return {**doc, 'documentType': kind}
+
+
+def review_work_examples(data, affected_ids):
+    """只在预置样例入库时执行一次可离线核对的规则，并保存该次真实结果。"""
+    center = data['rulesSubmission']
+    saved = center.setdefault('reviewResults', {})
+    selected = set(affected_ids)
+    changed = False
+    for doc in data['auditDocuments']:
+        if doc['id'] not in selected:
+            continue
+        active = rules_for(data, scope='review', system=doc['system'])
+        basis = {'documentVersion': doc.get('version', 1), 'signature': signature(active)}
+        current = saved.get(doc['id'], {})
+        if all(current.get(key) == value for key, value in basis.items()):
+            continue
+        review = Business(None).evaluate_rules(audit_document_input(doc), active)
+        saved[doc['id']] = {**basis, 'review': review, 'checkedAt': now()}
+        changed = True
+    return changed
+
+
+def work_review_summary(doc, rules_submission):
+    """将审单版本及规则配置同时匹配的快照提供给关联单据对话。"""
+    saved = doc.get('decisionReview')
+    if saved is None:
+        active = rules_for({'rulesSubmission': rules_submission}, scope='review', system=doc['system'])
+        saved = rules_submission.get('reviewResults', {}).get(doc['id'])
+        checked = bool(saved and saved.get('documentVersion') == doc.get('version', 1)
+                       and saved.get('signature') == signature(active))
+        stale = bool(saved and not checked)
+        total = len(active)
+    else:
+        checked, stale = saved['checked'], saved['stale']
+        total = len(saved['review']['applicable']) + len(saved['review']['inapplicable'])
+    review = saved['review'] if checked else {}
+    findings = review.get('findings', [])
+    hits = [f for f in findings if f['state'] == 'hit']
+    pending = [f for f in findings if f['state'] == 'unknown']
+    passed, applicable = len(review.get('passed', [])), len(review.get('applicable', []))
+    counts = {'total': total, 'executed': applicable - sum(f.get('executed') is False for f in pending),
+              'hit': len(hits), 'pending': len(pending), 'passed': passed,
+              'inapplicable': len(review.get('inapplicable', []))}
+    score = None
+    if applicable and (passed or hits):
+        lower = (passed * 200 + applicable) // (2 * applicable)
+        upper = ((passed + len(pending)) * 200 + applicable) // (2 * applicable)
+        score = str(lower) if upper == lower else f'{lower}–{upper}'
+    return {'checked': checked, 'stale': stale, 'checkedAt': (saved or {}).get('checkedAt'),
+            'score': score, 'scoreMax': 100, 'counts': counts, 'risks': hits, 'pending': pending}
 
 
 class Business:
@@ -156,9 +284,11 @@ class Business:
             if self.rule_service:
                 result = self.rule_service.evaluate(document, applicable)
             else:
-                result = evaluate({}, applicable)
-                for finding in result['findings']:
-                    finding.update(actual='语义检查尚未执行', detail='语义检查服务不可用，请稍后重新检查。', engine='llm')
+                result = {'inapplicable': [], 'applicable': applicable, 'passed': [],
+                          'findings': [{'rule': rule, 'state': 'unknown', 'actual': '尚未执行语义审核',
+                                        'expected': rule.get('instruction') or rule.get('description', '规则要求'),
+                                        'detail': '尚无模型审查结果。', 'evidence': [], 'executed': False}
+                                       for rule in applicable]}
             for key in ('findings', 'passed', 'inapplicable', 'applicable'):
                 review[key].extend(result[key])
             if result.get('evaluations'):
@@ -176,21 +306,70 @@ class Business:
             (f['state'] == 'unknown' and f['rule'].get('metric') != 'semantic')
             for f in check['review']['findings'])
 
-    def query_documents(self, query=''):
-        state = self.store.get_state()
-        data = state['data']
+    def query_documents(self, query='', document_ids=None):
+        if document_ids is not None and (not isinstance(document_ids, list)
+                                         or any(not isinstance(value, str) for value in document_ids)):
+            raise BusinessError('VALIDATION_ERROR', '单据引用格式无效。')
         query = str(query).strip().lower()
-        unavailable = [k for k,v in data.get('documentSources', {}).get('states', {}).items() if v != 'ready']
-        def matches(doc):
-            if not query or query in ('全部','所有','全部单据','所有单据'):
-                return True
-            text = json.dumps(doc, ensure_ascii=False).lower()
-            if query in text:
-                return True
-            mappings = [(r'差旅|出差','travel_application'),(r'报销','expense_claim'),(r'请假|年假','oa_leave'),(r'采购|付款|支付|到账','payment_request'),(r'合同','contract_approval'),(r'预算','budget_transfer')]
-            return any(re.search(pattern, query) and doc.get('typeId') == kind for pattern,kind in mappings)
-        documents = [d for d in data.get('documents', []) if matches(d) and d.get('source', {}).get('id') not in unavailable]
-        return {'items':documents,'count':len(documents),'unavailableSources':unavailable,'dataSource':SOURCE,'cards':[card('documents','单据查询',data={'query':query,'items':documents},status=f'{len(documents)}张单据')]}
+        documents, unavailable = search_documents(self.store.get_state()['data'], query, document_ids)
+        card_data = {'query': query, 'items': documents, 'unavailableSources': unavailable}
+        if document_ids is not None:
+            card_data['documentIds'] = document_ids
+        return {'items': documents, 'count': len(documents), 'unavailableSources': unavailable, 'dataSource': SOURCE,
+                'cards': [card('documents', '单据进展', data=card_data, status=f'{len(documents)}张单据')]}
+
+    def _available_travel_applications(self, data):
+        employee = submission_context({})['currentEmployee']
+        documents = [doc for doc in data.get('documents', []) if doc.get('typeId') == 'travel_application']
+        sources = {'travel'} | {doc.get('source', {}).get('id') for doc in documents}
+        states = data.get('documentSources', {}).get('states', {})
+        unavailable = sorted(source for source in sources if source and states.get(source, 'ready') != 'ready')
+        applications = []
+        if not employee:
+            return employee, applications, unavailable
+        for document in documents:
+            source = document.get('source', {})
+            if not source.get('id') or source['id'] in unavailable:
+                continue
+            if document.get('status') != 'completed' or document.get('sourceStatus') not in APPROVED_TRAVEL_STATUSES:
+                continue
+            applicant_id = document.get('applicantId')
+            if applicant_id is not None:
+                belongs_to_employee = applicant_id == employee['id']
+            else:
+                # 旧文档有且只有一个申请人姓名时，按当前本地员工档案匹配。
+                names = [field.get('value') for field in document.get('details', []) if field.get('label') == '申请人']
+                belongs_to_employee = names == [employee['name']]
+            if not belongs_to_employee or not document.get('id') or not document.get('key'):
+                continue
+            applications.append({
+                'id': document['id'], 'key': document['key'], 'title': document.get('title', ''),
+                'sourceStatus': document['sourceStatus'], 'source': source, 'updatedAt': document.get('updatedAt', ''),
+                'applicant': employee['name'], 'legs': travel_application_legs(document),
+                'synthetic': document.get('synthetic', False),
+            })
+        return employee, applications, unavailable
+
+    def query_travel_applications(self, query=''):
+        if not isinstance(query, str) or len(query) > 200:
+            raise BusinessError('VALIDATION_ERROR', '请输入200字以内的差旅申请单号或关键词。')
+        _, applications, unavailable = self._available_travel_applications(self.store.get_state()['data'])
+        query = query.strip().casefold()
+        items = []
+        for application in applications:
+            fields = [application['id'], application['title']]
+            fields.extend(leg[field] for leg in application['legs'] for field in ('departureCity', 'arrivalCity'))
+            if not query or any(query in field.casefold() for field in fields):
+                items.append(application)
+        items.sort(key=travel_application_time, reverse=True)
+        return {'items': items, 'count': len(items), 'unavailableSources': unavailable, 'dataSource': SOURCE}
+
+    def _find_travel_application(self, data, draft, application_id):
+        employee, applications, _ = self._available_travel_applications(data)
+        if not employee or draft.get('applicant') != employee['name']:
+            return None, employee
+        matches = [app for app in applications if app['id'].casefold() == application_id.strip().casefold()]
+        return (matches[0] if len(matches) == 1 else None), employee
 
     def analyze(self, month='10', dept='全部部门', type=None):
         month = str(month).removeprefix('2026-').replace('月','').zfill(2)
@@ -276,11 +455,18 @@ class Business:
                 'savedAt': now(), 'status': 'draft',
             }
             draft = apply_submission_defaults(draft, adopt_defaults=True)
+            if kind in ('expense', 'personal'):
+                draft['documentNumber'] = reimbursement_number(data['submissions'])
             data['submissions']['drafts'][draft['id']] = draft
             return self._draft_result(draft)
         return self.store.mutate(create)
 
-    def update_draft(self, id, patch, manual_fields=None):
+    def update_agent_draft(self, id, patch, expected_snapshot, manual_fields=None, remove_rows=None):
+        if expected_snapshot is None:
+            raise BusinessError('DRAFT_SNAPSHOT_REQUIRED', '请先读取当前草稿，再填写本轮明确的修改。')
+        return self.update_draft(id, patch, manual_fields, expected_snapshot=expected_snapshot, remove_rows=remove_rows)
+
+    def update_draft(self, id, patch, manual_fields=None, *, expected_snapshot=None, remove_rows=None):
         if not isinstance(patch, dict):
             raise BusinessError('VALIDATION_ERROR','草稿修改必须是字段对象。')
         allowed = {'title','applicant','department','paymentCompany','travelType','purpose','legs','activities','activityMode','companions','applicationId','expenses','files','materialIds','subsidyCents','returnDatePending'}
@@ -292,6 +478,11 @@ class Business:
             if draft.get('status') != 'draft':
                 raise BusinessError('INVALID_STATE','单据已提交，不能修改原申请。')
             previous = deepcopy(data['submissions'].get('edits', {}).get(id, draft))
+            if expected_snapshot is not None and expected_snapshot != draft_snapshot_token(previous):
+                raise BusinessError('STALE_DRAFT', '草稿已有新的修改，请读取最新草稿后再更新需要修改的字段。')
+            if (expected_snapshot is not None and draft_type(draft) == 'expense'
+                    and 'applicationId' in patch and patch['applicationId'] != previous.get('applicationId')):
+                raise BusinessError('APPLICATION_SELECTION_REQUIRED', '请通过差旅申请关联工具让用户确认申请单。')
             value = deepcopy(patch)
             string_fields(value, ('title','applicant','department','paymentCompany','travelType','purpose','applicationId','activityMode'))
             if 'activityMode' in value and value['activityMode'] not in ('required','optional','hidden'):
@@ -309,6 +500,8 @@ class Business:
                 if key in value and any(not isinstance(item,str) for item in value[key]):
                     raise BusinessError('VALIDATION_ERROR',f'{key}必须是文本数组。')
             try:
+                if expected_snapshot is not None:
+                    value = expand_agent_row_patch(previous, value, remove_rows)
                 merged = merge_draft_patch(previous, value)
             except ValueError as exc:
                 raise BusinessError('VALIDATION_ERROR', str(exc)) from None
@@ -344,6 +537,51 @@ class Business:
             return self._draft_result(draft)
         return self.store.mutate(update)
 
+    def link_travel_application(self, id, application_id, version, *, expected_snapshot=None):
+        if not isinstance(id, str) or not id.strip():
+            raise BusinessError('VALIDATION_ERROR', '请选择要关联的差旅报销草稿。')
+        if not isinstance(application_id, str) or not application_id.strip() or len(application_id) > 200:
+            raise BusinessError('VALIDATION_ERROR', '请选择有效的差旅申请单号。')
+        if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+            raise BusinessError('VALIDATION_ERROR', '草稿版本无效。')
+
+        def link(state):
+            data = state['data']
+            draft = self._draft(data, id)
+            if draft_type(draft) != 'expense' or draft.get('status') != 'draft':
+                raise BusinessError('INVALID_STATE', '只有待填写的差旅报销草稿可关联申请。')
+            submissions = data['submissions']
+            edits = submissions.setdefault('edits', {})
+            previous = edits.get(id, draft)
+            if expected_snapshot is not None and expected_snapshot != draft_snapshot_token(previous):
+                raise BusinessError('STALE_DRAFT', '草稿已有新的修改，请读取最新草稿后重新关联。')
+            if draft['version'] != version:
+                raise BusinessError('VERSION_CONFLICT', '草稿已变化，请同步后重新关联。')
+            application, employee = self._find_travel_application(data, previous, application_id)
+            if application is None:
+                raise BusinessError('TRAVEL_APPLICATION_UNAVAILABLE', '未找到当前申请人已审批且可关联的差旅申请。')
+
+            imported_legs = [] if previous.get('legs') else application['legs']
+            if imported_legs:
+                import_status = 'imported'
+            elif previous.get('legs'):
+                import_status = 'existing_legs_preserved'
+            else:
+                import_status = 'no_available_legs'
+
+            draft.update(previous)
+            draft.update(applicationId=application['id'], applicationLink={
+                'id': application['id'], 'key': application['key'], 'employeeId': employee['id'],
+            }, version=version + 1, savedAt=now())
+            if imported_legs:
+                draft['legs'] = deepcopy(imported_legs)
+            submissions.setdefault('checks', {}).pop(id, None)
+            edits.pop(id, None)
+            return {**self._draft_result(draft), 'application': application,
+                    'importedLegCount': len(imported_legs), 'legImportStatus': import_status}
+
+        return self.store.mutate(link)
+
     def _check(self, data, draft):
         issues = []
         def issue(path, message):
@@ -355,8 +593,20 @@ class Business:
             require(draft,field)
         if draft_type(draft) == 'travel':
             require(draft,'travelType')
+        application = None
         if draft_type(draft) == 'expense':
-            require(draft,'applicationId')
+            application_id = draft.get('applicationId')
+            if not isinstance(application_id, str) or not application_id.strip():
+                issue('applicationId', '请关联差旅申请。')
+            else:
+                application, employee = self._find_travel_application(data, draft, application_id)
+                link = draft.get('applicationLink') or {}
+                if application and link.get('id') == application['id'] and (
+                    link.get('key') != application['key'] or link.get('employeeId') != employee['id']
+                ):
+                    application = None
+                if application is None:
+                    issue('applicationId', '当前申请号无法核实为本人的已审批差旅申请，请重新选择。')
         legs = draft.get('legs',[])
         if draft_type(draft) != 'personal':
             if not legs:
@@ -440,7 +690,12 @@ class Business:
                     hotels.append(Decimal(amount)/Decimal(nights*rooms) if amount is not None and nights*rooms>0 else None)
         def file_key(file_id):
             row = self.store.get_file(file_id) if hasattr(self.store, 'get_file') and file_id else None
-            digest = row['metadata'].get('sha256') if row else None
+            metadata = row['metadata'] if row else {}
+            recognition = metadata.get('materialRecognition', {}).get('recognition') or {}
+            number = recognition.get('facts', {}).get('invoiceNumber')
+            if recognition.get('role') in ('invoice', 'unknown') and number:
+                return ('invoiceNumber', ''.join(str(number).upper().split()))
+            digest = metadata.get('sha256')
             return ('sha256', digest) if digest else ('id', file_id)
 
         materials = {item['id']: item for item in data.get('materials', {}).get('items', []) if item.get('id')}
@@ -486,6 +741,8 @@ class Business:
             # 相同原件中不同的已核对条目可以分别报销；换名重传仍按摘要拦截。
             duplicate_file = register_claim(file_id, material_id) or duplicate_file
         unique_files = {file_id for file_id, _ in current_claims}
+        if duplicate_file and any('receiptReadKey' in item or 'receiptPrefill' in item or item.get('reimbursementBatchId') for item in expenses):
+            issue('expenses', '有发票已计入其他费用或已受理的报销单，请核对重复原件。')
         seeded = json.loads(Path(__file__).with_name('seed.json').read_text())['data']['materials']['files']
         trusted = {file['id']: file for file in seeded}
         invoice_unique = bool(unique_files) and not duplicate_file and not any(trusted.get(file_id, {}).get('status') == 'duplicate' for file_id in unique_files)
@@ -498,6 +755,9 @@ class Business:
         review_doc = {'amountCents':total_amount,'mealCents':sum(meals),'hotelNightCents':max(hotels) if hotels and all(h is not None for h in hotels) else None,'days':(date.fromisoformat(end)-date.fromisoformat(start)).days+1 if start and end else None,'categories':(['hotel'] if hotels else [])+(['meal'] if meals else []),'invoiceUnique':invoice_unique if unique_files else None,'attachment':bool(draft.get('files')) or bool(expenses) and all(item.get('files') for item in expenses)}
         review_doc.update({key: deepcopy(draft.get(key)) for key in ('title','purpose','applicant','department','paymentCompany','travelType','legs','activities','expenses','files')})
         review_doc.update(documentType=draft_type(draft), system='oa' if draft_type(draft) == 'travel' else 'expense')
+        if draft_type(draft) == 'expense':
+            review_doc['applicationId'] = draft.get('applicationId')
+            review_doc['travelApplication'] = application
         category_index = {item['id']: item for item in data.get('expenseCategories', [])}
         for expense in review_doc.get('expenses') or []:
             category = category_index.get(expense.get('categoryId'), {})
@@ -567,7 +827,7 @@ class Business:
             if not allowed:
                 raise BusinessError('VALIDATION_ERROR','单据尚未通过服务端检查。',{'check':check})
             created=now()
-            business_id=f"LOCAL-{'TR' if draft_type(draft)=='travel' else 'BX'}-{datetime.now(timezone.utc):%Y%m%d}-{uuid4().hex[:8].upper()}"
+            business_id = draft.get('documentNumber') or f"LOCAL-{'TR' if draft_type(draft)=='travel' else 'BX'}-{datetime.now(timezone.utc):%Y%m%d}-{uuid4().hex[:8].upper()}"
             request_id='request-'+uuid4().hex
             receipt_id='receipt-'+uuid4().hex
             amount=draft_total(draft)
@@ -603,6 +863,24 @@ class Business:
         request=next((r for r in data['submissions']['requests'] if r['id']==receipt['requestId']),None)
         return {'receipt':receipt,'request':request,'dataSource':SOURCE,'cards':[card('submission','本地受理回执',receipt['draftId'],status='本地已受理',data={'receipt':receipt,'requestId':receipt['requestId']})]}
 
+    def get_work_document(self, document_id, *, with_review=False):
+        data = self.store.get_state()['data']
+        doc = next((item for item in data.get('auditDocuments', []) if item['id'] == document_id), None)
+        if doc is None:
+            doc = data.get('handledWorkDocuments', {}).get(document_id)
+        if doc is None:
+            raise BusinessError('NOT_FOUND', '未找到这张待办单据，可能已移出当前工作清单。')
+        result = {'document': doc, 'dataSource': SOURCE}
+        if with_review:
+            state = data.get('rulesSubmission', {})
+            summary = work_review_summary(doc, state)
+            result['review'] = summary
+            if summary['checked']:
+                saved = (doc.get('decisionReview') or state['reviewResults'][document_id])['review']
+                result['passedRules'] = [rule['name'] for rule in saved.get('passed', [])]
+                result['inapplicableRules'] = [rule['name'] for rule in saved.get('inapplicable', [])]
+        return result
+
     def preaudit(self, system=None, ids=None, cancel_check=None):
         if system not in (None,'expense','oa'):
             raise BusinessError('VALIDATION_ERROR','预审系统无效。')
@@ -617,9 +895,7 @@ class Business:
         for original in selected:
             if cancel_check:
                 cancel_check()
-            doc = deepcopy(original)
-            if not doc.get('documentType'):
-                doc['documentType'] = ('travel' if doc.get('kind') in ('出差申请', '差旅申请') else 'other') if doc['system'] == 'oa' else 'expense'
+            doc = audit_document_input(deepcopy(original))
             active = rules_for(snapshot, scope='review', system=doc['system'])
             signatures[doc['system']] = signature(active)
             review = self.evaluate_rules(doc, active)

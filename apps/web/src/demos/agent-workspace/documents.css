@@ -5,3 +5,31 @@
 .dw-file-select-row{display:flex;align-items:center;gap:2px;padding-left:18px}.dw-file-select-row+.dw-file-select-row{border-top:1px solid #eef1f5}.dw-file-select-row>.dw-file-row{min-width:0;flex:1}.dw-file-select-row>input{accent-color:var(--dw-blue);flex-shrink:0}
 
 .dw-material-source a,.dw-exception-row a{color:var(--dw-blue);font-size:11px;white-space:nowrap}.dw-material-evidence{margin:0 0 16px;color:var(--dw-muted);font-size:11px}.dw-material-evidence summary{cursor:pointer}.dw-material-evidence dl>div{display:grid;grid-template-columns:72px 1fr;gap:8px;margin-top:8px}.dw-material-evidence dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+
+.dw-draft-file-actions {
+  margin-bottom: 16px;
+}
+
+.dw-draft-file-picker {
+  font-size: 13px;
+}
+
+.dw-draft-file-picker summary {
+  width: fit-content;
+  padding-block: 8px;
+  cursor: pointer;
+}
+
+.dw-draft-file-picker > div {
+  display: grid;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.dw-draft-file-picker label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  overflow-wrap: anywhere;
+}

@@ -1,6 +1,7 @@
 import type { Task } from './workspace';
 import { needsAttention } from './task-model';
 import { getCapability } from './capability-model';
+import { visibleMessageCards } from './submission-conversation';
 
 function isTimestamp(value: unknown): value is number {
   return (
@@ -75,6 +76,62 @@ export function conversationState(task: Task): {
   return { icon: 'chat', label, tone: 'neutral' };
 }
 
+const deliveredRunStates = new Set([
+  'completed',
+  'succeeded',
+  'awaiting_input',
+  'waiting',
+]);
+const failedRunStates = new Set(['failed', 'interrupted', 'incomplete']);
+
+export function latestReplyId(task: Task): string | null {
+  for (let index = task.messages.length - 1; index >= 0; index--) {
+    const message = task.messages[index]!;
+    if (message.role !== 'assistant') continue;
+    // Streaming and final representations share an ID. Only delivery advances the read marker.
+    if (message.runStatus && !deliveredRunStates.has(message.runStatus))
+      continue;
+    if (task.activeRunId && message.runId === task.activeRunId) continue;
+    if (
+      message.text.trim() ||
+      message.question?.title ||
+      visibleMessageCards(message).length
+    )
+      return message.id;
+  }
+  return null;
+}
+
+export function hasUnreadReply(
+  task: Task,
+  lastReadId: string | null,
+  latestId = latestReplyId(task),
+): boolean {
+  if (!latestId || latestId === lastReadId) return false;
+  if (!lastReadId) return true;
+  // Another tab can have read a newer snapshot, including this run's final reply.
+  const readIndex = task.messages.findIndex(
+    (message) => message.id === lastReadId,
+  );
+  return (
+    readIndex >= 0 &&
+    task.messages.findIndex((message) => message.id === latestId) > readIndex
+  );
+}
+
+export function recentConversationAlert(
+  task: Task,
+  lastReadId: string | null,
+): 'error' | 'unread' | null {
+  const last = task.messages.at(-1);
+  const latestRun = last?.role === 'assistant' ? last.runStatus : undefined;
+  const failed = latestRun
+    ? failedRunStates.has(latestRun)
+    : /失败|错误|异常|中断|未完成/.test(task.status);
+  if (failed && !task.activeRunId && task.status !== '处理中') return 'error';
+  return hasUnreadReply(task, lastReadId) ? 'unread' : null;
+}
+
 export function recentConversations(tasks: Task[]): Task[] {
   const seen = new Set<string>();
   return tasks
@@ -82,7 +139,10 @@ export function recentConversations(tasks: Task[]): Task[] {
       if (seen.has(task.id)) return false;
       const hasContent =
         task.messages.some(
-          (message) => message.text.trim() || message.cards?.length,
+          (message) =>
+            message.text.trim() ||
+            message.cards?.length ||
+            message.question?.title,
         ) ||
         task.input.trim() ||
         task.refs.length ||

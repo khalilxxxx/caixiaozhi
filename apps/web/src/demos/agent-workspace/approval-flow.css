@@ -1,0 +1,100 @@
+.dp-node-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  margin: 0 0 22px;
+  border: 1px solid #dbe4eb;
+  border-radius: 10px;
+  color: #233a50;
+  background: #f5f8fb;
+}
+.dp-node-card header,
+.dp-node-meta,
+.dp-node-card header h3 {
+  display: flex;
+  align-items: center;
+}
+.dp-node-card header {
+  justify-content: space-between;
+  gap: 12px;
+}
+.dp-node-card header h3 {
+  margin: 0;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 550;
+  color: #4e6479;
+}
+.dp-node-card > strong {
+  font-size: 16px;
+  font-weight: 620;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.dp-node-card .badge {
+  font-size: 11px;
+}
+.dp-node-meta {
+  flex-wrap: wrap;
+  gap: 3px 16px;
+  min-width: 0;
+  color: #526173;
+  font-size: 12px;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.dp-node-meta b {
+  margin-left: 6px;
+  font-weight: 550;
+  color: #2f4050;
+}
+.dp-node-meta time {
+  color: #5b6979;
+}
+@media (max-width: 480px) {
+  .dp-node-card {
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+}
+.dp-dossier .dw-source-line {
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.dp-dossier .dw-source-line > span {
+  color: #627183;
+  font-size: 11px;
+}
+.dp-caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.dp-caption > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.dp-caption > svg {
+  flex: none;
+}
+.dp-caption h2 {
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.dp-caption small {
+  color: #617285;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.dp-dossier .wd-expense-summary {
+  color: #586779;
+  font-size: 12px;
+  margin: 8px 0;
+}
+.dp-dossier .wd-route-text strong {
+  font-size: 13px;
+}

@@ -1,0 +1,61 @@
+.skill-doc {
+  min-width: 0;
+  color: #394150;
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.skill-doc-fields {
+  margin: 0;
+}
+
+.skill-doc-fields > div {
+  display: grid;
+  grid-template-columns: 3.5em minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.skill-doc-fields > div:first-child {
+  padding-top: 0;
+}
+
+.skill-doc-fields dt,
+.skill-doc-requirements h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #19263a;
+}
+
+.skill-doc-fields dd {
+  margin: 0;
+}
+
+.skill-doc-requirements {
+  padding-top: 19px;
+}
+
+.skill-doc-requirements h3 {
+  margin: 0 0 6px;
+}
+
+.skill-doc .skill-doc-text,
+.skill-doc .skill-doc-text p {
+  font-size: inherit;
+  color: inherit;
+  line-height: inherit;
+}
+
+.skill-doc .skill-doc-text .message-table-scroll:focus-visible {
+  outline: 2px solid #4175aa;
+  outline-offset: 2px;
+}
+
+.skill-doc-empty {
+  margin: 0;
+  color: #667085;
+  font-size: 14px;
+}

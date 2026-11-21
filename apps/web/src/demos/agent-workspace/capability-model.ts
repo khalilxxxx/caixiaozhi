@@ -1,5 +1,17 @@
-import type { PageId } from './workspace';
+import type { ContextRef, PageId } from './workspace';
 import { selectPromptExamples } from './prompt-model';
+import { appendDraft } from './task-model';
+
+export type ExpertTeamId =
+  | 'finance-review-team'
+  | 'finance-analysis-team'
+  | `expert-team-${string}`;
+
+export function isExpertTeam(id?: string | null): id is ExpertTeamId {
+  return id === 'finance-review-team' ||
+    id === 'finance-analysis-team' ||
+    (typeof id === 'string' && id.startsWith('expert-team-'));
+}
 
 export type CapabilityId =
   | 'submission'
@@ -10,7 +22,8 @@ export type CapabilityId =
   | 'materials'
   | 'receipt'
   | 'translation'
-  | 'contract';
+  | 'contract'
+  | ExpertTeamId;
 
 export interface Capability {
   id: CapabilityId;
@@ -24,6 +37,40 @@ export interface Capability {
 }
 
 export const capabilities: readonly Capability[] = [
+  {
+    id: 'finance-review-team',
+    label: '财务核验专家团',
+    icon: 'shield',
+    appId: 'skills',
+    placeholder: '输入要核对的单据、材料或制度问题…',
+    featured: false,
+    description: '核对业务单据、报销材料与适用制度',
+    examples: [
+      '这张报销单还缺哪些材料？',
+      '帮我核对这次出差的住宿标准',
+      '核对附件和报销单中的金额',
+      '请列出需要补充的报销材料',
+      '查询这张单据适用的差旅制度',
+      '核对这张报销单的费用日期和提交时间',
+    ],
+  },
+  {
+    id: 'finance-analysis-team',
+    label: '财务分析专家团',
+    icon: 'chart',
+    appId: 'skills',
+    placeholder: '输入费用期间或财报问题，也可以附上费用 CSV…',
+    featured: false,
+    description: '汇总费用，分析费用结构与公开财报',
+    examples: [
+      '分析海康威视2025年度的收入与利润',
+      '汇总我上传的费用 CSV，列出各类费用小计',
+      '比较2026年9月和10月的部门费用',
+      '列出2026年10月各类费用占比',
+      '对照年报核实海康威视2025年度的归母净利润',
+      '核对这份费用 CSV 的行数和总金额',
+    ],
+  },
   {
     id: 'submission',
     label: '智能提单',
@@ -63,16 +110,16 @@ export const capabilities: readonly Capability[] = [
     label: '数据分析',
     icon: 'chart',
     appId: 'analysis',
-    placeholder: '告诉我分析期间、部门和想了解的费用问题…',
+    placeholder: '输入年度和财务问题，例如分析海康威视2025年度研发费用…',
     featured: true,
-    description: '指定期间、部门与费用范围',
+    description: '查询公开财报指标、年度变化与报告',
     examples: [
-      '分析10月各部门的费用构成',
-      '对比销售部9月与10月的差旅费用',
-      '10月报销费用比9月变化了多少？',
-      '查看10月差旅费用的部门分布',
-      '生成10月销售部费用分析报告',
-      '汇总10月各类报销费用及占比',
+      '分析海康威视2025年度的营收与利润',
+      '对比海康威视2024与2025年度的研发费用',
+      '海康威视2025年度营业收入同比变化了多少？',
+      '查看海康威视2025年度的成本费用结构',
+      '生成海康威视2025年度财务分析报告',
+      '核查海康威视2023至2025年度财报的数据来源',
     ],
   },
   {
@@ -181,8 +228,36 @@ export const capabilities: readonly Capability[] = [
 
 export function getCapability(
   id?: CapabilityId | null,
+  teamName?: string | null,
 ): Capability | undefined {
-  return capabilities.find((capability) => capability.id === id);
+  const builtin = capabilities.find((capability) => capability.id === id);
+  if (builtin || !isExpertTeam(id)) return builtin;
+  return {
+    id, label: teamName?.trim() || '我的专家团', icon: 'spark', appId: 'skills',
+    featured: false, placeholder: '输入要交给专家团处理的问题…', description: '', examples: [],
+  };
+}
+
+export function expertTeamRefs(draftRefs: ContextRef[], explicitRefs: ContextRef[] = []): ContextRef[] {
+  const refs = new Map<string, ContextRef>();
+  for (const ref of [...draftRefs, ...explicitRefs]) {
+    if (ref.kind !== 'skill') refs.set(`${ref.kind}/${ref.id}`, ref);
+  }
+  return [...refs.values()];
+}
+
+export function prepareExpertTeamDraft(
+  draft: { input: string; refs: ContextRef[] },
+  id: ExpertTeamId,
+  prompt?: string,
+  teamName?: string,
+) {
+  return {
+    input: prompt?.trim() ? appendDraft(draft.input, prompt.trim()) : draft.input,
+    refs: expertTeamRefs(draft.refs),
+    capability: id,
+    expertTeamName: getCapability(id, teamName)!.label,
+  };
 }
 
 export function capabilityExamples(

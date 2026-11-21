@@ -1,33 +1,54 @@
-/* Coral action, warm AI context, and neutral reading surfaces have separate roles. */
-:root {
-  --brand: #db373c;
-  --brand-hover: #cb3038;
-  --brand-bright: #fa283b;
-  --brand-gradient: linear-gradient(135deg, #ff5b4c, #fa283b);
-  --brand-action: linear-gradient(135deg, #db373c, #d9343e);
-  --brand-soft: #fff3eb;
-  --brand-context-ink: #945432;
-  --brand-context-muted: #865a42;
-  --enterprise-canvas: #fafaf9;
-  --enterprise-sidebar: #f4f4f2;
-  --enterprise-ink: #29292d;
-  --enterprise-text: #525257;
-  --enterprise-muted: #6f6f74;
-  --enterprise-line: #e6e5e3;
-  --enterprise-hover: #efefed;
-  --enterprise-focus: #8c8782;
+@font-face {
+  font-family: Geist;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/agent-assets/fonts/geist-latin-variable.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-.agent-first {
+/* Shared by the conversation, business pages and their dialogs. */
+:root {
+  --enterprise-font: Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --enterprise-canvas: #fafafa;
+  --enterprise-sidebar: #fff;
+  --enterprise-ink: #121826;
+  --enterprise-text: #394150;
+  --enterprise-secondary: #4d5562;
+  --enterprise-muted: #667085;
+  --enterprise-icon: #848fa2;
+  --enterprise-line: #e5e7eb;
+  --enterprise-hover: #f3f4f6;
+  --enterprise-hover-fill: #e6e8ea;
+  --enterprise-subtle: #f8f9fb;
+  --enterprise-focus: #5278b5;
+  --enterprise-link: #315e96;
+  --enterprise-selected: #eef3fa;
+  --brand: #d23c33;
+  --brand-hover: #cf392f;
+  --brand-coral: #ff5b4c;
+  --brand-icon: #e94e41;
+  --brand-focus: #eb6354;
+  --brand-line: #ffada3;
+  --brand-line-soft: #f8cec8;
+  --brand-tint: #fff5f3;
+  --brand-gradient: linear-gradient(135deg, var(--brand-coral), #fa283b);
   --ink: var(--enterprise-ink);
   --muted: var(--enterprise-muted);
   --line: var(--enterprise-line);
   --canvas: var(--enterprise-canvas);
-  --shadow: 0 16px 50px rgba(36, 33, 30, 0.12);
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei',
-    sans-serif;
-  color: var(--enterprise-ink);
+  --primary: var(--enterprise-link);
+  --primary-soft: var(--enterprise-selected);
+  --shadow: 0 16px 50px rgb(18 24 38 / 10%);
+  font-family: var(--enterprise-font);
+  color: var(--ink);
+  background: var(--canvas);
+}
+.agent-first {
+  color: var(--enterprise-text);
+}
+.agent-first .ar-document {
+  font-family: inherit;
 }
 .agent-first .main-shell {
   background: var(--enterprise-canvas);
@@ -44,20 +65,16 @@
   color: var(--enterprise-ink);
 }
 
-/* Navigation stays quiet; coral identifies the action, not every label. */
+/* Sidebar navigation */
 .agent-first .new-task {
   background: #fff;
-  color: var(--enterprise-ink);
-  border-color: #e2e1df;
+  color: var(--enterprise-muted);
+  border-color: var(--enterprise-line);
   font-weight: 550;
   border-radius: 10px;
 }
 .agent-first .new-task > svg {
-  color: #e24a40;
-}
-.agent-first .new-task:hover {
-  background: #fffaf6;
-  border-color: #ddcabc;
+  flex: none;
 }
 .agent-first .nav-item,
 .agent-first .recent-chat {
@@ -66,10 +83,10 @@
 .agent-first .nav-item.active,
 .agent-first .recent-chat.active {
   color: var(--enterprise-ink);
-  background: #e9e9e6;
+  background: var(--enterprise-hover);
 }
 .agent-first .nav-item.active > svg {
-  color: #d64b40;
+  color: var(--enterprise-text);
 }
 .agent-first .nav-item:hover:not(.active),
 .agent-first .recent-chat:hover:not(.active) {
@@ -87,12 +104,11 @@
   color: var(--enterprise-ink);
 }
 .agent-first .avatar {
-  background: #e7e6e3;
-  color: #62615e;
+  background: #e5e7eb;
+  color: var(--enterprise-secondary);
 }
 
-/* The icon-only send control uses the reference's bright coral gradient.
-   Text-bearing primary controls use a deeper coral ramp for readable white text. */
+/* The send gradient and text-bearing actions share a warm coral hue. */
 .agent-first .send-button:not(:disabled) {
   color: #fff;
   background: var(--brand-gradient);
@@ -105,15 +121,15 @@
 }
 .agent-first .btn.primary {
   color: #fff;
-  background: var(--brand-action);
+  background: var(--brand);
 }
 .agent-first .btn.primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, #d33035, #ca2c37);
+  background: var(--brand-hover);
 }
 .agent-first .btn.primary:disabled,
 .agent-first .send-button:disabled {
-  background: #efefed;
-  color: #96969b;
+  background: var(--enterprise-hover);
+  color: #9aa3b2;
   opacity: 1;
 }
 .agent-first .btn.secondary {
@@ -123,9 +139,9 @@
 .agent-first .icon-btn {
   color: var(--enterprise-text);
 }
-.agent-first .btn.secondary:hover,
-.agent-first .btn.ghost:hover,
-.agent-first .icon-btn:hover {
+.agent-first .btn.secondary:enabled:hover,
+.agent-first .btn.ghost:enabled:hover,
+.agent-first .icon-btn:enabled:hover {
   background: var(--enterprise-hover);
 }
 
@@ -133,16 +149,40 @@
 .agent-first .workspace-home .composer,
 .agent-first .composer {
   background: #fff;
-  border-color: #e1e0de;
+  border-color: var(--enterprise-line);
   border-radius: 18px;
 }
-.agent-first .workspace-home .composer:focus-within,
-.agent-first .composer:focus-within {
-  border-color: var(--enterprise-focus);
+.agent-first .chat-compose > .composer {
+  border-color: var(--brand-line-soft);
+}
+@media (hover: hover) {
+  .agent-first .workspace-home .composer:hover:not(:focus-within) {
+    border-color: var(--brand-line);
+  }
+}
+.agent-first .workspace-home .composer:focus-within {
+  border-color: #cc7a70;
+}
+@media (forced-colors: active) {
+  .agent-first .workspace-home .composer:focus-within {
+    border-color: Highlight;
+  }
+}
+.agent-first .chat-compose > .composer:focus-within {
+  border-color: var(--brand-focus);
+}
+.agent-first .chat-compose > .composer:has(textarea:focus-visible) {
+  outline: 1px solid var(--brand-focus);
 }
 .agent-first .composer textarea {
   color: var(--enterprise-ink);
-  caret-color: #e64b42;
+  caret-color: var(--brand-icon);
+}
+.agent-first .workspace-home .composer textarea {
+  caret-color: auto;
+}
+.agent-first .composer-skill-control:not(.selected) .composer-tool > svg:first-child {
+  color: var(--brand-icon);
 }
 .agent-first .composer textarea::placeholder,
 .agent-first input::placeholder,
@@ -159,7 +199,7 @@
 }
 .agent-first .composer-quick-action > svg,
 .agent-first .home-example > svg {
-  color: #77777c;
+  color: var(--enterprise-muted);
 }
 .agent-first .composer-tool:hover,
 .agent-first .home-example:hover,
@@ -169,15 +209,15 @@
 .agent-first
   .composer-skill-option:hover:not([aria-pressed='true']):not(:disabled) {
   color: var(--enterprise-ink);
-  background: #f4f4f2;
+  background: var(--enterprise-hover);
 }
 .agent-first .composer-quick-action:hover {
   color: var(--enterprise-ink);
   background: #fff;
-  border-color: #c6c3bf;
+  border-color: #c4cbd4;
 }
 .agent-first .composer-quick-action:hover > svg {
-  color: #ce5647;
+  color: var(--enterprise-secondary);
 }
 .agent-first .composer-hint,
 .agent-first .home-examples-header h2,
@@ -192,7 +232,7 @@
   color: var(--enterprise-text);
 }
 
-/* Pale apricot belongs only to the selected AI context. */
+/* A selected skill or capability stays visible while the user edits a draft. */
 .agent-first .composer-capability-control.selected,
 .agent-first .composer-capability-control.selected > .composer-tool,
 .agent-first .composer-skill-control.selected,
@@ -200,27 +240,27 @@
 .agent-first .composer-tool[aria-expanded='true'],
 .agent-first .capability-option[aria-pressed='true'],
 .agent-first .composer-skill-option[aria-pressed='true'] {
-  color: var(--brand-context-ink);
-  background: var(--brand-soft);
+  color: var(--enterprise-link);
+  background: var(--enterprise-selected);
 }
 .agent-first .capability-option[aria-pressed='true'] small,
 .agent-first .composer-skill-option[aria-pressed='true'] small {
-  color: var(--brand-context-muted);
+  color: var(--enterprise-secondary);
 }
 .agent-first .composer-skill-clear {
-  color: var(--brand-context-ink);
+  color: var(--enterprise-link);
 }
 .agent-first .composer-skill-clear:hover {
-  background: #f5e5d7;
+  background: #dde8f5;
 }
 .agent-first .shortcut-menu {
-  box-shadow: 0 12px 38px rgba(36, 33, 30, 0.14);
+  box-shadow: 0 12px 38px rgb(18 24 38 / 12%);
 }
 
 /* Conversation reading surfaces use neutral ink. Status and chart colors remain semantic. */
 .agent-first .user-bubble {
-  background: #eeeeec;
-  color: #37373b;
+  background: #f0f2f5;
+  color: var(--enterprise-text);
 }
 .agent-first .assistant-text,
 .agent-first .result-title strong,
@@ -242,27 +282,28 @@
 }
 .agent-first .result-card:hover,
 .agent-first .history-row:hover {
-  background: #f6f6f4;
-  border-color: #d0cdc8;
+  background: var(--enterprise-subtle);
+  border-color: #cbd2dc;
 }
 .agent-first .result-icon,
 .agent-first .ref-chip {
-  background: #f2f2f0;
-  color: #626266;
+  background: var(--enterprise-hover);
+  color: var(--enterprise-secondary);
 }
 .agent-first .result-arrow {
-  color: #818184;
+  color: var(--enterprise-muted);
 }
-.agent-first .suggestions button,
-.agent-first .row-action {
-  color: #67615d;
+.agent-first .suggestions button {
+  color: var(--enterprise-secondary);
 }
 .agent-first .suggestions button:hover {
   background: var(--enterprise-hover);
   color: var(--enterprise-ink);
 }
-.agent-first .source-link {
-  color: #496b89;
+.agent-first .row-action,
+.agent-first .source-link,
+.agent-first .schedule-history-link {
+  color: var(--enterprise-link);
 }
 .agent-first .history-search {
   color: var(--enterprise-text);
@@ -293,11 +334,11 @@
 }
 .agent-first .rs-table th {
   color: var(--enterprise-muted);
-  background: #f6f6f4;
+  background: var(--enterprise-subtle);
   border-color: var(--enterprise-line);
 }
 .agent-first .rs-table td {
-  border-bottom-color: #efefed;
+  border-bottom-color: var(--enterprise-hover);
 }
 .agent-first .rs-table td > small,
 .agent-first .rs-list-footer,
@@ -307,6 +348,7 @@
 .agent-first .dw-page,
 .agent-first .dw-panel,
 .agent-first .dw-results {
+  --dw-blue: var(--enterprise-link);
   --dw-ink: var(--enterprise-ink);
   --dw-muted: var(--enterprise-muted);
   --dw-line: var(--enterprise-line);
@@ -330,10 +372,38 @@
 .agent-first .tabs > button.active,
 .agent-first .as-tabs > button.active {
   color: var(--enterprise-ink);
-  border-bottom-color: #e95447;
+  border-bottom-color: var(--enterprise-link);
 }
 .agent-first .as-tabs > button.active::after {
-  background: #e95447;
+  background: var(--enterprise-link);
+}
+
+@media (hover: hover) {
+  .agent-first :is(.pf-source-switch, .sc-type-filter) > button[aria-pressed='false']:enabled:hover,
+  .agent-first .sc-favorites[aria-pressed='false']:enabled:hover {
+    background: var(--enterprise-hover-fill);
+    color: var(--enterprise-ink);
+  }
+
+  .agent-first :is(.tabs, .as-tabs, .sc-management-tabs, .rc-detail-tabs) > button:enabled:hover:not(.active, [aria-selected='true']) {
+    color: var(--enterprise-ink);
+    box-shadow: inset 0 -2px 0 #aab4c1;
+  }
+
+  .agent-first .knowledge-row:enabled:hover {
+    background: var(--enterprise-hover);
+  }
+
+  .agent-first .knowledge-row:enabled:hover :is(strong, svg:last-child),
+  .agent-first .dw-document-main:enabled:hover :is(.dw-document-title strong, .dw-card-chevron) {
+    color: var(--enterprise-link);
+  }
+
+  .agent-first :is(.pf-source-details, .rc-sample-test, .rc-migration-history) > summary:hover {
+    color: var(--enterprise-link);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
 }
 .agent-first .sh-card,
 .agent-first .sh-search,
@@ -343,7 +413,7 @@
   border-color: var(--enterprise-line);
 }
 .agent-first .sh-card:hover {
-  border-color: #cecac5;
+  border-color: #cbd2dc;
   box-shadow: none;
 }
 .agent-first .sh-card-title,
@@ -383,11 +453,11 @@
   color: var(--enterprise-muted);
 }
 .agent-first .sh-tags > span {
-  background: #f3f3f1;
+  background: var(--enterprise-hover);
 }
 .agent-first ::selection {
-  background: #f5e6db;
-  color: #493529;
+  background: #dbe8fb;
+  color: var(--enterprise-ink);
 }
 .agent-first :is(button, a, input, select, textarea, summary):focus-visible {
   outline: 2px solid var(--enterprise-focus);
@@ -409,9 +479,6 @@
   height: 100%;
   object-fit: contain;
   user-select: none;
-}
-.agent-first .workspace-home {
-  grid-template-rows: minmax(min-content, 0.9fr) auto minmax(min-content, 1.1fr);
 }
 .agent-first .home-greeting {
   flex-direction: column;
@@ -467,7 +534,7 @@
 }
 .reply-mark {
   border-radius: 9px;
-  background: #f1f1ef;
+  background: var(--enterprise-hover);
   padding: 1px;
 }
 .agent-first .assistant-name .xiaozhi-mark img {

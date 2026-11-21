@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import {
   useSlice,
   useWorkspace,
@@ -10,14 +10,21 @@ import './analytics-skills.css';
 import './skills-catalog.css';
 import { useToolCatalog } from './tool-catalog';
 import { ToolDetailPanel } from './ToolDetailPanel';
+import { CatalogMark } from './CatalogMark';
+import { SkillDocument } from './SkillDocument';
+import { SkillFiles } from './SkillFiles';
+import './skill-detail.css';
 import {
   available,
+  catalogArea,
+  type CatalogArea,
   currentVersion,
   filterCatalog,
   formatCatalogUpdatedAt,
   readCatalogRoute,
   reviewStage,
   skillCatalogItem,
+  skillDocumentText,
   skillUnavailableReason,
   writeCatalogRoute,
   type CatalogItem,
@@ -262,7 +269,7 @@ function downloadSkill(skill: Skill, v: SkillVersion) {
     link.click();
     return;
   }
-  const content = `# ${skill.title}\n\n版本：${v.version}\n类别：${skill.category}\n维护者：${skill.owner}\n发布方式：${v.mode === 'runnable' ? '可调用' : '仅存储'}\n\n${v.instructions || skill.instructions}\n\n${v.note}\n`;
+  const content = `# ${skill.title}\n\n版本：${v.version}\n类别：${skill.category}\n维护者：${skill.owner}\n发布方式：${v.mode === 'runnable' ? '可调用' : '仅存储'}\n\n${skillDocumentText(skill, v)}\n\n${v.note}\n`;
   const url = URL.createObjectURL(
     new Blob([content], { type: 'text/markdown;charset=utf-8' }),
   );
@@ -450,31 +457,37 @@ function SkillEnvironment() {
   );
 }
 
-const catalogSessionKey = 'caixiaozhi-skills-catalog';
-function initialCatalogRoute(): CatalogRoute {
-  if (location.hash === '#skills') {
+const catalogSessionKey = (area: CatalogArea) => `caixiaozhi-${area}-catalog`;
+
+function initialCatalogRoute(area: CatalogArea): CatalogRoute {
+  const hash = location.hash;
+  if (hash === `#${area}`) {
     try {
-      const saved = sessionStorage.getItem(catalogSessionKey);
-      if (saved)
-        return {
-          ...readCatalogRoute(saved),
-          view: 'catalog',
-          toolId: '',
-          action: 'tool',
-        };
-    } catch {
-      /* Session storage may be unavailable in a private browser. */
-    }
+      const saved = sessionStorage.getItem(catalogSessionKey(area));
+      if (saved && catalogArea(saved) === area) {
+        return { ...readCatalogRoute(saved), view: 'catalog', type: 'all', toolId: '', action: 'tool' };
+      }
+    } catch { /* The URL also works without session storage. */ }
   }
-  return readCatalogRoute(location.hash);
+  return { ...readCatalogRoute(hash), type: 'all' };
 }
 
-export function SkillsPage() {
+export function SkillsPage({ area = 'skills' }: { area?: CatalogArea }) {
   const w = useWorkspace();
   const [hub, setHub] = useHub();
-  const tools = useToolCatalog();
-  const [route, setRoute] = useState(initialCatalogRoute);
+  const applications = area === 'light-apps';
+  const tools = useToolCatalog(applications);
+  const [route, setRoute] = useState(() => initialCatalogRoute(area));
   const root = useRef<HTMLDivElement>(null);
+  const options = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const dismiss = (event: PointerEvent) => {
+      if (options.current?.open && event.target instanceof Node && !options.current.contains(event.target))
+        options.current.open = false;
+    };
+    document.addEventListener('pointerdown', dismiss);
+    return () => document.removeEventListener('pointerdown', dismiss);
+  }, []);
   const restoringScroll = useRef(true);
   const routeRef = useRef(route);
   routeRef.current = route;
@@ -482,7 +495,7 @@ export function SkillsPage() {
     !!route.toolId || ['upload', 'requests'].includes(route.action);
   const listRoute = { ...route, toolId: '', action: 'tool' };
   const scrollKey = (state: CatalogRoute) =>
-    `skills-scroll:${writeCatalogRoute({ ...state, toolId: '', action: 'tool' })}`;
+    `skills-scroll:${writeCatalogRoute({ ...state, toolId: '', action: 'tool' }, area)}`;
   const scroller = () => {
     let node = root.current?.parentElement;
     while (node) {
@@ -511,7 +524,7 @@ export function SkillsPage() {
     saveScroll();
     const next = { ...route, ...patch };
     setRoute(next);
-    const hash = writeCatalogRoute(next);
+    const hash = writeCatalogRoute(next, area);
     if (replace)
       history.replaceState(
         history.state,
@@ -521,7 +534,7 @@ export function SkillsPage() {
     else location.hash = hash;
     if (!next.toolId && !['upload', 'requests'].includes(next.action)) {
       try {
-        sessionStorage.setItem(catalogSessionKey, hash);
+        sessionStorage.setItem(catalogSessionKey(area), hash);
       } catch {
         /* URL remains the source of truth. */
       }
@@ -529,13 +542,12 @@ export function SkillsPage() {
   };
   useEffect(() => {
     const onHash = () => {
-      if (location.hash.split('?')[0] === '#skills')
-        setRoute(readCatalogRoute(location.hash));
+      if (catalogArea(location.hash) === area) setRoute(initialCatalogRoute(area));
     };
     window.addEventListener('hashchange', onHash);
     window.addEventListener('scroll', saveScroll, true);
-    if (location.hash === '#skills') {
-      const hash = writeCatalogRoute(routeRef.current);
+    if (location.hash === `#${area}`) {
+      const hash = writeCatalogRoute(routeRef.current, area);
       history.replaceState(
         history.state,
         '',
@@ -574,10 +586,9 @@ export function SkillsPage() {
     };
   }, [working, currentScrollKey, tools.loading]);
 
-  const items: CatalogItem[] = [
-    ...hub.skills.map(skillCatalogItem),
-    ...tools.items.map((item) => ({ ...item, type: 'tool' as const })),
-  ];
+  const items: CatalogItem[] = applications
+    ? tools.items.map((item) => ({ ...item, type: 'tool' as const }))
+    : hub.skills.map(skillCatalogItem);
   const visibleItems = filterCatalog(items, route);
   const categoryOptions = [
     '全部分类',
@@ -593,7 +604,7 @@ export function SkillsPage() {
   ];
   const openDetail = (item: CatalogItem) => {
     saveScroll();
-    if (!item.canView && route.view === 'manage') {
+    if ((!item.canView && route.view === 'manage') || (route.view === 'catalog' && item.type === 'tool' && item.status !== 'published' && item.canManage)) {
       manage(item);
       return;
     }
@@ -623,23 +634,20 @@ export function SkillsPage() {
   const openTool = (item: CatalogItem, action = 'tool') =>
     navigate({ toolId: item.id, action });
   const manage = (item: CatalogItem) => {
+    const reviewing = route.view === 'manage' && route.management === 'review';
     if (item.type === 'tool')
-      openTool(item, route.management === 'review' ? 'review' : 'manage');
+      openTool(item, reviewing ? 'review' : 'manage');
     else
       w.openPanel({
         kind: 'governance',
         id: item.id,
-        title: `${item.name} · ${route.management === 'review' ? '审核发布' : '版本管理'}`,
-        data: { mode: route.management === 'review' ? 'review' : 'manage' },
+        title: `${item.name} · ${reviewing ? '审核发布' : '版本管理'}`,
+        data: { mode: reviewing ? 'review' : 'manage' },
       });
   };
   const useItem = (item: CatalogItem) => {
     if (!item.canUse) {
       openDetail(item);
-      return;
-    }
-    if (item.type === 'tool') {
-      openTool(item);
       return;
     }
     const skill = hub.skills.find((entry) => entry.id === item.id);
@@ -665,6 +673,27 @@ export function SkillsPage() {
       archived: '已停用',
     })[value] || value;
 
+  const assetLabel = applications ? '轻应用' : '技能';
+  const hasFilters = route.favorites || route.category !== '全部分类';
+  const uploadButton = (!applications || tools.canUpload) && (
+    <Button icon="upload" onClick={() => {
+      if (applications) navigate({ action: 'upload' });
+      else w.openPanel({ kind: 'governance', title: '上传技能', data: { mode: 'upload' } });
+    }}>上传{assetLabel}</Button>
+  );
+  const searchField = (
+    <label className={route.view === 'manage' ? 'sc-search' : 'et-search'}>
+      <Icon name="search" size={16} />
+      <input type="search" aria-label={'搜索' + assetLabel} placeholder={'搜索' + assetLabel + '名称或用途'}
+        value={route.search} onChange={(event) => navigate({search: event.target.value}, true)} />
+    </label>
+  );
+  const categoryField = (
+    <select aria-label="业务分类" value={route.category}
+      onChange={(event) => navigate({category: event.target.value}, true)}>
+      {[...new Set([...categoryOptions, route.category])].map(category => <option key={category}>{category}</option>)}
+    </select>
+  );
   return (
     <div className="skills-catalog" ref={root} data-view={route.view}>
       {working ? (
@@ -678,61 +707,43 @@ export function SkillsPage() {
         />
       ) : (
         <>
-          <div className="sc-toolbar">
-            {route.view === 'manage' ? (
-              <>
-                <Button
-                  variant="ghost"
-                  icon="back"
-                  onClick={() => navigate({ view: 'catalog' })}
-                >
-                  返回目录
-                </Button>
-                <h2>管理</h2>
-                <div className="sc-toolbar-actions">
-                  {tools.identity?.role === 'admin' && (
-                    <Button
-                      variant="ghost"
-                      onClick={() => navigate({ action: 'requests' })}
-                    >
-                      访问申请
-                    </Button>
-                  )}
-                  {tools.canUpload && (
-                    <Button
-                      icon="upload"
-                      onClick={() => navigate({ action: 'upload' })}
-                    >
-                      上传工具
-                    </Button>
-                  )}
-                  <Button
-                    variant="primary"
-                    icon="upload"
-                    onClick={() =>
-                      w.openPanel({
-                        kind: 'governance',
-                        title: '上传技能',
-                        data: { mode: 'upload' },
-                      })
-                    }
-                  >
-                    上传技能
-                  </Button>
+          {route.view === 'catalog' ? (
+            <div className="et-controls sc-catalog-controls">
+              <div className="et-filters" role="group" aria-label={assetLabel + '范围'}>
+                <button aria-pressed={route.scope === 'all'} onClick={() => navigate({scope:'all'})}>全部</button>
+                <button aria-pressed={route.scope === 'mine'} onClick={() => navigate({scope:'mine'})}>我创建的</button>
+              </div>
+              {searchField}
+              <details className="sc-options" ref={options} onKeyDown={event => {
+                if (event.key === 'Escape' && event.currentTarget.open) {
+                  event.preventDefault();
+                  event.currentTarget.open = false;
+                  event.currentTarget.querySelector('summary')?.focus();
+                }
+              }}>
+                <summary title="筛选与管理">更多{hasFilters && <span aria-label="已启用筛选" className="sc-active-dot" />}<Icon name="chevron" size={13} /></summary>
+                <div className="sc-options-body">
+                  <label>业务分类{categoryField}</label>
+                  <label className="sc-check"><input type="checkbox" checked={route.favorites}
+                    onChange={event => navigate({favorites:event.target.checked}, true)} />仅看收藏</label>
+                  <button type="button" onClick={() => navigate({view:'manage', favorites:false})}>
+                    <Icon name="settings" size={15} />管理{assetLabel}
+                  </button>
                 </div>
-              </>
-            ) : (
-              <>
-                <span className="sc-count">{visibleItems.length} 项</span>
-                <Button
-                  icon="settings"
-                  onClick={() => navigate({ view: 'manage', favorites: false })}
-                >
-                  管理
-                </Button>
-              </>
-            )}
-          </div>
+              </details>
+              {uploadButton}
+            </div>
+          ) : (
+            <div className="sc-toolbar">
+              <Button variant="ghost" icon="back" onClick={() => navigate({view:'catalog'})}>返回目录</Button>
+              <h2>管理</h2>
+              <div className="sc-toolbar-actions">
+                {applications && tools.identity?.role === 'admin' &&
+                  <Button variant="ghost" onClick={() => navigate({action:'requests'})}>访问申请</Button>}
+                {uploadButton}
+              </div>
+            </div>
+          )}
           {route.view === 'manage' && (
             <div
               className="sc-management-tabs"
@@ -744,7 +755,7 @@ export function SkillsPage() {
                 aria-selected={route.management === 'mine'}
                 onClick={() => navigate({ management: 'mine' })}
               >
-                我创建的
+                {applications && tools.identity?.role === 'admin' ? '可管理' : '我创建的'}
               </button>
               <button
                 role="tab"
@@ -758,124 +769,71 @@ export function SkillsPage() {
               )}
             </div>
           )}
-          <div className="sc-filters">
-            <label className="sc-search">
-              <Icon name="search" size={17} />
-              <input
-                type="search"
-                aria-label="搜索技能与工具"
-                placeholder="搜索名称或用途"
-                value={route.search}
-                onChange={(event) =>
-                  navigate({ search: event.target.value }, true)
-                }
-              />
-            </label>
-            <div className="sc-type-filter" role="group" aria-label="能力类型">
-              {(
-                [
-                  ['all', '全部'],
-                  ['skill', '技能'],
-                  ['tool', '工具'],
-                ] as const
-              ).map(([type, label]) => (
-                <button
-                  key={type}
-                  aria-pressed={route.type === type}
-                  onClick={() => navigate({ type }, true)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <select
-              aria-label="业务分类"
-              value={route.category}
-              onChange={(event) =>
-                navigate({ category: event.target.value }, true)
-              }
-            >
-              {categoryOptions.map((category) => (
-                <option key={category}>{category}</option>
-              ))}
-            </select>
-            {route.view === 'catalog' && (
-              <button
-                className="sc-favorites"
-                aria-pressed={route.favorites}
-                onClick={() => navigate({ favorites: !route.favorites }, true)}
-              >
-                <Icon name="star" size={16} />
-                仅看收藏
-              </button>
-            )}
-          </div>
+          {route.view === 'manage' && <div className="sc-filters">{searchField}{categoryField}</div>}
           {tools.loading && (
             <div className="sc-feedback" role="status">
-              工具目录加载中…
+              轻应用目录加载中…
             </div>
           )}
           {tools.error && (
             <div className="sc-feedback sc-error" role="alert">
-              <span>工具目录加载失败</span>
+              <span>轻应用目录加载失败</span>
               <Button onClick={() => void tools.refresh()}>重试</Button>
             </div>
           )}
           {route.view === 'catalog' ? (
             <div className="sc-grid">
               {visibleItems.map((item) => (
-                <article className="sc-card" key={`${item.type}:${item.id}`}>
+                <article className={item.type === 'skill' ? 'sc-card sc-skill-card' : 'sc-card'} key={item.id}>
                   <div className="sc-card-heading">
-                    <span className="sc-icon">
-                      <Icon name={item.icon} size={21} />
-                    </span>
-                    <button
-                      className="sc-card-name"
-                      onClick={() => openDetail(item)}
-                    >
-                      {item.name}
-                    </button>
-                    <button
-                      className="sc-star"
+                    <CatalogMark kind={item.type === 'tool' ? 'app' : 'skill'} id={item.id} />
+                    <div className="sc-card-identity">
+                      <button
+                        className="sc-card-name"
+                        aria-haspopup={item.type === 'skill' ? 'dialog' : undefined}
+                        title={item.type === 'skill' ? item.unavailableReason || undefined : undefined}
+                        onClick={(event) => {
+                          event.currentTarget.focus({ preventScroll: true });
+                          openDetail(item);
+                        }}
+                      >{item.name}</button>
+                      <small>{item.category} · {item.owner}</small>
+                    </div>
+                    <button className="sc-star"
                       aria-label={`${item.favorite ? '取消收藏' : '收藏'}${item.name}`}
-                      aria-pressed={item.favorite}
-                      onClick={() => void toggleFavorite(item)}
-                    >
+                      aria-pressed={item.favorite} onClick={() => void toggleFavorite(item)}>
                       <Icon name="star" size={17} />
                     </button>
                   </div>
-                  <div className="sc-card-labels">
-                    <span>{item.type === 'skill' ? '技能' : '工具'}</span>
-                    <span>{item.category}</span>
-                  </div>
                   <p className="sc-description">{item.description}</p>
-                  <div className="sc-meta">
-                    <span>{item.owner}</span>
-                    <span>v{item.version}</span>
-                  </div>
+                  {item.formats && (
+                    <div className="sc-formats">
+                      <span><small>输入</small>{item.formats.input}</span>
+                      <Icon name="arrow" size={13} />
+                      <span><small>输出</small>{item.formats.output}</span>
+                    </div>
+                  )}
+                  {route.scope === 'mine' && item.canManage && item.status === 'published' && item.latestStatus !== 'published' &&
+                    <button className="sc-pending" onClick={() => manage(item)}>v{item.latestVersion} · {labelForStatus(item.latestStatus)}<Icon name="chevron" size={12} /></button>}
                   <div className="sc-card-footer">
-                    <span
-                      className={`sc-availability ${item.canUse ? 'available' : ''}`}
-                      title={item.unavailableReason}
-                    >
-                      {item.canUse
-                        ? '可使用'
-                        : item.type === 'skill'
-                          ? item.availabilityState === 'reference'
-                            ? '仅供查阅'
-                            : item.availabilityState === 'denied'
-                              ? '无使用权限'
-                              : '暂不可用'
-                          : '无使用权限'}
-                    </span>
-                    <Button variant="ghost" onClick={() => useItem(item)}>
-                      {item.canUse
-                        ? item.type === 'skill'
-                          ? '在对话中使用'
-                          : '打开工具'
-                        : '查看详情'}
-                      <Icon name="arrow" size={14} />
-                    </Button>
+                    {item.status !== 'published' ? <span className={'sc-status sc-status-' + item.status}>{labelForStatus(item.status)}</span> : (
+                      <span className={`sc-availability ${item.canUse ? 'available' : ''}`} title={item.unavailableReason}>
+                        {item.canUse ? '可使用' : item.availabilityState === 'reference' ? '仅供查阅'
+                          : item.availabilityState === 'unavailable' ? '暂不可用' : '无使用权限'}
+                      </span>
+                    )}
+                    {item.status !== 'published' && item.canManage ? (
+                      <Button variant="ghost" onClick={() => manage(item)}>管理版本<Icon name="chevron" size={14} /></Button>
+                    ) : item.type === 'tool' && item.canUse ? (
+                      <a className="btn ghost" target="_blank" rel="noopener" title="在新窗口打开" onClick={saveScroll}
+                        href={writeCatalogRoute({ ...route, toolId: item.id, action:'tool' }, 'light-apps')}>
+                        打开应用<Icon name="external" size={14} />
+                      </a>
+                    ) : (
+                      <Button variant="ghost" onClick={() => useItem(item)}>
+                        {item.canUse ? '在对话中使用' : '查看详情'}<Icon name={item.canUse ? 'chat' : 'chevron'} size={14} />
+                      </Button>
+                    )}
                   </div>
                 </article>
               ))}
@@ -911,7 +869,7 @@ export function SkillsPage() {
                         </button>
                         <small>{item.owner}</small>
                       </td>
-                      <td>{item.type === 'skill' ? '技能' : '工具'}</td>
+                      <td>{item.type === 'skill' ? '技能' : '轻应用'}</td>
                       <td>
                         {item.status === 'published' ? `v${item.version}` : '—'}
                       </td>
@@ -946,19 +904,17 @@ export function SkillsPage() {
               </table>
             </div>
           )}
-          {!visibleItems.length && !tools.loading && (
+          {!visibleItems.length && !tools.loading && !tools.error && (
             <Empty
               title={
                 route.view === 'manage'
                   ? route.management === 'review'
                     ? '暂无可审核的资产'
                     : '暂无符合条件的资产'
-                  : '未找到符合条件的技能或工具'
+                  : route.scope === 'mine' && !route.search && !hasFilters ? '尚未创建' + assetLabel : '未找到符合条件的' + assetLabel
               }
             >
-              <Button variant="ghost" onClick={clearFilters}>
-                清除筛选
-              </Button>
+              {(hasFilters || route.search) && <Button variant="ghost" onClick={clearFilters}>清除筛选</Button>}
             </Empty>
           )}
         </>
@@ -1159,184 +1115,264 @@ export function SkillPanel({ panel }: { panel: PanelSpec }) {
   return <SkillContent panel={panel} />;
 }
 
+const builtInQuestions: Record<string, string> = {
+  'monthly-analysis':
+    '请汇总市场部 10 月的差旅费用，与 9 月比较，并列出需要核实的变化。',
+  'invoice-check':
+    '请核对这份报销单和随附票据，列出有疑点的项目以及我还需要补交的材料。',
+  'travel-guide':
+    '下周从杭州去上海出差两天，住宿费按什么标准报销？请附上制度依据。',
+};
+
 function SkillContent({ panel }: { panel: PanelSpec }) {
-  const w = useWorkspace(),
-    [hub, setHub] = useHub();
+  const w = useWorkspace();
+  const [hub, setHub] = useHub();
   const skill = hub.skills.find(
     (s) => s.id === (panel.id || panel.data?.skillId),
   );
-  const [tab, setTab] = useState('overview'),
-    [selectedVersion, setSelectedVersion] = useState(
-      String(panel.data?.version || ''),
-    );
+  const [tab, setTab] = useState('overview');
+  const [selectedVersion, setSelectedVersion] = useState(
+    String(panel.data?.version || ''),
+  );
+  const readerId = useId();
+  const scrollArea = useRef<HTMLDivElement>(null);
   const version =
     skill?.versions.find((v) => v.version === selectedVersion) ||
     (skill ? currentVersion(skill) : undefined);
   if (!skill?.view || !version) return <Empty title="技能不可查看" />;
-  const pick = () => selectSkillInConversation(w, skill, version);
+
+  const canUse = available(skill, version);
+  const downloadLabel = version.file?.id ? '下载原文件' : '下载说明';
+  const example = canUse && !version.file && builtInQuestions[skill.id];
+  const tabs = [
+    { id: 'overview', label: '技能说明' },
+    ...(version.file ? [{ id: 'files', label: '技能文件' }] : []),
+    { id: 'versions', label: '版本记录' },
+    { id: 'access', label: '权限与兼容' },
+  ];
+  const activeTab = tabs.some((t) => t.id === tab) ? tab : 'overview';
+  const switchTab = (value: string) => {
+    setTab(value);
+    scrollArea.current?.scrollTo({ top: 0 });
+  };
+  const selectVersion = (value: string) => {
+    setSelectedVersion(value);
+    if (
+      tab === 'files' &&
+      !skill.versions.find((v) => v.version === value)?.file
+    )
+      setTab('overview');
+  };
+
   return (
-    <div className="sh-detail">
-      <div className="sh-detail-intro">
-        <span className="sh-skill-icon">
-          <Icon name={skill.icon} size={26} />
-        </span>
-        <div>
-          <strong>{skill.title}</strong>
-          <p>
-            {skill.owner} · {skill.category}
-          </p>
-        </div>
-        <button
-          className={`sh-star ${skill.favorite ? 'selected' : ''}`}
-          aria-label={skill.favorite ? '取消收藏' : '收藏技能'}
-          onClick={() =>
-            setHub((p) => ({
-              ...p,
-              skills: p.skills.map((s) =>
-                s.id === skill.id ? { ...s, favorite: !s.favorite } : s,
-              ),
-            }))
-          }
-        >
-          <Icon name="star" size={19} />
-        </button>
-      </div>
-      <p>{skill.description}</p>
-      <div className="sh-versionline">
-        <select
-          aria-label="技能版本"
-          value={version.version}
-          onChange={(e) => setSelectedVersion(e.target.value)}
-        >
-          {skill.versions.map((v) => (
-            <option key={v.version} value={v.version}>
-              v{v.version} · {statusLabel[v.status]}
-            </option>
-          ))}
-        </select>
-        <VersionBadge version={version} />
-      </div>
-      <p
-        className="sc-detail-availability"
-        data-available={available(skill, version)}
-      >
-        {available(skill, version)
-          ? '可在对话中使用'
-          : skillUnavailableReason(skill, version)}
-      </p>
-      <div className="as-tabs">
-        <button
-          className={tab === 'overview' ? 'active' : ''}
-          onClick={() => setTab('overview')}
-        >
-          技能说明
-        </button>
-        <button
-          className={tab === 'versions' ? 'active' : ''}
-          onClick={() => setTab('versions')}
-        >
-          版本记录
-        </button>
-        <button
-          className={tab === 'access' ? 'active' : ''}
-          onClick={() => setTab('access')}
-        >
-          权限与兼容
-        </button>
-      </div>
-      {tab === 'overview' ? (
-        <>
-          <Section title="输入与输出">
-            <div className="sh-instructions">
-              {version.instructions || skill.instructions}
+    <div className="sd-reader">
+      <div className="sd-scroll" ref={scrollArea}>
+        <header className="sd-summary">
+          <div className="sd-identity">
+            <CatalogMark kind="skill" id={skill.id} />
+            <div>
+              <h3>{skill.title}</h3>
+              <p>{[skill.category, skill.owner].filter(Boolean).join(' · ')}</p>
             </div>
-          </Section>
-          <Section title="版本备注">
-            <p>{version.note}</p>
-          </Section>
-          {version.file && (
-            <div className="sh-file-info">
-              <Icon name="file" />
-              <div>
-                <strong>{version.file.name}</strong>
-                <small>
-                  {(version.file.size / 1024).toFixed(1)} KB ·
-                  {version.file.id ? '原文件已保存' : '内置技能资料'}
-                </small>
-              </div>
-            </div>
-          )}
-        </>
-      ) : tab === 'versions' ? (
-        <div className="sh-version-list">
-          {skill.versions.map((v) => (
             <button
-              key={v.version}
-              className={v.version === version.version ? 'active' : ''}
-              onClick={() => setSelectedVersion(v.version)}
+              type="button"
+              className="sd-favorite"
+              aria-pressed={skill.favorite}
+              aria-label={skill.favorite ? '取消收藏' : '收藏技能'}
+              title={skill.favorite ? '取消收藏' : '收藏技能'}
+              onClick={() =>
+                setHub((p) => ({
+                  ...p,
+                  skills: p.skills.map((s) =>
+                    s.id === skill.id ? { ...s, favorite: !s.favorite } : s,
+                  ),
+                }))
+              }
             >
-              <div>
-                <strong>v{v.version}</strong>
-                <VersionBadge version={v} />
-                <time>{v.updated}</time>
-              </div>
-              <p>{v.note}</p>
+              <Icon name="star" size={18} />
+            </button>
+          </div>
+          {skill.description && (
+            <p className="sd-description">{skill.description}</p>
+          )}
+          <div className="sd-meta">
+            {skill.versions.length > 1 ? (
+              <label className="sd-version-select">
+                <select
+                  aria-label="技能版本"
+                  value={version.version}
+                  onChange={(e) => selectVersion(e.target.value)}
+                >
+                  {skill.versions.map((v) => (
+                    <option key={v.version} value={v.version}>
+                      v{v.version}
+                    </option>
+                  ))}
+                </select>
+                <Icon name="down" size={13} />
+              </label>
+            ) : (
+              <span className="sd-version-value">v{version.version}</span>
+            )}
+            {version.updated && (
+              <span>
+                更新于 <time>{formatCatalogUpdatedAt(version.updated)}</time>
+              </span>
+            )}
+            <span className="sd-state" data-available={canUse}>
+              {canUse
+                ? '可在对话中使用'
+                : version.status === 'published'
+                  ? skillUnavailableReason(skill, version)
+                  : statusLabel[version.status]}
+            </span>
+          </div>
+        </header>
+        <div className="sd-tabs" role="tablist" aria-label="技能详情内容">
+          {tabs.map((t, index) => (
+            <button
+              type="button"
+              role="tab"
+              key={t.id}
+              id={readerId + '-' + t.id}
+              aria-selected={activeTab === t.id}
+              aria-controls={readerId + '-content'}
+              tabIndex={activeTab === t.id ? 0 : -1}
+              onClick={() => switchTab(t.id)}
+              onKeyDown={(e) => {
+                let next;
+                if (e.key === 'ArrowRight') next = (index + 1) % tabs.length;
+                else if (e.key === 'ArrowLeft')
+                  next = (index + tabs.length - 1) % tabs.length;
+                else if (e.key === 'Home') next = 0;
+                else if (e.key === 'End') next = tabs.length - 1;
+                else return;
+                e.preventDefault();
+                switchTab(tabs[next]!.id);
+                e.currentTarget.parentElement
+                  ?.querySelectorAll('button')
+                  [next]?.focus();
+              }}
+            >
+              {t.label}
             </button>
           ))}
         </div>
-      ) : (
-        <>
-          <Section title="我的权限">
-            <div className="sh-permissions">
-              {[
-                ['查看内容', skill.view],
-                ['下载说明', skill.download],
-                ['在对话中调用', available(skill, version)],
-              ].map(([label, yes]) => (
-                <div key={String(label)}>
-                  <Icon name={yes ? 'check' : 'lock'} size={16} />
-                  <span>{label}</span>
-                  <Badge tone={yes ? 'success' : 'neutral'}>
-                    {yes ? '允许' : '不可用'}
-                  </Badge>
-                </div>
+        <div
+          id={readerId + '-content'}
+          role="tabpanel"
+          aria-labelledby={readerId + '-' + activeTab}
+          className="sd-content"
+          tabIndex={0}
+          key={activeTab + version.version}
+        >
+          {activeTab === 'overview' && (
+            <>
+              <SkillDocument skill={skill} version={version} />
+              {example && (
+                <details className="sd-example">
+                  <summary>
+                    <Icon name="chat" size={16} />
+                    提问示例
+                    <Icon name="down" size={15} />
+                  </summary>
+                  <p>{example}</p>
+                </details>
+              )}
+            </>
+          )}
+          {activeTab === 'files' && version.file && (
+            <SkillFiles
+              file={version.file}
+              instructions={skillDocumentText(skill, version)}
+            />
+          )}
+          {activeTab === 'versions' && (
+            <div className="sd-history">
+              {skill.versions.map((v) => (
+                <button
+                  type="button"
+                  key={v.version}
+                  aria-pressed={v.version === version.version}
+                  onClick={() => selectVersion(v.version)}
+                >
+                  <span className="sd-history-top">
+                    <strong>v{v.version}</strong>
+                    <VersionBadge version={v} />
+                    <time>{formatCatalogUpdatedAt(v.updated)}</time>
+                  </span>
+                  {v.note && <span>{v.note}</span>}
+                </button>
               ))}
+              {!!version.events?.length && (
+                <section>
+                  <h3>v{version.version} 变更记录</h3>
+                  <ul>
+                    {version.events.map((event, i) => (
+                      <li key={i}>{event}</li>
+                    ))}
+                  </ul>
+                </section>
+              )}
             </div>
-          </Section>
-          <Section title="版本检查">
-            <dl className="as-basis">
-              <dt>业务审核</dt>
-              <dd>{conclusion(version.business)}</dd>
-              <dt>安全结论</dt>
-              <dd>{conclusion(version.security)}</dd>
-              <dt>运行兼容</dt>
-              <dd>{conclusion(version.compatibility)}</dd>
-              <dt>发布方式</dt>
-              <dd>{version.mode === 'runnable' ? '可调用' : '仅存储'}</dd>
-            </dl>
-          </Section>
-        </>
-      )}
-      {version.mode === 'storage' && (
-        <div className="notice sh-notice">
-          <Icon name="folder" size={17} />
-          <span>此版本仅存储，可查看资料，暂不可在对话中调用。</span>
+          )}
+          {activeTab === 'access' && (
+            <div className="sd-access">
+              <section>
+                <h3>我的权限</h3>
+                <dl>
+                  {[
+                    ['查看内容', skill.view],
+                    [downloadLabel, skill.download],
+                    ['在对话中调用', canUse],
+                  ].map(([label, yes]) => (
+                    <div key={String(label)}>
+                      <dt>{label}</dt>
+                      <dd>
+                        <Icon name={yes ? 'check' : 'lock'} size={15} />
+                        {yes ? '允许' : '不可用'}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+              <section>
+                <h3>版本检查</h3>
+                <dl>
+                  {[
+                    ['发布状态', statusLabel[version.status]],
+                    ['业务审核', conclusion(version.business)],
+                    ['安全结论', conclusion(version.security)],
+                    ['运行兼容', conclusion(version.compatibility)],
+                    [
+                      '发布方式',
+                      version.mode === 'runnable' ? '可调用' : '仅存储',
+                    ],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <dt>{label}</dt>
+                      <dd>{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+            </div>
+          )}
+          {version.status === 'returned' && (
+            <p className="sd-warning">
+              此版本已退回并锁定。请创建新版本后重新申请。{version.note}
+            </p>
+          )}
         </div>
-      )}
-      {!skill.download && <p className="as-footnote">当前账号没有下载权限。</p>}
-      {version.status === 'returned' && (
-        <div className="notice warning sh-notice">
-          <Icon name="lock" size={17} />
-          <span>此版本已退回并锁定。修改后需创建新版本重新申请。</span>
-        </div>
-      )}
-      <div className="as-panel-footer sh-detail-actions">
+      </div>
+      <footer className="sd-actions">
         <Button
           icon="download"
-          disabled={!skill.download || !skill.view}
+          disabled={!skill.download}
+          title={skill.download ? downloadLabel : '当前账号没有下载权限'}
           onClick={() => downloadSkill(skill, version)}
         >
-          下载说明
+          {downloadLabel}
         </Button>
         {skill.owner === '我' && (
           <Button
@@ -1353,12 +1389,16 @@ function SkillContent({ panel }: { panel: PanelSpec }) {
             管理版本
           </Button>
         )}
-        {available(skill, version) && (
-          <Button variant="primary" icon="plus" onClick={pick}>
+        {canUse && (
+          <Button
+            variant="primary"
+            icon="chat"
+            onClick={() => selectSkillInConversation(w, skill, version)}
+          >
             在对话中使用
           </Button>
         )}
-      </div>
+      </footer>
     </div>
   );
 }

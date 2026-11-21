@@ -20,6 +20,14 @@ function render(props: Record<string, unknown>) {
 }
 
 describe('会话内真实执行进度', () => {
+  it('团队执行步骤保留实际使用的技能和来源', () => {
+    const html = render({running: false, steps: [{name: 'search_policies', status:'completed',
+      expertSkill: '制度条款核对', expertConnector: '财务制度库'}]});
+    expect(html).toContain('制度条款核对');
+    expect(html).toContain('财务制度库');
+    expect(html).not.toContain('企查查');
+  });
+
   it('使用真实业务动作，并且不输出原始工具名、参数和结果', () => {
     const html = render({
       running: true,
@@ -41,6 +49,37 @@ describe('会话内真实执行进度', () => {
       /secret-(call-id|input|output)|secret_internal_tool/,
     );
     expect(html).toContain('<summary');
+    expect(html).toMatch(/<details[^>]*\sopen/);
+    expect(html).toContain('0/1 项已完成');
+  });
+
+  it('运行中的卡头提供停止操作，已读取的行程显示在记录页脚', () => {
+    const html = render({
+      running: true,
+      onStop() {},
+      steps: [
+        {
+          id: 'one',
+          name: 'get_submission_draft',
+          status: 'completed',
+          durationMs: 800,
+          itinerary: { destination: '南京', transport: '高铁二等座' },
+        },
+        { id: 'two', name: 'validate_submission', status: 'running' },
+      ],
+    });
+    expect(html).toContain('停止办理');
+    expect(html).toContain('1/2 项已完成');
+    expect(html).toContain('0.8 秒');
+    expect(html).toContain('南京');
+    expect(html).toContain('高铁二等座');
+    expect(
+      render({
+        running: false,
+        status: 'completed',
+        steps: [{ name: 'query_documents', status: 'completed' }],
+      }),
+    ).not.toContain('停止办理');
   });
 
   it('成功终态默认收起，并保留失败后重试的两次真实记录及耗时', () => {
@@ -106,6 +145,21 @@ describe('会话内真实执行进度', () => {
       render({ running: true, phase: 'responding', activity: '正在整理回复' }),
     ).toContain('正在整理回复');
     expect(render({ running: false, status: 'completed' })).toBe('');
+  });
+
+  it('思考轨迹与业务动作跟随本轮事件，等用户回答时立即切成静态', () => {
+    const thinking = render({ running: true, phase: 'thinking', activity: '正在分析任务' });
+    expect(thinking).toContain('data-activity="thinking"');
+    expect(thinking).toContain('run-progress-orbit-light');
+    expect(thinking).toContain('run-progress-glint');
+
+    const steps = [{ id: 'read', name: 'read_uploaded_file', status: 'running' }];
+    const working = render({ running: true, phase: 'working', steps });
+    expect(working).toContain('data-activity="reading"');
+    expect(working).not.toContain('run-progress-orbit-light');
+    const waiting = render({ running: true, phase: 'awaiting_input', activity: '待你回答', steps });
+    expect(waiting).toContain('data-activity="waiting"');
+    expect(waiting).not.toMatch(/run-progress-(orbit-light|glint)/);
   });
 
   it('没有正文的真实工具记录仍保留在会话，失败后可主动继续', () => {

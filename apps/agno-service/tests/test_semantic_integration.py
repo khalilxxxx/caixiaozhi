@@ -100,7 +100,7 @@ def test_preaudit_persists_authoritative_results_and_avoids_out_of_scope_leave(s
     evaluator = Evaluator()
     result = Business(store, rule_service=evaluator).preaudit('oa')
     assert len(evaluator.calls) == 1
-    assert result['counts']['attention'] == 1
+    assert result['counts'] == {'attention': 1, 'unknown': 0, 'clear': 1}
     saved = store.get_state()['data']['rulesSubmission']['reviewResults']['travel-doc']
     assert saved['review']['findings'][0]['engine'] == 'llm'
     assert saved['documentVersion'] == 1

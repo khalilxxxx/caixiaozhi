@@ -3,7 +3,10 @@ import type { Task } from '../../apps/web/src/demos/agent-workspace/workspace';
 import {
   conversationState,
   formatConversationTime,
+  hasUnreadReply,
+  latestReplyId,
   lastMessageTime,
+  recentConversationAlert,
   recentConversations,
 } from '../../apps/web/src/demos/agent-workspace/conversation-model';
 
@@ -182,6 +185,156 @@ describe('conversation state', () => {
       label: '待开始',
       tone: 'neutral',
     });
+  });
+});
+
+describe('recent conversation alerts', () => {
+  const previous = {
+    id: 'answer-1',
+    role: 'assistant' as const,
+    text: '第一份清单',
+  };
+  const next = {
+    id: 'answer-2',
+    role: 'assistant' as const,
+    text: '第二份清单',
+  };
+
+  it('does not redisplay or roll back a read marker when a stale snapshot is replayed', () => {
+    const older = task('stale', { messages: [previous] });
+    expect(hasUnreadReply(older, next.id)).toBe(false);
+    const placeholder = task('stale', {
+      messages: [previous, { ...next, runStatus: 'running' }],
+    });
+    expect(hasUnreadReply(placeholder, next.id)).toBe(false);
+    expect(recentConversationAlert(placeholder, next.id)).toBeNull();
+  });
+
+  it('marks new replies once, independently of updated timestamps and task completion', () => {
+    const completed = task('completed', {
+      status: '已完成',
+      messages: [previous, next],
+    });
+    expect(latestReplyId(completed)).toBe(next.id);
+    expect(recentConversationAlert(completed, previous.id)).toBe('unread');
+    expect(
+      recentConversationAlert({ ...completed, updated: '其他时间' }, next.id),
+    ).toBeNull();
+  });
+
+  it('ignores user messages, in-progress text and activity without a delivered reply', () => {
+    const streaming = task('streaming', {
+      status: '处理中',
+      messages: [
+        previous,
+        { id: 'user-2', role: 'user', text: '请重新查询' },
+        { ...next, runStatus: 'running' },
+      ],
+    });
+    expect(latestReplyId(streaming)).toBe(previous.id);
+    expect(recentConversationAlert(streaming, previous.id)).toBeNull();
+    expect(
+      latestReplyId({
+        ...streaming,
+        messages: [{ ...next, text: '', runStatus: 'completed' }],
+      }),
+    ).toBeNull();
+    expect(recentConversationAlert(task('user-only'), null)).toBeNull();
+  });
+
+  it('delivers result cards and questions, including answers persisted without text', () => {
+    const result = {
+      ...next,
+      text: '',
+      runStatus: 'completed',
+      cards: [{ kind: 'submission', title: '差旅草稿' }],
+    };
+    expect(latestReplyId(task('cards', { messages: [previous, result] }))).toBe(
+      next.id,
+    );
+    expect(
+      latestReplyId(
+        task('hidden', {
+          messages: [previous, { ...result, submissionPhase: 'collecting' }],
+        }),
+      ),
+    ).toBe(previous.id);
+    const question = task('question', {
+      messages: [
+        {
+          ...next,
+          text: '',
+          question: {
+            id: 'q',
+            title: '本次出差前往哪里？',
+            options: [],
+            status: 'pending',
+            multiple: false,
+          },
+          runStatus: 'awaiting_input',
+        },
+      ],
+    });
+    expect(recentConversations([question])).toEqual([question]);
+    expect(recentConversationAlert(question, null)).toBe('unread');
+    expect(recentConversationAlert(question, next.id)).toBeNull();
+  });
+
+  it.each(['待你回答', '待我确认', '已暂停', '已完成', '等待审批', '待回执'])(
+    'does not alert for the status label %s by itself',
+    (status) =>
+      expect(
+        recentConversationAlert(task('status', { status }), null),
+      ).toBeNull(),
+  );
+
+  it.each(['failed', 'interrupted', 'incomplete'])(
+    'shows a current %s run before unread replies',
+    (runStatus) => {
+      const failed = task('failed', {
+        messages: [previous, { ...next, runStatus }],
+      });
+      expect(latestReplyId(failed)).toBe(previous.id);
+      expect(recentConversationAlert(failed, null)).toBe('error');
+      expect(recentConversationAlert(failed, previous.id)).toBe('error');
+      expect(
+        recentConversationAlert(task('legacy', { status: '执行失败' }), null),
+      ).toBe('error');
+    },
+  );
+
+  it('clears historical failures after a retry and keeps voluntary stops quiet', () => {
+    const failure = { ...previous, runStatus: 'failed' };
+    expect(
+      recentConversationAlert(
+        task('retry', { activeRunId: 'new-run', messages: [failure] }),
+        null,
+      ),
+    ).toBeNull();
+    expect(
+      recentConversationAlert(
+        task('starting', { status: '处理中', messages: [failure] }),
+        null,
+      ),
+    ).toBeNull();
+    expect(
+      recentConversationAlert(
+        task('done', {
+          status: '执行失败',
+          messages: [failure, { ...next, runStatus: 'completed' }],
+        }),
+        next.id,
+      ),
+    ).toBeNull();
+    expect(
+      recentConversationAlert(
+        task('stopped', {
+          status: '已暂停',
+          messages: [failure, { ...next, runStatus: 'cancelled' }],
+        }),
+        null,
+      ),
+    ).toBeNull();
   });
 });
 

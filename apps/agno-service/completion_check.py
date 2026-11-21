@@ -71,14 +71,18 @@ class CompletionCheck:
         self.generation_started = False
         self.failures = {}
 
-    def observe(self, name, key, result, status):
+    def observe(self, name, key, result, status, draft_retry_id=None):
         if name == 'publish_skill_artifact' or (name == 'write_skill_file' and _document_output(result.get('path'))):
             self.generation_started = True
         if name == 'run_skill_script' and any(_document_output(item.get('path')) for item in result.get('files', []) if isinstance(item, dict)):
             self.generation_started = True
+        draft_retry = (name, draft_retry_id) if draft_retry_id is not None else None
         if status == 'failed':
-            self.failures[key] = {
+            # A draft conflict requires a fresh read and may require a different patch.
+            retry_draft = draft_retry is not None and result.get('code') in {'STALE_DRAFT', 'DRAFT_SNAPSHOT_REQUIRED'}
+            self.failures[draft_retry if retry_draft else key] = {
                 'name': name,
+                'message': result.get('error') if retry_draft else None,
                 'recoverableOutput': name == 'run_skill_script' and result.get('status') == 'resource_limit'
                     and result.get('exitCode') == 0 and any(
                         _document_output(item.get('path')) for item in result.get('files', [])
@@ -86,6 +90,8 @@ class CompletionCheck:
             }
         elif status == 'completed':
             self.failures.pop(key, None)
+            if draft_retry is not None:
+                self.failures.pop(draft_retry, None)
 
     def issue(self, artifacts=()):
         # One artifact shown twice, or several revisions of the same filename,
@@ -104,5 +110,6 @@ class CompletionCheck:
         unresolved = [failure for failure in self.failures.values()
                       if not (delivered_file and failure['recoverableOutput'])]
         if unresolved:
-            return '部分操作未完成，已保存的内容仍保留，请重试未完成步骤。'
+            return next((failure['message'] for failure in unresolved if failure['message']),
+                        '部分操作未完成，已保存的内容仍保留，请重试未完成步骤。')
         return None

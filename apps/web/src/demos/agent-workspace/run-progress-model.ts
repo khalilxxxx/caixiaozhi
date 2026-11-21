@@ -4,10 +4,13 @@ export interface ToolStep {
   id?: string;
   name: string;
   label?: string;
+  expertSkill?: string;
+  expertConnector?: string;
   status: string;
   startedAt?: number | string | null;
   finishedAt?: number | string | null;
   durationMs?: number | null;
+  itinerary?: { destination?: string; transport?: string };
 }
 
 export interface RunStream {
@@ -66,7 +69,9 @@ function readStep(value: unknown): ToolStep | null {
     return null;
   const step: ToolStep = { name: item.name.slice(0, 160), status: item.status };
   if (typeof item.id === 'string') step.id = item.id;
-  if (typeof item.label === 'string') step.label = item.label.slice(0, 160);
+  for (const key of ['label', 'expertSkill', 'expertConnector'] as const) {
+    if (typeof item[key] === 'string') step[key] = item[key].slice(0, 160);
+  }
   for (const key of ['startedAt', 'finishedAt'] as const) {
     const time = item[key];
     if (
@@ -81,6 +86,15 @@ function readStep(value: unknown): ToolStep | null {
     item.durationMs >= 0
   )
     step.durationMs = item.durationMs;
+  if (item.itinerary && typeof item.itinerary === 'object') {
+    const values = item.itinerary as Record<string, unknown>;
+    step.itinerary = {};
+    for (const key of ['destination', 'transport'] as const) {
+      const value = values[key];
+      if (typeof value === 'string' && value.trim())
+        step.itinerary[key] = value.trim().slice(0, 80);
+    }
+  }
   return step;
 }
 
@@ -124,7 +138,12 @@ export function reduceRunEvent(
   if (kind === 'delta' && typeof item.text === 'string')
     return { ...stream, text: stream.text + item.text };
   if (kind === 'status') {
-    const phase = typeof item.phase === 'string' ? item.phase : stream.phase;
+    const phase =
+      item.status === '待你回答'
+        ? 'awaiting_input'
+        : typeof item.phase === 'string'
+          ? item.phase
+          : stream.phase;
     const running = [...stream.steps]
       .reverse()
       .find((step) => step.status === 'running');

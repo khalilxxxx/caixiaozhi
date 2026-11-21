@@ -4,6 +4,7 @@ import {
   presentDocument,
 } from '../../apps/web/src/demos/document-query/document-model.js';
 import { documents } from '../../apps/web/src/demos/document-query/fixtures.js';
+import { getDocumentProgress } from '../../apps/web/src/demos/agent-workspace/document-progress.js';
 
 describe('generic document presentation', () => {
   it('keeps identities distinct across systems and document types', () => {
@@ -65,5 +66,65 @@ describe('generic document presentation', () => {
     expect(presentDocument(payment).displayStatus).toBe('待付款');
     expect(presentDocument(payment).currentLabel).toContain('资金共享中心');
     expect(presentDocument(payment).estimateLabel).toBeUndefined();
+  });
+});
+
+describe('approval tracking for the workspace', () => {
+  it('shows only the pending countersigner, separates payment handlers and uses a receipt without inventing its approver', () => {
+    const contract = documents.find(
+      (doc) => doc.typeId === 'contract_approval',
+    )!;
+    expect(getDocumentProgress(contract)).toMatchObject({
+      role: '当前审批人',
+      actors: ['张伟'],
+    });
+    const payment = documents.find((doc) => doc.phase === 'execution')!;
+    expect(getDocumentProgress(payment)).toMatchObject({
+      role: '办理方',
+      actors: ['资金共享中心'],
+      status: '待付款',
+    });
+    const local = {
+      ...documents[0]!,
+      current: undefined,
+      steps: [
+        { id: 'review', label: '待本地审批', status: 'current' as const },
+      ],
+    };
+    expect(getDocumentProgress(local)).toMatchObject({
+      node: '待本地审批',
+      actors: [],
+    });
+    const parallel = {
+      ...local,
+      steps: [
+        {
+          id: 'manager',
+          label: '部门审核',
+          actors: ['李婷'],
+          status: 'current' as const,
+        },
+        {
+          id: 'legal',
+          label: '法务审核',
+          actors: ['张伟'],
+          status: 'current' as const,
+        },
+      ],
+    };
+    expect(getDocumentProgress(parallel)).toMatchObject({
+      node: '部门审核、法务审核',
+      actors: ['李婷', '张伟'],
+    });
+    const finished = {
+      ...contract,
+      status: 'completed' as const,
+      phase: 'closed' as const,
+      phaseLabel: '审批完成',
+    };
+    expect(getDocumentProgress(finished)).toMatchObject({
+      node: '审批完成',
+      actors: [],
+    });
   });
 });

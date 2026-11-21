@@ -8,13 +8,30 @@ const sampleCsv =
     '\uFEFF费用类型,金额\r\n交通,36.50\r\n餐饮,48.00\r\n交通,-6.50\r\n',
   );
 
-export function SkillsGuide({
-  onClose,
-  toolPanel,
-}: {
+interface GuideProps {
   onClose?: () => void;
   toolPanel?: { kind: string | null; toolId?: string };
-}) {
+}
+
+export function SkillsGuide({ area, ...props }: GuideProps & { area: 'skills' | 'light-apps' }) {
+  if (area === 'light-apps') return <LightAppsGuide {...props} />;
+  return <>
+    <section className="help-section">
+      <h3>会话技能</h3>
+      <p>从技能目录查看输入和可用状态。选择“在对话中使用”会将技能加入当前草稿，发送任务后开始执行。</p>
+    </section>
+    <section className="help-section">
+      <h3>专家团与连接器</h3>
+      <p>在专家团详情中查看成员分工、技能和数据来源。选择“召唤专家团”后，在会话里说明任务并发送。也可以从基础专家团选择所需技能，创建自己的专家团。</p>
+    </section>
+    <section className="help-section">
+      <h3>技能管理</h3>
+      <p>在技能页选择“上传技能”，上传指令文件或包含 SKILL.md 的 ZIP 包。检查文件后可保存草稿或提交审核。在“我创建的”中可继续编辑自己的技能。发布后，具备权限的用户可在会话中调用。</p>
+    </section>
+  </>;
+}
+
+function LightAppsGuide({ onClose, toolPanel }: GuideProps) {
   const { identity, loading, error: catalogError } = useToolCatalog();
   const [error, setError] = useState('');
   const [switching, setSwitching] = useState(false);
@@ -53,13 +70,8 @@ export function SkillsGuide({
       <section className="help-section">
         <h3>查找和使用</h3>
         <ol>
-          <li>在目录搜索名称或用途，按技能、工具、业务分类或收藏筛选。</li>
-          <li>
-            技能选择“在对话中使用”，保留当前草稿与材料；发送消息后才执行。
-          </li>
-          <li>
-            工具选择“打开工具”，选择材料并确认参数后执行。结果按工具实际能力提供查看和下载。
-          </li>
+          <li>按名称、用途、业务分类或收藏查找轻应用。</li>
+          <li>从目录选择“打开应用”，可在新窗口核对材料和参数并运行。</li>
         </ol>
         <p>点击名称可查看详情。收藏只用于快速查找，不会授予权限或自动执行。</p>
       </section>
@@ -101,27 +113,22 @@ export function SkillsGuide({
         <h3>创建、审核与版本</h3>
         <ol>
           <li>
-            从“管理”进入“我创建的”，添加技能或上传工具。文件检查后可保存草稿，再提交审核。
+            在轻应用目录选择“上传轻应用”，上传 HTML 文件。文件检查后可保存草稿或提交审核。自己的应用可在“我创建的”中维护。
           </li>
           <li>
             退回后查看原因并创建修订版本。新版本审核期间，目录继续使用原有发布版本。
           </li>
           <li>
-            “审核发布”处理审核与发布；工具沿用演示角色，技能保留原演示审核流程。
+            在“审核发布”处理审核与发布。使用指引下方可切换轻应用的示例身份。
           </li>
         </ol>
         <p>
-          技能上传支持指令文件与含 SKILL.md 的 ZIP
-          包，具体限制和检查结果在上传表单内显示。工具上传支持
-          HTML，保留隔离预览。
+          上传的 HTML 轻应用在隔离区域预览。
         </p>
       </section>
       <section className="help-section">
         <h3>执行与保存范围</h3>
         <ul>
-          <li>
-            上传本身不会运行代码；已审核发布且环境可用的技能，可在任务隔离环境执行脚本并生成成果。
-          </li>
           <li>
             费用汇总使用本地服务，页面和对话共用执行结果，可从汇总历史重新打开与下载。
           </li>

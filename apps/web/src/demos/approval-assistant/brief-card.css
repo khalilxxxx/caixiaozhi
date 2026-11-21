@@ -1,0 +1,53 @@
+.ra-brief {
+  --card-line: #d9e4ec;
+  background: linear-gradient(180deg, #f1f6fb 0, #fff 165px);
+}
+.ra-brief-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  padding: 16px 20px 7px;
+}
+.ra-brief-copy {
+  min-width: 0;
+}
+.ra-brief .ra-brand {
+  color: #3d5b75;
+  margin-bottom: 8px;
+}
+.ra-brief .ra-level {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap-reverse;
+}
+.ra-brief .ra-level strong {
+  font-size: 23px;
+}
+.ra-brief .ra-summary {
+  padding: 0 20px 13px;
+}
+.ra-brief .ra-points {
+  border-top: 1px solid var(--card-line);
+}
+.ra-brief .ra-point p {
+  padding-left: 37px;
+}
+.ra-brief .ra-execution {
+  margin-top: 15px;
+  padding-top: 13px;
+  border-top: 1px solid var(--card-line);
+}
+.ra-brief .ra-card-foot {
+  border-top: 0;
+  margin-top: 1px;
+}
+@container approval-card (max-width:390px) {
+  .ra-brief-top {
+    padding: 13px 14px 6px;
+  }
+  .ra-brief .ra-summary {
+    padding-inline: 14px;
+  }
+}

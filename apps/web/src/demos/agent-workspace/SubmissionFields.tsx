@@ -7,19 +7,24 @@ import {
   getExpenseCategories,
   getExpenseCategory,
   switchExpenseCategory,
+  validateDraft,
   type ActivityAssignment,
   type Attachment,
   type ExpenseField,
   type ExpenseItem,
+  type ReceiptEvidence,
   type SubmissionDraft,
   type TravelLeg,
 } from './submission-model';
 import { Button, Icon } from './ui';
 import { useSlice, useWorkspace } from './workspace';
-import { api, uploadFile } from './runtime-client';
+import { ReceiptSources } from './ReimbursementBatchReview';
+import { applyReceiptLine, markReceiptFields, receiptCategoryOverride, receiptLineKey } from './receipt-line-prefill';
+import { acceptWorkspace, ApiError, api, uploadFile, type WorkspaceSnapshot } from './runtime-client';
 import { SubmissionDefaults } from './SubmissionDefaults';
 import { setManualExpenseField } from './submission-defaults';
 import './submission.css';
+import './reimbursement-fields.css';
 
 type Issue = { path: string; message: string };
 type ExpenseEditorState = { item: ExpenseItem; isNew: boolean };
@@ -165,12 +170,20 @@ function fileSize(size: number) {
 function expensePeriod(item: ExpenseItem) {
   const template = getExpenseCategory(item.categoryId)?.template;
   if (template === 'T03' || template === 'T09') {
-    return `${item.checkIn || '入住待补充'} — ${item.checkOut || '退房待补充'}`;
+    if (item.checkIn && item.checkOut)
+      return `${item.checkIn} – ${item.checkOut}`;
+    return item.checkIn
+      ? `${item.checkIn} 入住`
+      : item.checkOut && `${item.checkOut} 退房`;
   }
   if (template === 'T08') {
-    return `${item.departureDate || '出发待补充'} — ${item.arrivalDate || '到达待补充'}`;
+    if (item.departureDate && item.arrivalDate)
+      return `${item.departureDate} – ${item.arrivalDate}`;
+    return item.departureDate
+      ? `${item.departureDate} 出发`
+      : item.arrivalDate && `${item.arrivalDate} 到达`;
   }
-  return item.date || (template === 'T01' ? '日期见关联行程' : '日期待补充');
+  return item.date;
 }
 
 function checkoutNeedsReview(item: ExpenseItem) {
@@ -186,42 +199,48 @@ function checkoutNeedsReview(item: ExpenseItem) {
 function FilePicker({
   title,
   files,
-  multiple = true,
+  compact = false,
   onChange,
   onUpload,
   onPreview,
+  onUploading,
 }: {
   title: string;
   files: Attachment[];
-  multiple?: boolean;
+  compact?: boolean;
   onChange: (files: Attachment[]) => void;
   onUpload: (file: File, id: string) => void;
   onPreview: (file: Attachment) => void;
+  onUploading?: (busy: boolean) => void;
 }) {
   const inputId = useId();
   const w = useWorkspace();
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const currentFiles = useRef({ files, onChange });
+  currentFiles.current = { files, onChange };
   return (
     <div className="sf-files">
       <div className="sf-files-heading">
         <h4>{title}</h4>
         <label className="sf-upload" htmlFor={inputId}>
           <Icon name="upload" size={14} />
-          {multiple ? '上传附件' : files.length ? '更换发票' : '上传发票'}
+          {uploading ? '上传中…' : title === '发票' ? '添加发票' : '上传附件'}
         </label>
         <input
           className="sf-file-input"
           id={inputId}
           type="file"
-          multiple={multiple}
-          aria-label={multiple ? `上传${title}` : '上传或更换发票'}
+          multiple
+          aria-label={`上传${title}`}
           disabled={uploading}
           onChange={async (event) => {
-            const selected = Array.from(event.currentTarget.files ?? []);
+            const picker = event.currentTarget;
+            const selected = Array.from(picker.files ?? []);
             event.currentTarget.value = '';
             if (!selected.length) return;
             setUploading(true);
+            onUploading?.(true);
             setUploadError('');
             const attachments: Attachment[] = [];
             try {
@@ -242,13 +261,13 @@ function FilePicker({
                 error instanceof Error ? error.message : '附件上传失败，请重试',
               );
             } finally {
-              if (attachments.length)
-                onChange(
-                  multiple
-                    ? [...files, ...attachments]
-                    : attachments.slice(0, 1),
+              if (attachments.length && picker.isConnected) {
+                currentFiles.current.onChange(
+                  [...currentFiles.current.files, ...attachments],
                 );
+              }
               setUploading(false);
+              onUploading?.(false);
             }
           }}
         />
@@ -288,20 +307,48 @@ function FilePicker({
           ))}
         </ul>
       ) : (
-        <p className="sf-empty-inline">尚未添加{title}</p>
-      )}
-      {!multiple && files.length > 0 && (
-        <p className="sf-source-line">已关联文件 · 请核对费用信息</p>
+        !compact && <p className="sf-empty-inline">尚未添加{title}</p>
       )}
     </div>
   );
 }
 
+function EntryDetails({
+  className,
+  compact,
+  initialOpen,
+  hasIssues,
+  children,
+}: {
+  className: string;
+  compact: boolean;
+  initialOpen: boolean;
+  hasIssues: boolean;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  const [openAtMount] = useState(initialOpen);
+  useEffect(() => {
+    if (compact && hasIssues && ref.current) ref.current.open = true;
+  }, [compact, hasIssues]);
+  return (
+    <details
+      ref={ref}
+      className={className}
+      open={compact ? openAtMount : initialOpen}
+    >
+      {children}
+    </details>
+  );
+}
+
 function LegFields({
+  compact = false,
   legs,
   onChange,
   issues,
 }: {
+  compact?: boolean;
   legs: TravelLeg[];
   onChange: (legs: TravelLeg[]) => void;
   issues: Issue[];
@@ -322,7 +369,17 @@ function LegFields({
   return (
     <div className="sf-leg-list">
       {legs.map((leg, index) => (
-        <details className="sf-leg" key={leg.id} open={index === 0}>
+        <EntryDetails
+          className="sf-leg"
+          key={leg.id}
+          compact={compact}
+          initialOpen={
+            compact ? !leg.departureCity && !leg.arrivalCity : index === 0
+          }
+          hasIssues={issues.some((issue) =>
+            issue.path.startsWith(`legs.${index}.`),
+          )}
+        >
           <summary>
             <Icon name="plane" size={16} />
             <span>
@@ -431,9 +488,11 @@ function LegFields({
               </button>
             </div>
           </div>
-        </details>
+        </EntryDetails>
       ))}
-      {!legs.length && <p className="sf-empty-inline">尚未添加行程</p>}
+      {!compact && !legs.length && (
+        <p className="sf-empty-inline">尚未添加行程</p>
+      )}
       {issues
         .filter((issue) => issue.path === 'legs')
         .map((issue) => (
@@ -454,6 +513,7 @@ function ActivityFields({
   onChange: (draft: SubmissionDraft) => void;
   issues: Issue[];
 }) {
+  const compact = getDraftType(draft) !== 'travel';
   function updateActivity(
     index: number,
     field: keyof ActivityAssignment,
@@ -502,17 +562,35 @@ function ActivityFields({
             })
           }
         >
-          添加
+          {compact ? '添加活动' : '添加'}
         </Button>
       }
     >
       {draft.activities.map((activity, index) => (
-        <details className="sf-activity" open={index === 0} key={activity.id}>
+        <EntryDetails
+          className="sf-activity"
+          compact={compact}
+          key={activity.id}
+          initialOpen={
+            compact
+              ? !activity.activityNumber &&
+                !activity.description &&
+                !activity.oaNumber
+              : index === 0
+          }
+          hasIssues={issues.some((issue) =>
+            issue.path.startsWith(`activities.${index}.`),
+          )}
+        >
           <summary>
             <span>
               {activity.description ||
                 activity.activityNumber ||
                 '未填写活动／派工'}
+              {compact && activity.source === 'sample' && (
+                <small>（样例）</small>
+              )}
+              {compact && activity.source === 'receipt' && <small>（票据识别）</small>}
             </span>
             <Icon name="down" size={15} />
           </summary>
@@ -526,7 +604,7 @@ function ActivityFields({
                         (sample) =>
                           sample.activityNumber === activity.activityNumber,
                       )?.id || ''
-                    : ''
+                    : activity.source === 'receipt' ? 'receipt' : ''
                 }
                 onChange={(event) => {
                   const sample = activitySamples.find(
@@ -550,6 +628,7 @@ function ActivityFields({
                     });
                 }}
               >
+                {activity.source === 'receipt' && <option value="receipt">票据识别</option>}
                 <option value="">手工录入外部记录</option>
                 {activitySamples.map((sample) => (
                   <option value={sample.id} key={sample.id}>
@@ -558,11 +637,13 @@ function ActivityFields({
                 ))}
               </select>
             </FormField>
-            <p className="sf-source-line">
-              {activity.source === 'sample'
-                ? '来源为样例活动记录'
-                : '手工录入 · 外部记录待核验'}
-            </p>
+            {!compact && (
+              <p className="sf-source-line">
+                {activity.source === 'sample'
+                  ? '来源为样例活动记录'
+                  : activity.source === 'receipt' ? '票据识别 · 外部记录待核验' : '手工录入 · 外部记录待核验'}
+              </p>
+            )}
             <div className="sf-grid">
               {(
                 [
@@ -631,9 +712,9 @@ function ActivityFields({
               </button>
             </div>
           </div>
-        </details>
+        </EntryDetails>
       ))}
-      {!draft.activities.length && (
+      {!compact && !draft.activities.length && (
         <p className="sf-empty-inline">
           未关联活动／派工{draft.activityMode === 'required' ? '，请添加' : ''}
         </p>
@@ -651,14 +732,18 @@ function ActivityFields({
 
 function ExpenseEditor({
   item,
+  isNew,
+  issues,
   draft,
-  onChange,
+  onChange: writeParent,
   onSave,
   onCancel,
   onUpload,
   onPreview,
 }: {
   item: ExpenseItem;
+  isNew: boolean;
+  issues: Issue[];
   draft: SubmissionDraft;
   onChange: (item: ExpenseItem) => void;
   onSave: () => void;
@@ -672,6 +757,109 @@ function ExpenseEditor({
   const template = category?.template;
   const [selectedGroup, setSelectedGroup] = useState(category?.group || '');
   const [oaQueryStatus, setOaQueryStatus] = useState('');
+  const [uploadCount, setUploadCount] = useState(0);
+  const [receiptStatus, setReceiptStatus] = useState<'idle' | 'reading' | 'done' | 'failed' | 'blocked'>('idle');
+  const [receiptNotice, setReceiptNotice] = useState('');
+  const [retry, setRetry] = useState(0);
+  const latest = useRef({ item, writeParent });
+  latest.current = { item, writeParent };
+
+  function onChange(next: ExpenseItem) {
+    latest.current.item = next;
+    latest.current.writeParent(next);
+  }
+  function receiveFiles(field: 'files' | 'attachments', files: Attachment[]) {
+    const previous = latest.current.item;
+    const next = { ...previous, [field]: files };
+    const removed = previous[field].some((file) => !files.some((value) => value.id === file.id));
+    // 补传附件时保留原票已识别的字段。移除来源或新增发票时，撤回失去依据的旧值。
+    if (removed) {
+      const cleared = applyReceiptLine(next, {}, {}, isNew);
+      if (cleared.categoryId !== next.categoryId) setSelectedGroup(getExpenseCategory(cleared.categoryId)?.group || '');
+      onChange({ ...cleared, receiptReadKey: '' });
+    } else {
+      if (field === 'files' && previous.amount && previous.receiptPrefill?.amount === previous.amount &&
+          !previous.receiptManualFields?.includes('amount')) {
+        next.amount = '';
+        next.receiptPrefill = { ...previous.receiptPrefill, amount: '' };
+        next.receiptEvidence = { ...previous.receiptEvidence, amount: [] };
+      }
+      onChange({ ...next, receiptReadKey: '' });
+    }
+    if (next.files.length || next.attachments.length) setReceiptStatus('reading');
+    else {
+      setReceiptStatus('idle');
+      setReceiptNotice('');
+    }
+  }
+  function uploading(busy: boolean) {
+    setUploadCount((count) => count + (busy ? 1 : -1));
+  }
+  const selection = receiptLineKey(item);
+  const needsRead = item.receiptReadKey !== undefined && selection !== item.receiptReadKey &&
+    !!(item.files.length || item.attachments.length);
+
+  useEffect(() => {
+    if (!needsRead) return;
+    let active = true;
+    const entry = latest.current.item;
+    setReceiptStatus('reading');
+    setReceiptNotice('');
+    const currentRequest = () => active && selection === receiptLineKey(latest.current.item);
+    api<{ expense: Partial<ExpenseItem> | null; issues: string[]; blockedFileIds?: string[];
+      evidence: ReceiptEvidence; workspace?: WorkspaceSnapshot }>(
+      `/reimbursements/${encodeURIComponent(draft.id)}/line-preview`,
+      { expenseId: entry.id, invoiceFileIds: entry.files.map((f) => f.id),
+        attachmentFileIds: entry.attachments.map((f) => f.id), categoryId: receiptCategoryOverride(entry) || undefined },
+    ).then((result) => {
+      if (result.workspace) acceptWorkspace(result.workspace);
+      if (!currentRequest()) return;
+      if (result.expense) {
+        const next = applyReceiptLine(latest.current.item, result.expense, result.evidence, isNew);
+        onChange(next);
+        if (next.categoryId !== entry.categoryId) setSelectedGroup(getExpenseCategory(next.categoryId)?.group || '');
+      }
+      const blocked = result.blockedFileIds ?? [];
+      const originals = [...entry.files, ...entry.attachments];
+      const wrong = originals.filter((file) => blocked.includes(file.id)).map((file) => file.name);
+      setReceiptNotice([...result.issues, ...(wrong.length ? ['请移除或重新归类『' + wrong.join('、') + '』。'] : [])].join(' '));
+      setReceiptStatus(result.expense ? 'done' : blocked.length ? 'blocked' : 'failed');
+    }).catch((error) => {
+      if (!currentRequest()) return;
+      const blocked = error instanceof ApiError && error.payload?.code === 'MATERIAL_CONFLICT';
+      setReceiptStatus(blocked ? 'blocked' : 'failed');
+      const blockedIds: string[] = blocked ? error.payload?.details?.blockedFileIds ?? [] : [];
+      const wrong = [...entry.files, ...entry.attachments].filter((file) => blockedIds.includes(file.id)).map((file) => file.name);
+      setReceiptNotice((error instanceof Error ? error.message : '票据识别未完成，请重试。') +
+        (wrong.length ? ' 请移除『' + wrong.join('、') + '』。' : ''));
+    });
+    return () => { active = false; };
+  }, [draft.id, isNew, selection, needsRead, retry]);
+
+  const [visited, setVisited] = useState<Set<string>>(() => new Set());
+  const fieldIssues = validateDraft(
+    { ...draft, expenses: [item] },
+    { submit: true },
+  ).filter((issue) => issue.path.startsWith('expenses.0.'));
+  const expenseIndex = draft.expenses.findIndex(
+    (expense) => expense.id === item.id,
+  );
+  const original = draft.expenses[expenseIndex];
+  function fieldError(field: ExpenseField | 'categoryId') {
+    if (
+      original?.categoryId === item.categoryId &&
+      original[field] === item[field]
+    ) {
+      const reported = issues.find(
+        (issue) => issue.path === `expenses.${expenseIndex}.${field}`,
+      );
+      if (reported) return reported.message;
+    }
+    return !isNew || visited.has(field)
+      ? fieldIssues.find((issue) => issue.path === `expenses.0.${field}`)
+          ?.message
+      : undefined;
+  }
   const editorElement = useRef<HTMLDivElement>(null);
   const groups = [...new Set(categories.map((value) => value.group))];
   const groupCategories = categories.filter(
@@ -687,13 +875,21 @@ function ExpenseEditor({
 
   useEffect(() => {
     editorElement.current?.scrollIntoView({ block: 'start' });
-    editorElement.current
-      ?.querySelector<HTMLSelectElement>('select')
-      ?.focus({ preventScroll: true });
+    const problem =
+      editorElement.current?.querySelector<HTMLElement>(
+        '.sf-field:has(.sf-field-error) :is(input:not([readonly]), select, textarea):not(:disabled)',
+      ) ||
+      editorElement.current?.querySelector<HTMLElement>(
+        '.sf-field:has(.sf-field-note) input',
+      );
+    const target =
+      problem || editorElement.current?.querySelector<HTMLElement>('select');
+    target?.focus({ preventScroll: true });
+    problem?.scrollIntoView({ block: 'nearest' });
   }, []);
 
   function change(field: ExpenseField, value: string) {
-    onChange(setManualExpenseField(item, field, value));
+    onChange(markReceiptFields(setManualExpenseField(latest.current.item, field, value), field));
   }
 
   function input(
@@ -709,10 +905,7 @@ function ExpenseEditor({
     } = {},
   ) {
     const value = options.value ?? item[field];
-    const error =
-      required(field) && !value
-        ? `请填写${label.replace(/（.*?）/g, '')}`
-        : undefined;
+    const error = fieldError(field);
     return (
       <FormField
         key={field}
@@ -723,6 +916,7 @@ function ExpenseEditor({
         note={options.note}
       >
         <input
+          data-expense-field={field}
           aria-label={`费用${label}`}
           type={options.type || 'text'}
           inputMode={options.numeric ? 'numeric' : undefined}
@@ -746,13 +940,10 @@ function ExpenseEditor({
       <FormField
         label="交通工具"
         required={required('transport')}
-        error={
-          required('transport') && !item.transport
-            ? '请选择交通工具'
-            : undefined
-        }
+        error={fieldError('transport')}
       >
         <select
+          data-expense-field="transport"
           aria-label="费用交通工具"
           value={item.transport}
           onChange={(event) => change('transport', event.target.value)}
@@ -791,6 +982,10 @@ function ExpenseEditor({
     <div
       className="sf-expense-editor"
       ref={editorElement}
+      onBlur={(event) => {
+        const field = (event.target as HTMLElement).dataset.expenseField;
+        if (field) setVisited((previous) => new Set(previous).add(field));
+      }}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.stopPropagation();
@@ -799,15 +994,10 @@ function ExpenseEditor({
       }}
     >
       <div className="sf-editor-heading">
-        <h4>{item.name || category?.label || '新增费用'}</h4>
-        <button
-          className="sf-icon-button"
-          type="button"
-          aria-label="取消费用编辑"
-          onClick={onCancel}
-        >
-          <Icon name="close" size={17} />
-        </button>
+        <h3>
+          {isNew ? '新增费用' : '编辑费用'}
+          {item.generated && <span className="sf-expense-source">AI 生成</span>}
+        </h3>
       </div>
       <div className="sf-grid sf-type-grid">
         <FormField label="费用大类" required>
@@ -821,7 +1011,9 @@ function ExpenseEditor({
                 (value) => value.group === group,
               );
               if (targets.length === 1)
-                onChange(switchExpenseCategory(item, targets[0]!.id));
+                onChange(markReceiptFields(switchExpenseCategory(latest.current.item, targets[0]!.id), 'categoryId'));
+              else if (group !== category?.group)
+                onChange(markReceiptFields(switchExpenseCategory(latest.current.item, ''), 'categoryId'));
             }}
           >
             <option value="">请选择</option>
@@ -833,14 +1025,15 @@ function ExpenseEditor({
         <FormField
           label={reception ? '招待类型' : '费用类型'}
           required
-          error={!item.categoryId ? '请选择费用类型' : undefined}
+          error={fieldError('categoryId')}
         >
           <select
+            data-expense-field="categoryId"
             aria-label="费用类型"
             value={category?.group === selectedGroup ? item.categoryId : ''}
             onChange={(event) => {
               if (event.target.value)
-                onChange(switchExpenseCategory(item, event.target.value));
+                onChange(markReceiptFields(switchExpenseCategory(latest.current.item, event.target.value), 'categoryId'));
             }}
             disabled={!selectedGroup}
           >
@@ -869,12 +1062,7 @@ function ExpenseEditor({
           </select>
         </FormField>
       </div>
-      {item.generated && (
-        <div className="sf-ai-source">
-          <Icon name="spark" size={16} />
-          <span>本费用由 AI 生成，请核对后提交</span>
-        </div>
-      )}
+
       <div className="sf-grid">
         {template === 'T01' && (
           <>
@@ -882,9 +1070,10 @@ function ExpenseEditor({
               label="关联行程"
               required
               wide
-              error={!item.tripId ? '请选择行程' : undefined}
+              error={fieldError('tripId')}
             >
               <select
+                data-expense-field="tripId"
                 aria-label="费用关联行程"
                 value={item.tripId}
                 onChange={(event) => change('tripId', event.target.value)}
@@ -968,17 +1157,16 @@ function ExpenseEditor({
         {template === 'T07' && input('quantity', '采购数量', { numeric: true })}
         {template === 'T05' && required('oaId') && (
           <>
-            <FormField
-              label="OA 单号"
-              required
-              wide
-              error={!item.oaId ? '请关联用餐申请' : undefined}
-            >
+            <FormField label="OA 单号" required wide error={fieldError('oaId')}>
               <div className="sf-input-action">
                 <input
+                  data-expense-field="oaId"
                   aria-label="费用OA单号"
                   value={item.oaId}
-                  onChange={(event) => change('oaId', event.target.value)}
+                  onChange={(event) => {
+                    change('oaId', event.target.value);
+                    setOaQueryStatus('');
+                  }}
                 />
                 <Button
                   onClick={async () => {
@@ -998,29 +1186,28 @@ function ExpenseEditor({
                   查询
                 </Button>
                 {item.oaId && (
-                  <Button variant="ghost" onClick={() => change('oaId', '')}>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      change('oaId', '');
+                      setOaQueryStatus('');
+                    }}
+                  >
                     解除
                   </Button>
                 )}
               </div>
             </FormField>
-            <p
-              className="sf-source-line sf-wide"
-              role={oaQueryStatus ? 'status' : undefined}
-            >
-              {oaQueryStatus ||
-                (item.oaId
-                  ? '已保留 OA 关联标识 · 外部记录待核验'
-                  : '尚未关联用餐申请')}
-            </p>
+            {oaQueryStatus && (
+              <p className="sf-source-line sf-wide" role="status">
+                {oaQueryStatus}
+              </p>
+            )}
           </>
         )}
-        <FormField
-          label="币种"
-          required
-          error={!item.currency ? '请选择币种' : undefined}
-        >
+        <FormField label="币种" required error={fieldError('currency')}>
           <select
+            data-expense-field="currency"
             aria-label="费用币种"
             value={item.currency}
             onChange={(event) => change('currency', event.target.value)}
@@ -1035,23 +1222,16 @@ function ExpenseEditor({
             ))}
           </select>
         </FormField>
-        <FormField
-          label="金额"
-          required
-          error={
-            !item.amount
-              ? '请填写金额'
-              : /^\d+(?:\.\d{1,2})?$/.test(item.amount)
-                ? undefined
-                : '请填写非负且最多两位小数的金额'
-          }
-        >
+        <FormField label="金额" required error={fieldError('amount')}>
           <input
+            data-expense-field="amount"
             aria-label="费用金额"
             inputMode="decimal"
             value={item.amount}
             onChange={(event) => change('amount', event.target.value)}
-            onBlur={() => change('amount', decimalAmount(item.amount))}
+            onBlur={() => {
+              if (decimalAmount(item.amount) !== item.amount) change('amount', decimalAmount(item.amount));
+            }}
           />
         </FormField>
         <FormField label="事由选项" required={required('reason')}>
@@ -1059,7 +1239,7 @@ function ExpenseEditor({
             aria-label="费用事由选项"
             value={item.reasonOption}
             onChange={(event) =>
-              onChange({ ...item, reasonOption: event.target.value })
+              onChange(markReceiptFields({ ...latest.current.item, reasonOption: event.target.value }, 'reasonOption'))
             }
           >
             <option value="">请选择</option>
@@ -1073,42 +1253,54 @@ function ExpenseEditor({
           label="自定义事由"
           required={required('reason')}
           wide
-          error={
-            required('reason') && !item.reason.trim() ? '请填写事由' : undefined
-          }
+          error={fieldError('reason')}
         >
           <textarea
+            data-expense-field="reason"
             aria-label="费用自定义事由"
             rows={2}
             value={item.reason}
             onChange={(event) =>
-              onChange({
-                ...item,
+              onChange(markReceiptFields({
+                ...latest.current.item,
                 reason: event.target.value,
-                reasonOption: event.target.value ? '其他' : item.reasonOption,
-              })
+                reasonOption: event.target.value ? '其他' : latest.current.item.reasonOption,
+              }, 'reason', 'reasonOption'))
             }
           />
         </FormField>
       </div>
-      <FilePicker
-        title="发票"
-        files={item.files}
-        multiple={false}
-        onChange={(files) => onChange({ ...item, files })}
-        onUpload={onUpload}
-        onPreview={onPreview}
-      />
-      <FilePicker
-        title="补充附件"
-        files={item.attachments}
-        onChange={(attachments) => onChange({ ...item, attachments })}
-        onUpload={onUpload}
-        onPreview={onPreview}
-      />
+      <ReceiptSources evidence={item.receiptEvidence} files={[...item.files, ...item.attachments]} />
+      <div className="sf-expense-files">
+        <FilePicker
+          compact
+          title="发票"
+          files={item.files}
+          onChange={(files) => receiveFiles('files', files)}
+          onUploading={uploading}
+          onUpload={onUpload}
+          onPreview={onPreview}
+        />
+        <FilePicker
+          compact
+          title="补充附件"
+          files={item.attachments}
+          onChange={(attachments) => receiveFiles('attachments', attachments)}
+          onUploading={uploading}
+          onUpload={onUpload}
+          onPreview={onPreview}
+        />
+      </div>
+      {receiptStatus !== 'idle' && (
+        <div className={receiptStatus === 'blocked' || receiptStatus === 'failed' ? 'sf-error' : 'sf-source-line'}
+          role={receiptStatus === 'blocked' ? 'alert' : 'status'}>
+          {receiptStatus === 'reading' ? '正在识别本笔票据…' : receiptNotice || '本笔票据已识别。'}
+          {receiptStatus === 'failed' && <Button variant="ghost" onClick={() => setRetry((n) => n + 1)}>重新识别</Button>}
+        </div>
+      )}
       <div className="sf-editor-actions">
         <Button onClick={onCancel}>取消</Button>
-        <Button variant="primary" icon="check" onClick={onSave}>
+        <Button variant="primary" icon="check" disabled={uploadCount > 0 || receiptStatus === 'reading' || receiptStatus === 'blocked'} onClick={onSave}>
           保存费用
         </Button>
       </div>
@@ -1123,15 +1315,150 @@ function ExpenseEditor({
   );
 }
 
+interface ReimbursableApplication {
+  id: string;
+  title: string;
+  sourceStatus: string;
+  synthetic?: boolean;
+  legs: TravelLeg[];
+}
+
+function TravelApplicationLink({ draft, error }: { draft: SubmissionDraft; error?: string }) {
+  const workspace = useWorkspace();
+  const [query, setQuery] = useState<string | null>(null);
+  const [applications, setApplications] = useState<ReimbursableApplication[]>([]);
+  const [operation, setOperation] = useState<'search' | 'link' | null>(null);
+  const [notice, setNotice] = useState('');
+  const [failed, setFailed] = useState(false);
+  const queryRef = useRef<HTMLInputElement>(null);
+  const busy = operation !== null;
+
+  async function search() {
+    if (busy) return;
+    setOperation('search');
+    setNotice('');
+    setFailed(false);
+    setApplications([]);
+    try {
+      const term = encodeURIComponent((query ?? draft.applicationId).trim());
+      const result = await api<{
+        items: ReimbursableApplication[];
+        unavailableSources: string[];
+      }>(`/business/travel-applications?query=${term}`);
+      setApplications(result.items);
+      if (!result.items.length)
+        setNotice(result.unavailableSources.length
+          ? '差旅申请来源暂不可用，请稍后重试。'
+          : '未找到可关联的已审批差旅申请。');
+    } catch (error) {
+      setFailed(true);
+      setNotice(error instanceof Error ? error.message : '查询失败，请重试。');
+    } finally {
+      setOperation(null);
+    }
+  }
+
+  async function link(application: ReimbursableApplication) {
+    if (busy) return;
+    setOperation('link');
+    setNotice('');
+    setFailed(false);
+    try {
+      await workspace.flush();
+      const result = await api<{
+        workspace: WorkspaceSnapshot;
+        importedLegCount: number;
+        legImportStatus: 'imported' | 'existing_legs_preserved' | 'no_available_legs';
+      }>('/business/link-travel-application', {
+        id: draft.id, applicationId: application.id, version: draft.version,
+      });
+      acceptWorkspace(result.workspace);
+      setQuery(null);
+      setApplications([]);
+      requestAnimationFrame(() => queryRef.current?.focus());
+      setNotice(result.legImportStatus === 'imported'
+        ? `已带入 ${result.importedLegCount} 段申请行程，请核对实际行程。`
+        : result.legImportStatus === 'existing_legs_preserved'
+          ? '已关联，保留现有行程。'
+          : '已关联，申请单暂无可带入行程。');
+    } catch (error) {
+      setFailed(true);
+      setNotice(error instanceof Error ? error.message : '关联失败，请重试。');
+      await workspace.refresh().catch(() => {});
+    } finally {
+      setOperation(null);
+    }
+  }
+
+  return (
+    <div className="sf-application-link" aria-busy={busy}>
+      <FormField label="关联差旅申请单号" required error={error}>
+        <div className="sf-input-action">
+          <input
+            ref={queryRef}
+            aria-label="差旅申请单号"
+            placeholder="搜索单号或目的地"
+            value={query ?? draft.applicationId}
+            disabled={busy}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setApplications([]);
+              setNotice('');
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              void search();
+            }}
+          />
+          <Button icon="search" disabled={busy} onClick={search}>
+            {operation === 'search' ? '查询中…' : '查询'}
+          </Button>
+        </div>
+      </FormField>
+      {query !== null && draft.applicationId && query !== draft.applicationId && (
+        <p className="sf-source-line">当前关联 {draft.applicationId}</p>
+      )}
+      {notice && <p className={failed ? 'sf-error' : 'sf-source-line'} role={failed ? 'alert' : 'status'}>{notice}</p>}
+      {applications.length > 0 && (
+        <ul className="sf-application-results" aria-label="可关联差旅申请">
+          {applications.map((application) => {
+            const first = application.legs[0];
+            const last = application.legs.at(-1);
+            const start = first?.departureDate;
+            const end = last?.arrivalDate;
+            const period = start && end && start !== end ? `${start} 至 ${end}` : start || end;
+            return (
+              <li key={application.id}>
+                <div>
+                  <strong>{application.title}</strong>
+                  <small>{[application.id, period, application.synthetic ? '本地示例' : application.sourceStatus].filter(Boolean).join(' · ')}</small>
+                </div>
+                <Button
+                  disabled={busy}
+                  aria-label={`选用 ${application.id}`}
+                  onClick={() => link(application)}
+                >选用</Button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function SubmissionFields({
   draft,
   onChange,
   issues = [],
+  expenseAction,
   onEditingChange,
 }: {
   draft: SubmissionDraft;
   onChange: (draft: SubmissionDraft) => void;
   issues?: Issue[];
+  expenseAction?: ReactNode;
   onEditingChange?: (editing: boolean) => void;
 }) {
   const w = useWorkspace();
@@ -1142,10 +1469,10 @@ export function SubmissionFields({
   const editor = expenseEditors[draft.id] ?? null;
   const [companion, setCompanion] = useState('');
   const [companionError, setCompanionError] = useState('');
-  const [applicationQueryStatus, setApplicationQueryStatus] = useState('');
   const [previewFile, setPreviewFile] = useState<Attachment | null>(null);
   const fileUrls = useRef(new Map<string, string>());
   const previousDraftId = useRef(draft.id);
+  const formRoot = useRef<HTMLDivElement>(null);
   const expenseTrigger = useRef<HTMLButtonElement | null>(null);
   const filePreviewElement = useRef<HTMLDivElement>(null);
 
@@ -1153,7 +1480,6 @@ export function SubmissionFields({
     if (previousDraftId.current !== draft.id) {
       previousDraftId.current = draft.id;
       setPreviewFile(null);
-      setApplicationQueryStatus('');
       setCompanion('');
       setCompanionError('');
     }
@@ -1184,8 +1510,18 @@ export function SubmissionFields({
   }
 
   function closeEditor() {
+    setPreviewFile(null);
     setEditor(null);
-    requestAnimationFrame(() => expenseTrigger.current?.focus());
+    requestAnimationFrame(() => {
+      const trigger =
+        expenseTrigger.current ||
+        formRoot.current?.querySelector<HTMLButtonElement>(
+          editor?.isNew
+            ? '[data-add-expense]'
+            : `[data-expense-id="${CSS.escape(editor?.item.id || '')}"]`,
+        );
+      trigger?.focus();
+    });
   }
 
   function change(field: keyof SubmissionDraft, value: unknown) {
@@ -1221,375 +1557,398 @@ export function SubmissionFields({
     setCompanionError('');
   }
 
+  const reimbursement = getDraftType(draft) !== 'travel';
   const currencyTotals = draftCurrencyTotals(draft);
+  const partyFields = (
+    [
+      ['applicant', '申请人'],
+      ['department', '所属部门'],
+      ['paymentCompany', '付款公司'],
+    ] as const
+  ).map(([field, label]) => (
+    <FormField
+      label={label}
+      required
+      key={field}
+      error={issues.find((issue) => issue.path === field)?.message}
+    >
+      <input aria-label={label} value={draft[field]} readOnly />
+    </FormField>
+  ));
 
   return (
-    <div className="sf-fields">
-      <FormSection title="基本信息">
-        <div className="sf-grid">
-          {(
-            [
-              ['applicant', '申请人'],
-              ['department', '所属部门'],
-              ['paymentCompany', '付款公司'],
-            ] as const
-          ).map(([field, label]) => (
-            <FormField
-              label={label}
-              required
-              key={field}
-              error={issues.find((issue) => issue.path === field)?.message}
-            >
-              <input aria-label={label} value={draft[field]} readOnly />
-            </FormField>
-          ))}
-          {getDraftType(draft) !== 'personal' && (
-            <FormField
-              label="差旅类型"
-              required={getDraftType(draft) === 'travel'}
-              error={
-                issues.find((issue) => issue.path === 'travelType')?.message
-              }
-            >
-              <select
-                aria-label="差旅类型"
-                value={draft.travelType}
-                onChange={(event) => change('travelType', event.target.value)}
+    <div
+      ref={formRoot}
+      className={reimbursement ? 'sf-fields sf-reimbursement' : 'sf-fields'}
+    >
+      <div hidden={!!editor}>
+        <FormSection title="基本信息" action={reimbursement && draft.documentNumber && (
+          <span className="sf-source-line">草稿单号 {draft.documentNumber}</span>
+        )}>
+          <div className="sf-grid">
+            {reimbursement ? (
+              <details
+                className="sf-reimbursement-party sf-wide"
+                open={issues.some((issue) =>
+                  ['applicant', 'department', 'paymentCompany'].includes(
+                    issue.path,
+                  ),
+                )}
               >
-                <option value="">请选择</option>
-                {draft.travelType &&
-                  !['普通差旅', '短期异地办公'].includes(draft.travelType) && (
-                    <option>{draft.travelType}</option>
-                  )}
-                <option>普通差旅</option>
-                <option>短期异地办公</option>
-              </select>
+                <summary>
+                  <strong>报销人信息</strong>
+                  <span>{draft.applicant}</span>
+                  <Icon name="down" size={14} />
+                </summary>
+                <div className="sf-grid">{partyFields}</div>
+              </details>
+            ) : (
+              partyFields
+            )}
+            {getDraftType(draft) !== 'personal' && (
+              <FormField
+                label="差旅类型"
+                required={getDraftType(draft) === 'travel'}
+                error={
+                  issues.find((issue) => issue.path === 'travelType')?.message
+                }
+              >
+                <select
+                  aria-label="差旅类型"
+                  value={draft.travelType}
+                  onChange={(event) => change('travelType', event.target.value)}
+                >
+                  <option value="">请选择</option>
+                  {draft.travelType &&
+                    !['普通差旅', '短期异地办公'].includes(
+                      draft.travelType,
+                    ) && <option>{draft.travelType}</option>}
+                  <option>普通差旅</option>
+                  <option>短期异地办公</option>
+                </select>
+              </FormField>
+            )}
+            {getDraftType(draft) === 'expense' && (
+              <TravelApplicationLink
+                key={draft.id}
+                draft={draft}
+                error={issues.find((issue) => issue.path === 'applicationId')?.message}
+              />
+            )}
+            <FormField
+              label="单据事由"
+              required
+              wide
+              error={issues.find((issue) => issue.path === 'purpose')?.message}
+            >
+              <textarea
+                aria-label="单据事由"
+                rows={2}
+                value={draft.purpose}
+                onChange={(event) => change('purpose', event.target.value)}
+              />
             </FormField>
-          )}
-          <FormField
-            label="单据事由"
-            required
-            wide
-            error={issues.find((issue) => issue.path === 'purpose')?.message}
-          >
-            <textarea
-              aria-label="单据事由"
-              rows={2}
-              value={draft.purpose}
-              onChange={(event) => change('purpose', event.target.value)}
-            />
-          </FormField>
-        </div>
-      </FormSection>
+          </div>
+        </FormSection>
 
-      {getDraftType(draft) === 'expense' && (
-        <FormSection title="差旅申请关联">
-          <FormField
-            label="申请单号"
-            required
-            error={
-              issues.find((issue) => issue.path === 'applicationId')?.message
+        {getDraftType(draft) !== 'travel' && (
+          <FormSection
+            title={
+              draft.expenses.length
+                ? `报销费用（${draft.expenses.length}）`
+                : '报销费用'
+            }
+            action={
+              <div className="sf-expense-tools">
+                {expenseAction}
+                <Button
+                  variant="ghost"
+                  icon="plus"
+                  data-add-expense=""
+                  disabled={!!editor}
+                  onClick={(event) => {
+                    expenseTrigger.current = event.currentTarget;
+                    setPreviewFile(null);
+                    setEditor({ item: createBlankExpense(), isNew: true });
+                  }}
+                >
+                  新增费用
+                </Button>
+              </div>
             }
           >
-            <div className="sf-input-action">
-              <input
-                aria-label="差旅申请单号"
-                value={draft.applicationId}
-                onChange={(event) => {
-                  change('applicationId', event.target.value);
-                  setApplicationQueryStatus('');
-                }}
-              />
-              <Button
-                icon="search"
-                onClick={async () => {
-                  setApplicationQueryStatus('查询中…');
-                  try {
-                    await w.flush();
-                    setApplicationQueryStatus(
-                      await queryRelatedDocument(draft.applicationId),
-                    );
-                  } catch (error) {
-                    setApplicationQueryStatus(
-                      error instanceof Error
-                        ? error.message
-                        : '查询失败，请重试',
-                    );
-                  }
-                }}
-              >
-                查询
+            <div className="sf-expense-list">
+              {draft.expenses.map((item, index) => {
+                const category = getExpenseCategory(item.categoryId);
+                const missing =
+                  !category ||
+                  category.requiredFields.some((field) => !item[field]?.trim());
+                const itemIssues = issues.filter((issue) =>
+                  issue.path.startsWith(`expenses.${index}.`),
+                );
+                const review = checkoutNeedsReview(item);
+                return (
+                  <div
+                    className={`sf-expense-row${editor?.item.id === item.id ? ' is-editing' : ''}`}
+                    key={item.id}
+                  >
+                    <button
+                      type="button"
+                      className="sf-expense-open"
+                      data-expense-id={item.id}
+                      aria-describedby={`expense-summary-${item.id} expense-amount-${item.id}`}
+                      disabled={!!editor}
+                      onClick={(event) => {
+                        expenseTrigger.current = event.currentTarget;
+                        setPreviewFile(null);
+                        setEditor({
+                          item: {
+                            ...item,
+                            files: [...item.files],
+                            attachments: [...item.attachments],
+                          },
+                          isNew: false,
+                        });
+                      }}
+                      aria-label={`编辑${category?.label || item.name || '费用'}`}
+                    >
+                      <span
+                        className="sf-expense-copy"
+                        id={`expense-summary-${item.id}`}
+                      >
+                        <strong>
+                          {category?.label || item.name || '待选费用类型'}
+                          {(missing || itemIssues.length > 0 || review) && (
+                            <span
+                              className="sf-expense-warning"
+                              title={[
+                                missing ? '待完善' : '',
+                                ...itemIssues.map((issue) => issue.message),
+                                review ? '退房日期待核对' : '',
+                              ]
+                                .filter(Boolean)
+                                .join('，')}
+                            >
+                              <Icon name="alert" size={13} />
+                              <span>
+                                {missing || itemIssues.length
+                                  ? '待完善'
+                                  : '待核对'}
+                              </span>
+                            </span>
+                          )}
+                        </strong>
+                        <small className="sf-expense-metadata">
+                          {[
+                            expensePeriod(item),
+                            item.reason,
+                            item.files.length
+                              ? `${item.files.length} 张发票`
+                              : '',
+                            item.attachments.length ? `${item.attachments.length} 份附件` : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </small>
+                      </span>
+                      <span
+                        className="sf-expense-money"
+                        id={`expense-amount-${item.id}`}
+                      >
+                        <small>{item.currency || '币种待选'}</small>
+                        <strong>{formatAmount(item.amount)}</strong>
+                      </span>
+                      <Icon name="chevron" size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      className="sf-icon-button sf-delete"
+                      aria-label={`删除${category?.label || item.name || '费用'}`}
+                      disabled={!!editor}
+                      onClick={() =>
+                        change(
+                          'expenses',
+                          draft.expenses.filter(
+                            (value) => value.id !== item.id,
+                          ),
+                        )
+                      }
+                    >
+                      <Icon name="trash" size={15} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            {issues
+              .filter((issue) => issue.path === 'expenses')
+              .map((issue) => (
+                <p className="sf-error" key={issue.message}>
+                  {issue.message}
+                </p>
+              ))}
+            {currencyTotals.length > 0 && (
+              <div className="sf-totals">
+                <span>报销合计</span>
+                <div>
+                  {currencyTotals.map(({ currency, amountCents }) => (
+                    <strong key={currency}>
+                      <small>{currency}</small>
+                      {formatAmount((amountCents / 100).toFixed(2))}
+                    </strong>
+                  ))}
+                </div>
+              </div>
+            )}
+            {getDraftType(draft) === 'expense' &&
+              draft.subsidyCents !== null && (
+                <div className="sf-subsidy">
+                  <span>差旅补助</span>
+                  <strong>
+                    CNY {formatAmount((draft.subsidyCents / 100).toFixed(2))}
+                  </strong>
+                </div>
+              )}
+          </FormSection>
+        )}
+
+        {getDraftType(draft) !== 'personal' && (
+          <FormSection
+            title={getDraftType(draft) === 'travel' ? '差旅行程' : '实际行程'}
+            action={
+              <Button variant="ghost" icon="plus" onClick={addLeg}>
+                添加行程
+              </Button>
+            }
+          >
+            {draft.legacyPeriod && (
+              <p className="sf-source-line sf-legacy-period">
+                原草稿期间 {draft.legacyPeriod.start || '待补充'} 至{' '}
+                {draft.legacyPeriod.end || '待补充'}
+              </p>
+            )}
+            <LegFields
+              compact={reimbursement}
+              legs={draft.legs}
+              onChange={(legs) => change('legs', legs)}
+              issues={issues}
+            />
+            <SubmissionDefaults draft={draft} />
+          </FormSection>
+        )}
+
+        {draft.activityMode !== 'hidden' && (
+          <ActivityFields draft={draft} onChange={onChange} issues={issues} />
+        )}
+
+        {getDraftType(draft) === 'travel' && (
+          <FormSection title="同行人">
+            <div className="sf-companion-input">
+              <FormField label="姓名" error={companionError}>
+                <input
+                  aria-label="同行人姓名"
+                  value={companion}
+                  onChange={(event) => {
+                    setCompanion(event.target.value);
+                    setCompanionError('');
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      addCompanion();
+                    }
+                  }}
+                />
+              </FormField>
+              <Button icon="plus" onClick={addCompanion}>
+                添加
               </Button>
             </div>
-          </FormField>
-          {(applicationQueryStatus || draft.applicationId) && (
-            <p
-              className="sf-source-line"
-              role={applicationQueryStatus ? 'status' : undefined}
-            >
-              {applicationQueryStatus || '已保留关联申请单号 · 待核验'}
-            </p>
-          )}
-        </FormSection>
-      )}
-
-      {getDraftType(draft) !== 'personal' && (
-        <FormSection
-          title={getDraftType(draft) === 'travel' ? '差旅行程' : '实际行程'}
-          action={
-            <Button variant="ghost" icon="plus" onClick={addLeg}>
-              添加行程
-            </Button>
-          }
-        >
-          {draft.legacyPeriod && (
-            <p className="sf-source-line sf-legacy-period">
-              原草稿期间 {draft.legacyPeriod.start || '待补充'} 至{' '}
-              {draft.legacyPeriod.end || '待补充'}
-            </p>
-          )}
-          <LegFields
-            legs={draft.legs}
-            onChange={(legs) => change('legs', legs)}
-            issues={issues}
-          />
-          <SubmissionDefaults draft={draft} />
-        </FormSection>
-      )}
-
-      {draft.activityMode !== 'hidden' && (
-        <ActivityFields draft={draft} onChange={onChange} issues={issues} />
-      )}
-
-      {getDraftType(draft) === 'travel' && (
-        <FormSection title="同行人">
-          <div className="sf-companion-input">
-            <FormField label="姓名" error={companionError}>
-              <input
-                aria-label="同行人姓名"
-                value={companion}
-                onChange={(event) => {
-                  setCompanion(event.target.value);
-                  setCompanionError('');
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    addCompanion();
-                  }
-                }}
-              />
-            </FormField>
-            <Button icon="plus" onClick={addCompanion}>
-              添加
-            </Button>
-          </div>
-          {draft.companions.length > 0 && (
-            <ul className="sf-companions">
-              {draft.companions.map((name) => (
-                <li key={name}>
-                  <span>{name}</span>
-                  <button
-                    className="sf-icon-button"
-                    type="button"
-                    aria-label={`移除同行人${name}`}
-                    onClick={() =>
-                      change(
-                        'companions',
-                        draft.companions.filter((value) => value !== name),
-                      )
-                    }
-                  >
-                    <Icon name="close" size={13} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </FormSection>
-      )}
-
-      {getDraftType(draft) !== 'travel' && (
-        <FormSection
-          title="报销费用"
-          action={
-            <Button
-              variant="ghost"
-              icon="plus"
-              disabled={!!editor}
-              onClick={(event) => {
-                expenseTrigger.current = event.currentTarget;
-                setEditor({ item: createBlankExpense(), isNew: true });
-              }}
-            >
-              新增费用
-            </Button>
-          }
-        >
-          <div className="sf-expense-list">
-            {draft.expenses.map((item, index) => {
-              const category = getExpenseCategory(item.categoryId);
-              const missing =
-                !category ||
-                category.requiredFields.some((field) => !item[field]?.trim());
-              const itemIssues = issues.filter((issue) =>
-                issue.path.startsWith(`expenses.${index}.`),
-              );
-              const review = checkoutNeedsReview(item);
-              return (
-                <div
-                  className={`sf-expense-row${editor?.item.id === item.id ? ' is-editing' : ''}`}
-                  key={item.id}
-                >
-                  <button
-                    type="button"
-                    className="sf-expense-open"
-                    disabled={!!editor}
-                    onClick={(event) => {
-                      expenseTrigger.current = event.currentTarget;
-                      setEditor({
-                        item: {
-                          ...item,
-                          files: [...item.files],
-                          attachments: [...item.attachments],
-                        },
-                        isNew: false,
-                      });
-                    }}
-                    aria-label={`编辑${category?.label || item.name || '费用'}`}
-                  >
-                    <span className="sf-expense-copy">
-                      <strong>
-                        {category?.label || item.name || '待选费用类型'}
-                        {(missing || itemIssues.length > 0 || review) && (
-                          <span
-                            className="sf-expense-warning"
-                            title={[
-                              missing ? '待完善' : '',
-                              ...itemIssues.map((issue) => issue.message),
-                              review ? '退房日期待核对' : '',
-                            ]
-                              .filter(Boolean)
-                              .join('，')}
-                          >
-                            <Icon name="alert" size={13} />
-                            <span>
-                              {missing || itemIssues.length
-                                ? '待完善'
-                                : '待核对'}
-                            </span>
-                          </span>
-                        )}
-                      </strong>
-                      <small>{expensePeriod(item)}</small>
-                      <span className="sf-expense-reason" title={item.reason}>
-                        {item.reason || '事由待补充'}
-                      </span>
-                      <small>
-                        {item.files.length
-                          ? `${item.files.length}份发票`
-                          : '无发票'}{' '}
-                        · {item.attachments.length}份附件 · 超标金额待系统核定
-                      </small>
-                    </span>
-                    <span className="sf-expense-money">
-                      <small>{item.currency || '币种待选'}</small>
-                      <strong>{formatAmount(item.amount)}</strong>
-                    </span>
-                    <Icon name="chevron" size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    className="sf-icon-button sf-delete"
-                    aria-label={`删除${category?.label || item.name || '费用'}`}
-                    disabled={!!editor}
-                    onClick={() =>
-                      change(
-                        'expenses',
-                        draft.expenses.filter((value) => value.id !== item.id),
-                      )
-                    }
-                  >
-                    <Icon name="trash" size={15} />
-                  </button>
-                </div>
-              );
-            })}
-            {!draft.expenses.length && !editor && (
-              <p className="sf-empty-inline">尚未添加费用</p>
+            {draft.companions.length > 0 && (
+              <ul className="sf-companions">
+                {draft.companions.map((name) => (
+                  <li key={name}>
+                    <span>{name}</span>
+                    <button
+                      className="sf-icon-button"
+                      type="button"
+                      aria-label={`移除同行人${name}`}
+                      onClick={() =>
+                        change(
+                          'companions',
+                          draft.companions.filter((value) => value !== name),
+                        )
+                      }
+                    >
+                      <Icon name="close" size={13} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
-          </div>
-          {editor && (
-            <ExpenseEditor
-              key={editor.item.id}
-              item={editor.item}
-              draft={draft}
-              onChange={(item) => setEditor({ ...editor, item })}
-              onCancel={closeEditor}
-              onSave={() => {
-                const item = {
-                  ...editor.item,
-                  amount: decimalAmount(editor.item.amount),
-                };
-                change(
-                  'expenses',
-                  editor.isNew
-                    ? [...draft.expenses, item]
-                    : draft.expenses.map((value) =>
-                        value.id === item.id ? item : value,
-                      ),
-                );
-                closeEditor();
-              }}
+          </FormSection>
+        )}
+
+        {reimbursement ? (
+          <section className="sf-section sf-document-files">
+            <FilePicker
+              compact
+              title="单据附件"
+              files={draft.files}
+              onChange={(files) => change('files', files)}
               onUpload={(file, id) =>
                 fileUrls.current.set(id, URL.createObjectURL(file))
               }
               onPreview={setPreviewFile}
             />
-          )}
-          {issues
-            .filter((issue) => issue.path === 'expenses')
-            .map((issue) => (
-              <p className="sf-error" key={issue.message}>
-                {issue.message}
-              </p>
-            ))}
-          {currencyTotals.length > 0 && (
-            <div className="sf-totals">
-              <span>报销合计</span>
-              <div>
-                {currencyTotals.map(({ currency, amountCents }) => (
-                  <strong key={currency}>
-                    <small>{currency}</small>
-                    {formatAmount((amountCents / 100).toFixed(2))}
-                  </strong>
-                ))}
-              </div>
-            </div>
-          )}
-          {getDraftType(draft) === 'expense' && draft.subsidyCents !== null && (
-            <div className="sf-subsidy">
-              <span>差旅补助</span>
-              <strong>
-                CNY {formatAmount((draft.subsidyCents / 100).toFixed(2))}
-              </strong>
-              <small>来源为已保存补助金额</small>
-            </div>
-          )}
-        </FormSection>
-      )}
-
-      <FormSection title="单据附件">
-        <FilePicker
-          title="附件"
-          files={draft.files}
-          onChange={(files) => change('files', files)}
+          </section>
+        ) : (
+          <FormSection title="单据附件">
+            <FilePicker
+              title="附件"
+              files={draft.files}
+              onChange={(files) => change('files', files)}
+              onUpload={(file, id) =>
+                fileUrls.current.set(id, URL.createObjectURL(file))
+              }
+              onPreview={setPreviewFile}
+            />
+          </FormSection>
+        )}
+      </div>
+      {editor && (
+        <ExpenseEditor
+          key={editor.item.id}
+          item={editor.item}
+          isNew={editor.isNew}
+          issues={issues}
+          draft={draft}
+          onChange={(item) => setExpenseEditors((previous) => {
+            const active = previous[draft.id];
+            return active?.item.id === item.id ? { ...previous, [draft.id]: { ...active, item } } : previous;
+          })}
+          onCancel={closeEditor}
+          onSave={() => {
+            const item = {
+              ...editor.item,
+              amount: decimalAmount(editor.item.amount),
+            };
+            change(
+              'expenses',
+              editor.isNew
+                ? [...draft.expenses, item]
+                : draft.expenses.map((value) =>
+                    value.id === item.id ? item : value,
+                  ),
+            );
+            closeEditor();
+          }}
           onUpload={(file, id) =>
             fileUrls.current.set(id, URL.createObjectURL(file))
           }
           onPreview={setPreviewFile}
         />
-      </FormSection>
+      )}
 
       {previewFile && (
         <div className="sf-file-preview" ref={filePreviewElement}>

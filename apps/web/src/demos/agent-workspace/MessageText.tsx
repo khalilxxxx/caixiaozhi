@@ -16,9 +16,17 @@ function Inline({ text }: { text: string }) {
     </>
   );
 }
-export function MessageText({ text }: { text: string }) {
+export function MessageText({
+  text,
+  tableLabel = '回复中的表格',
+  className = 'assistant-text',
+}: {
+  text: string;
+  tableLabel?: string;
+  className?: string;
+}) {
   return (
-    <div className="assistant-text message-markdown">
+    <div className={`${className} message-markdown`}>
       {parseMessageMarkdown(text).map((block, index) => {
         if (block.kind === 'table')
           return (
@@ -27,7 +35,7 @@ export function MessageText({ text }: { text: string }) {
               className="message-table-scroll"
               tabIndex={0}
               role="region"
-              aria-label="回复中的表格"
+              aria-label={tableLabel}
             >
               <table>
                 <thead>

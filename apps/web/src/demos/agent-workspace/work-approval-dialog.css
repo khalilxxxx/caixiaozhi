@@ -1,0 +1,275 @@
+dialog.work-approval-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(440px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 40px);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: none;
+  border-radius: 14px;
+  background: #fff;
+  color: #202d3d;
+  box-shadow: 0 16px 58px rgb(15 31 48 / 20%);
+  text-align: left;
+}
+.work-approval-dialog::backdrop {
+  background: rgb(20 31 43 / 38%);
+}
+.work-approval-dialog form {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 40px);
+  margin: 0;
+}
+.wa-heading,
+.wa-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+.wa-heading {
+  justify-content: space-between;
+  padding: 16px 22px 12px;
+}
+.work-approval-dialog .wa-heading h2 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.4;
+  font-weight: 650;
+}
+.wa-heading h2:focus {
+  outline: none;
+}
+.wa-close {
+  display: grid;
+  place-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 5px;
+  color: #536374;
+  background: none;
+  cursor: pointer;
+}
+.wa-close:hover {
+  background: #eef2f5;
+}
+.wa-close:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.wa-body {
+  min-height: 0;
+  padding: 0 22px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.wa-document {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: #f3f6f8;
+  border-radius: 8px;
+}
+.wa-document .wi-document-icon {
+  width: 30px;
+  height: 33px;
+  flex: none;
+}
+.wa-document strong,
+.wa-document p {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.wa-document strong {
+  font-size: 14px;
+  line-height: 1.45;
+}
+.work-approval-dialog .wa-document p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #596a7c;
+}
+.wa-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border: 0;
+  margin: 18px 0 0;
+  padding: 0;
+}
+.wa-choices legend,
+.wa-comment > label,
+.work-approval-dialog .wa-evidence h3 {
+  display: block;
+  padding: 0;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 620;
+  line-height: 1.5;
+}
+.wa-choices label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  min-height: 40px;
+  color: #354356;
+  font-size: 14px;
+  border: 1px solid #cdd5dd;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.wa-choices label:has(input:checked) {
+  color: #274b70;
+  background: #edf4fa;
+  border-color: #7295b5;
+}
+.wa-choices label:has(input:disabled) {
+  cursor: default;
+  color: #647181;
+  background: #f5f7f8;
+}
+.work-approval-dialog input[type='radio'],
+.work-approval-dialog input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  flex: none;
+  accent-color: #315e88;
+}
+.wa-evidence {
+  margin: 18px 0 0;
+}
+.wa-evidence ul {
+  max-height: 162px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.wa-evidence li {
+  padding: 7px 10px;
+  background: #faf6ef;
+}
+.wa-evidence li + li {
+  border-top: 1px solid #e8dfcf;
+}
+.wa-evidence li strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #614e32;
+}
+.work-approval-dialog .wa-evidence li p {
+  margin: 1px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #61594c;
+  overflow-wrap: anywhere;
+}
+.wa-evidence label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.wa-comment {
+  margin-top: 18px;
+}
+.wa-comment small {
+  margin-left: 6px;
+  font-weight: 400;
+  font-size: 12px;
+  color: #65717f;
+}
+.wa-comment textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 64px;
+  max-height: 22dvh;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid #cbd3db;
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.wa-comment textarea:disabled {
+  background: #f6f8f9;
+  color: #586575;
+}
+.work-approval-dialog .wa-comment p,
+.work-approval-dialog .wa-restriction {
+  margin: 5px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #646d76;
+}
+.wa-feedback {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 12px 0 0;
+  line-height: 1.6;
+  font-size: 13px;
+}
+.wa-feedback.wa-alert {
+  color: #954139;
+}
+.wa-alert svg {
+  flex: none;
+  align-self: flex-start;
+  margin-top: 3px;
+}
+.wa-alert button {
+  border: 0;
+  color: #315e88;
+  background: none;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.wa-footer {
+  justify-content: flex-end;
+  padding: 12px 22px;
+  border-top: 1px solid #e1e6eb;
+}
+.wa-footer .btn {
+  min-height: 36px;
+}
+.work-approval-dialog :is(button, input, textarea):focus-visible {
+  outline: 2px solid #547ba2;
+  outline-offset: 2px;
+}
+@media (max-width: 480px) {
+  dialog.work-approval-dialog {
+    width: calc(100vw - 22px);
+    max-height: calc(100dvh - 22px);
+  }
+  .work-approval-dialog form {
+    max-height: calc(100dvh - 22px);
+  }
+  .wa-heading {
+    padding: 14px 15px 10px;
+  }
+  .wa-body {
+    padding: 0 15px 16px;
+  }
+  .wa-footer {
+    padding: 10px 15px;
+  }
+}

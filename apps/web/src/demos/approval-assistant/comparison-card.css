@@ -1,0 +1,117 @@
+.ra-dashboard {
+  --card-line: #d8e0e8;
+}
+.ra-dashboard-top {
+  background: #233a50;
+  color: #f3f7fa;
+  padding: 13px 19px 18px;
+}
+.ra-dashboard-brand {
+  border-bottom: 1px solid #45596b;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+.ra-dashboard-brand .ra-brand img {
+  width: 24px;
+  height: 24px;
+}
+.ra-dashboard-assess {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.ra-dashboard .ra-ring {
+  width: 86px;
+  height: 86px;
+}
+.ra-dashboard .ra-track {
+  stroke: #4f6579;
+}
+.ra-dashboard .ra-ring small,
+.ra-dashboard .ra-level span {
+  color: #c6d4df;
+}
+.ra-dashboard .ra-level {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 9px;
+}
+.ra-dashboard .ra-level strong {
+  color: #f5f8fa;
+  font-size: 20px;
+}
+.ra-dashboard.tone-high .ra-arc {
+  stroke: #ff9a83;
+}
+.ra-dashboard.tone-medium .ra-arc {
+  stroke: #f5bb72;
+}
+.ra-dashboard .ra-summary {
+  color: #e0e8ef;
+  font-size: 12px;
+  margin-top: 5px;
+}
+.ra-dashboard .ra-point {
+  padding: 8px 11px;
+  background: #f7f8fa;
+  border-radius: 6px;
+}
+.ra-dashboard .ra-execution {
+  padding-top: 16px;
+}
+.ra-viz-metrics {
+  display: flex;
+  flex-direction: column;
+}
+.ra-viz-metrics .ra-bar {
+  order: 2;
+  height: 4px;
+  margin-top: 8px;
+}
+.ra-viz-metrics .ra-skipped {
+  order: 3;
+}
+.ra-viz-metrics ul {
+  margin: 0;
+  gap: 0;
+  width: 100%;
+}
+.ra-viz-metrics ul li {
+  flex: 1;
+  gap: 1px 5px;
+  display: grid;
+  grid-template-columns: 6px 1fr;
+  padding-left: 12px;
+  border-left: 1px solid #e1e6eb;
+}
+.ra-viz-metrics ul li:first-child {
+  padding-left: 0;
+  border: 0;
+}
+.ra-viz-metrics li b {
+  grid-column: 1/-1;
+  grid-row: 1;
+  font-size: 22px;
+  line-height: 1.2;
+}
+.ra-viz-metrics li i {
+  grid-column: 1;
+  grid-row: 2;
+}
+.ra-viz-metrics li span {
+  grid-column: 2;
+  grid-row: 2;
+}
+@container approval-card (max-width:390px) {
+  .ra-dashboard-top {
+    padding: 12px 14px 14px;
+  }
+  .ra-dashboard-assess {
+    gap: 9px;
+  }
+  .ra-dashboard .ra-ring {
+    width: 72px;
+    height: 72px;
+  }
+}

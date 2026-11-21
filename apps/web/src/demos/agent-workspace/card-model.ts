@@ -1,5 +1,5 @@
 import type { ResultCard, Task } from './workspace';
-import { resolveDraftId } from './submission-state';
+import { readSubmissionState, resolveDraftId } from './submission-state';
 import { materialsInitial, materialBatchId } from './Documents';
 import {
   materialExpenseError,
@@ -8,6 +8,7 @@ import {
 } from './material-import';
 import { getAuditSummary } from './RulesSubmission';
 import { getSubmissionSummary } from './SubmissionWorkspace';
+import { withWorkDocumentTitle } from './work-document-model';
 
 export function materialSummary(
   data: Record<string, any>,
@@ -53,6 +54,13 @@ export function currentCard(
   data: Record<string, any>,
 ): ResultCard {
   if (card.kind === 'materials') {
+    if (card.data?.reimbursementBatchId || card.data?.reimbursementFileIds) {
+      const state = readSubmissionState(data);
+      const draftId = card.data.draftId;
+      const draft = state.edits[draftId] ?? state.drafts[draftId];
+      return card.data.reimbursementBatchId && draft?.expenses.some((item) => item.sourceBatchId === card.data?.reimbursementBatchId)
+        ? { ...card, status: '费用已生成', tone: 'green' } : card;
+    }
     const summary = materialSummary(data, {
       fileIds: card.data?.fileIds,
       batchId: card.id,
@@ -94,7 +102,7 @@ export function currentCard(
       tone: latest.data?.stale ? 'amber' : card.tone,
     };
   }
-  return card;
+  return withWorkDocumentTitle(card, data);
 }
 export function syncTaskStates(
   tasks: Task[],

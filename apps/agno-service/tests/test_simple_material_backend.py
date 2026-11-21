@@ -38,9 +38,109 @@ def mock_extractor(monkeypatch, data=None, error=None, before_result=None):
     monkeypatch.setattr(agent_runtime, 'model', lambda: object())
 
 
-def extract(store, ids):
+def extract(store, ids, **kwargs):
     from material_service import extract_materials
-    return asyncio.run(extract_materials(store, ids))
+    return asyncio.run(extract_materials(store, ids, **kwargs))
+
+
+@pytest.mark.parametrize(('service', 'category_id', 'hint'), [
+    ('出租车发票', 'taxi', None),
+    ('地铁乘车费', 'metro', None),
+    ('公交车票', 'bus', None),
+    ('停车费', 'other-parking', None),
+    ('车辆充电费', 'other-charging', None),
+    ('汽油费', 'other-fuel', None),
+    ('办公用品', 'other-office', None),
+    ('快递服务费', 'other-express', None),
+    ('签证办理费', 'other-visa', None),
+    ('手机话费充值', 'other-telecom', None),
+    ('宽带服务费', 'other-network', None),
+    ('入场券', 'reception-ticket', None),
+    ('餐饮服务', None, 'meal-purpose'),
+    ('餐饮服务，实际用途：客户招待', 'reception-meal', None),
+    ('餐饮服务，客户招待，OA申请', None, 'meal-oa'),
+    ('销售方：某某酒店', None, 'unclear'),
+    ('停车费、餐饮服务', None, 'mixed'),
+    ('铁路电子客票、机票', None, 'mixed'),
+])
+def test_material_category_requires_a_unique_supported_service(tmp_path, monkeypatch, service, category_id, hint):
+    store = Store(tmp_path / 'test.db')
+    file = uploaded(store, tmp_path, text=f'服务项目：{service}\n合计：80.50元')
+    data = proposal()
+    line = data['items'][0]
+    line['evidence'].update(category=service, amount='80.50元')
+    # A copied excerpt is not proof of the coarse type suggested by the model.
+    line['category'] = '办公'
+    mock_extractor(monkeypatch, data)
+    item = extract(store, [file['id']])['items'][0]
+    assert item['categoryId'] == category_id
+    assert item.get('categoryHint') == hint
+    assert item['amount'] == 8050
+
+
+def test_short_model_quotes_cannot_use_seller_opening_date_or_tax_as_expense_fields(tmp_path, monkeypatch):
+    store = Store(tmp_path / 'test.db')
+    text = '销售方：某某出租车有限公司\n开票日期：2026-11-17\n税额：80.50元\n价税合计：180.50元'
+    file = uploaded(store, tmp_path, text=text)
+    data = proposal()
+    data['items'][0]['evidence'].update(category='出租车', amount='80.50元')
+    mock_extractor(monkeypatch, data)
+    item = extract(store, [file['id']])['items'][0]
+    assert item['categoryId'] is None
+    assert item['date'] == ''
+    assert item['amount'] is None
+
+
+@pytest.mark.parametrize(('draft_id', 'alternatives', 'expected'), [
+    ('expense', [], ('long-distance', 'matched')),
+    ('expense', ['汽车-客车'], ('long-distance', 'matched')),
+    ('expense', ['火车-一等座'], ('other-long-distance', None)),
+    ('other-expense', [], ('other-long-distance', None)),
+    ('flight-expense', [], ('other-long-distance', None)),
+    ('personal', [], ('other-long-distance', None)),
+    (None, [], ('other-long-distance', None)),
+])
+def test_train_suggestion_uses_only_unique_available_legs_from_current_draft(
+    tmp_path, monkeypatch, draft_id, alternatives, expected,
+):
+    store = Store(tmp_path / 'test.db')
+    route = '上海至杭州'
+    text = f'铁路电子客票\n{route}\n乘车日期：2026-11-17\n票款合计：80.50元'
+    file = uploaded(store, tmp_path, text=text)
+    data = proposal()
+    line = data['items'][0]
+    line.update(category='交通', departureCity='上海', arrivalCity='杭州')
+    line['evidence'].update(category='铁路电子客票', date='乘车日期：2026-11-17',
+                            departureCity=route, arrivalCity=route, amount='80.50元')
+    mock_extractor(monkeypatch, data)
+
+    def add_drafts(state):
+        submissions = state['data']['submissions']
+        leg = {'id': 'matched', 'departureCity': '上海市', 'arrivalCity': '杭州',
+               'departureDate': '2026-11-17', 'transport': '火车-二等座'}
+        draft = submissions['drafts']['expense']
+        submissions.setdefault('edits', {})['expense'] = {
+            **draft, 'legs': [
+                leg,
+                {**leg, 'id': 'used'},
+                *[{**leg, 'id': f'alt-{index}', 'transport': transport}
+                  for index, transport in enumerate(alternatives)],
+            ], 'expenses': [{'id': 'existing', 'tripId': 'used'}],
+        }
+        submissions['drafts']['other-expense'] = {
+            **draft, 'id': 'other-expense', 'type': 'expense',
+            'legs': [{**leg, 'departureDate': '2026-11-18'}],
+        }
+        submissions['drafts']['flight-expense'] = {
+            **draft, 'id': 'flight-expense', 'type': 'expense',
+            'legs': [{**leg, 'transport': '飞机-经济舱'}],
+        }
+    store.mutate(add_drafts)
+
+    item = extract(store, [file['id']], draft_id=draft_id)['items'][0]
+    assert (item['categoryId'], item.get('tripId')) == expected
+    assert item['tripMode'] == '火车'
+    assert item.get('matchedDraftId') == ('expense' if expected[1] else None)
 
 
 def complete_personal(business, file, draft_id='personal'):
@@ -387,9 +487,9 @@ def test_distinct_confirmed_file_items_can_be_submitted_separately(tmp_path, mon
         second_draft_id = business.new_draft('personal')['draft']['id']
     patch = {'purpose': '出差资料', 'files': [file], 'expenses': [material_expense(items[1], file)]}
     if second_draft_id == 'expense':
-        patch.update(applicationId='TR-2026-1117', legs=[
-            {'departureCity': '北京', 'arrivalCity': '上海', 'departureDate': '2026-11-17', 'arrivalDate': '2026-11-17', 'transport': '高铁'},
-            {'departureCity': '上海', 'arrivalCity': '北京', 'departureDate': '2026-11-18', 'arrivalDate': '2026-11-18', 'transport': '高铁'},
+        patch.update(applicationId='TA-20261113-015', legs=[
+            {'departureCity': '杭州', 'arrivalCity': '上海', 'departureDate': '2026-11-17', 'arrivalDate': '2026-11-17', 'transport': '高铁'},
+            {'departureCity': '上海', 'arrivalCity': '杭州', 'departureDate': '2026-11-18', 'arrivalDate': '2026-11-18', 'transport': '高铁'},
         ])
     second = business.update_draft(second_draft_id, patch)['draft']
     check = business.validate_draft(second_draft_id)

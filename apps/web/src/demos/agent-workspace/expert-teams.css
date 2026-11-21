@@ -1,0 +1,488 @@
+.et-library {
+  --et-line: #dfe4ea;
+  --et-ink: #182639;
+  --et-muted: #526172;
+  color: var(--et-ink);
+  container-type: inline-size;
+}
+.et-controls,
+.et-title,
+.et-card footer,
+.et-footer,
+.et-dialog-head,
+.et-feedback {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.et-controls {
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.et-filters {
+  display: flex;
+  gap: 3px;
+  border: 1px solid #dfe4ea;
+  padding: 3px;
+  background: #f1f3f5;
+  border-radius: 8px;
+}
+.et-filters button,
+.et-name,
+.et-detail-btn,
+.et-examples button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.et-filters button {
+  border: 0;
+  border-radius: 5px;
+  padding: 6px 12px;
+  background: transparent;
+  color: #566273;
+  font-size: 13px;
+}
+.et-filters button[aria-pressed='true'] {
+  color: #193956;
+  background: white;
+  font-weight: 600;
+  box-shadow: 0 1px 3px #2732471f;
+}
+.et-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  width: min(240px, 100%);
+  margin-left: auto;
+  padding: 0 11px;
+  border: 1px solid var(--et-line);
+  border-radius: 7px;
+  background: white;
+  color: #657384;
+}
+.et-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  font-size: 14px;
+  outline: 0;
+  background: transparent;
+}
+.et-search:focus-within {
+  outline: 2px solid #4175aa;
+  outline-offset: 1px;
+}
+.agent-first .et-search input:focus-visible {
+  outline: none;
+}
+.et-grid,
+.et-connections {
+  display: grid;
+  gap: 16px;
+  align-items: stretch;
+}
+.et-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.et-connections {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.et-card,
+.et-connection {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 14px;
+  border: 1px solid var(--et-line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 20px;
+}
+.et-title {
+  gap: 12px;
+}
+.et-title > div,
+.et-source-identity {
+  min-width: 0;
+}
+.et-title h3 {
+  margin: 0;
+  line-height: 1.35;
+}
+.et-title small {
+  display: block;
+  margin-top: 3px;
+  color: var(--et-muted);
+  font-size: 12px;
+}
+.et-name {
+  padding: 0;
+  border: 0;
+  text-align: left;
+  background: none;
+  color: var(--et-ink);
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.et-name:hover,
+.et-detail-btn:hover {
+  color: #244f80;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.et-summary,
+.et-source-scope,
+.et-detail-list dd,
+.et-dialog-body p,
+.et-dialog-body li {
+  color: #4f5d6c;
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.et-summary {
+  margin: 0;
+  color: #354758;
+}
+.et-capabilities {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.et-capabilities > div {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 10px;
+}
+.et-capabilities dt {
+  min-width: 4em;
+  color: #566575;
+}
+.et-capabilities dd {
+  margin: 0;
+  color: #304457;
+  overflow-wrap: anywhere;
+}
+.et-card footer {
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid #e8edf1;
+}
+.et-detail-btn {
+  border: 0;
+  padding: 6px 0;
+  background: transparent;
+  color: #365e8a;
+  font-size: 13px;
+}
+.et-connection {
+  width: 100%;
+  height: 100%;
+  text-align: left;
+  color: var(--et-ink);
+  font: inherit;
+  cursor: pointer;
+}
+.et-connection:hover {
+  border-color: #b8c8d6;
+  background: #fcfdff;
+}
+.et-connection:focus-visible,
+.et-name:focus-visible,
+.et-detail-btn:focus-visible,
+.et-filters button:focus-visible {
+  outline: 2px solid #4671a3;
+  outline-offset: 2px;
+}
+.et-source-heading {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.et-source-identity {
+  display: grid;
+  gap: 3px;
+  justify-items: start;
+}
+.et-source-identity strong {
+  color: var(--et-ink);
+  font-weight: 650;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+.et-source-heading > svg:last-child {
+  flex: none;
+  margin-left: auto;
+  color: #65798a;
+}
+.et-source-scope {
+  display: block;
+  font-size: 13px;
+}
+.et-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #5b626d;
+  font-size: 12px;
+  font-weight: 500;
+}
+.et-state::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #8792a0;
+}
+.et-state.is-available {
+  color: #28604b;
+}
+.et-state.is-available::before {
+  background: #418867;
+}
+@container (max-width: 820px) {
+  .et-connections {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (max-width: 650px) {
+  .et-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@container (max-width: 500px) {
+  .et-connections {
+    grid-template-columns: 1fr;
+  }
+}
+.et-feedback {
+  padding: 22px;
+  background: white;
+  border: 1px solid #dfe4ea;
+  border-radius: 10px;
+  color: #4f6072;
+}
+.et-dialog {
+  border: 0;
+  padding: 0;
+  color: #1e2b3b;
+  background: white;
+  box-sizing: border-box;
+}
+.et-dialog::backdrop {
+  background: #17253655;
+}
+.et-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.et-drawer {
+  width: min(540px, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0 0 0 auto;
+  border-left: 1px solid #dae0e7;
+}
+.et-create {
+  width: min(620px, calc(100vw - 32px));
+  max-height: min(86dvh, 850px);
+  margin: auto;
+  border-radius: 15px;
+  box-shadow: 0 12px 52px #1b28322b;
+}
+.et-dialog-head,
+.et-footer {
+  padding: 17px 23px;
+  flex-shrink: 0;
+  justify-content: space-between;
+}
+.et-dialog-head {
+  border-bottom: 1px solid #e4e8ed;
+}
+.et-dialog-head h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.et-dialog-body {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 20px 23px;
+  flex: 1;
+  overscroll-behavior: contain;
+}
+.et-dialog-body > section + section,
+.et-dialog-body > .et-detail-summary + section {
+  margin-top: 22px;
+}
+.et-dialog-body h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 650;
+}
+.et-dialog-body p {
+  margin: 0;
+}
+.et-dialog-body ul {
+  padding-left: 19px;
+}
+.et-detail-list {
+  margin: 0;
+}
+.et-detail-list > div {
+  padding: 9px 0;
+  border-bottom: 1px solid #e8ebef;
+}
+.et-detail-list dt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.et-detail-list dt small {
+  font-size: 12px;
+  color: #526172;
+  font-weight: 400;
+}
+.et-detail-list dd {
+  margin: 3px 0 0;
+}
+.et-examples {
+  display: grid;
+  gap: 6px;
+}
+.et-examples button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #dce2e8;
+  border-radius: 7px;
+  background: #fff;
+  padding: 8px 11px;
+  text-align: left;
+  font-size: 14px;
+}
+.et-examples button:hover {
+  background: #f5f8fa;
+}
+.et-footer {
+  border-top: 1px solid #e4e8ed;
+  justify-content: flex-end;
+}
+.et-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.et-fields,
+.et-skill-choices {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.et-fields {
+  display: grid;
+  gap: 17px;
+}
+.et-fields > label,
+.et-skill-choices legend,
+.et-derived strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: #26364a;
+}
+.et-fields > label {
+  display: grid;
+  gap: 6px;
+}
+.et-fields input:not([type='checkbox']),
+.et-fields textarea,
+.et-fields select {
+  width: 100%;
+  padding: 9px 10px;
+  font: inherit;
+  font-weight: 400;
+  border: 1px solid #c8d1db;
+  border-radius: 7px;
+  background: #fff;
+  color: inherit;
+}
+.et-fields textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+.et-skill-choices legend {
+  margin-bottom: 5px;
+}
+.et-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+}
+.et-choice input {
+  margin: 4px 0 0;
+  accent-color: #b4453b;
+}
+.et-choice strong,
+.et-choice small {
+  display: block;
+  font-size: 14px;
+}
+.et-choice small {
+  color: #576777;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 3px;
+}
+.et-derived {
+  padding: 10px 12px;
+  background: #f3f5f7;
+  border-radius: 7px;
+}
+.et-dialog .et-error {
+  margin-top: 12px;
+  color: #a2342d;
+}
+@media (max-width: 640px) {
+  .et-controls {
+    gap: 8px;
+  }
+  .et-controls .et-search {
+    width: 100%;
+    flex-basis: 100%;
+    order: 3;
+  }
+  .et-controls > .btn {
+    margin-left: auto;
+  }
+  .et-card,
+  .et-connection {
+    padding: 16px;
+  }
+  .et-create {
+    max-height: calc(100dvh - 20px);
+  }
+  .et-dialog-head,
+  .et-footer,
+  .et-dialog-body {
+    padding: 15px;
+  }
+}

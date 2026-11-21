@@ -1,4 +1,9 @@
 export type DraftType = 'travel' | 'expense' | 'personal';
+export const submissionLabels: Record<DraftType, string> = {
+  travel: '差旅申请',
+  expense: '差旅报销',
+  personal: '个人费用报销',
+};
 export type DraftId = string;
 
 export function getDraftType(
@@ -48,8 +53,10 @@ export interface ActivityAssignment {
   expiryDate: string;
   allocation: string;
   oaUrl: string;
-  source?: 'manual' | 'sample';
+  source?: 'manual' | 'sample' | 'receipt';
 }
+
+export type ReceiptEvidence = Record<string, { fileId: string; quote: string }[]>;
 
 export interface ExpenseItem {
   id: string;
@@ -86,7 +93,15 @@ export interface ExpenseItem {
   group?: 'travel' | 'daily';
   sourceBatchId?: string;
   sourceSnapshot?: string;
+  receiptEvidence?: ReceiptEvidence;
+  receiptPrefill?: Partial<Record<ReceiptField, string>>;
+  receiptManualFields?: ReceiptField[];
+  receiptReadKey?: string;
+  reimbursementBatchId?: string;
+  receiptInvoiceNumbers?: string[];
 }
+
+export type ReceiptField = ExpenseField | 'categoryId' | 'reasonOption' | 'name';
 
 export type ExpenseField =
   | 'currency'
@@ -123,6 +138,7 @@ export interface ExpenseCategory {
 
 export interface SubmissionDraft {
   id: DraftId;
+  documentNumber?: string;
   type?: DraftType;
   title: string;
   applicant: string;
@@ -174,7 +190,7 @@ export interface MaterialExpenseImport {
     id: string;
     name: string;
     category: string;
-    categoryId?: string;
+    categoryId?: string | null;
     amount: number;
     date: string;
     end?: string;
@@ -185,6 +201,8 @@ export interface MaterialExpenseImport {
     sourceFileId: string;
     nights?: number;
     tripId?: string;
+    matchedDraftId?: string;
+    tripMode?: string;
     departureDate?: string;
     arrivalDate?: string;
     departureCity?: string;
@@ -544,7 +562,7 @@ export function draftPeriod(draft: SubmissionDraft): {
   return { start: sorted[0] ?? '', end: sorted.at(-1) ?? '' };
 }
 
-const fieldLabels: Record<ExpenseField, string> = {
+export const fieldLabels: Record<ExpenseField, string> = {
   currency: '币种',
   amount: '金额',
   reason: '事由',
@@ -807,39 +825,91 @@ export function validateDraft(
   return issues;
 }
 
-function importCategory(
-  item: MaterialExpenseImport['items'][number],
-  draftId: 'expense' | 'personal',
+export function materialCategoryId(
+  item: { category?: string | null; categoryId?: string | null; oaId?: string },
+  type: 'expense' | 'personal',
 ): string {
-  if (
-    item.categoryId &&
-    getExpenseCategories(draftId).some(
-      (definition) => definition.id === item.categoryId,
-    )
-  )
-    return item.categoryId;
+  const categories = getExpenseCategories(type);
+  if (item.categoryId !== undefined) {
+    if (item.categoryId === 'hotel' || item.categoryId === 'other-hotel')
+      return type === 'expense' ? 'hotel' : 'other-hotel';
+    if (item.categoryId === 'long-distance' && type === 'personal')
+      return 'other-long-distance';
+    return (
+      categories.find((definition) => definition.id === item.categoryId)?.id ??
+      ''
+    );
+  }
   if (item.category === '住宿')
-    return draftId === 'expense' ? 'hotel' : 'other-hotel';
-  if (item.category === '餐饮')
-    return item.oaId ? 'reception-meal-oa' : 'reception-meal';
+    return type === 'expense' ? 'hotel' : 'other-hotel';
+  if (item.category === '餐饮') return item.oaId ? 'reception-meal-oa' : '';
   if (item.category === '办公') return 'other-office';
-  const exact = getExpenseCategories(draftId).find(
+  const exact = categories.find(
     (definition) =>
       definition.label === item.category ||
-      `${definition.group}/${definition.label}` === item.category,
+      `${definition.group}/${definition.label}` === item.category ||
+      (definition.otherGroup &&
+        `${definition.otherGroup}/${definition.label}` === item.category) ||
+      (definition.group === '市内交通' &&
+        `市内交通费/${definition.label}` === item.category),
   );
   return exact?.id ?? '';
+}
+
+function matchesAvailableMaterialTrip(
+  item: MaterialExpenseImport['items'][number],
+  draft?: SubmissionDraft,
+): boolean {
+  if (
+    !draft ||
+    !item.tripId ||
+    (item.categoryId === 'long-distance' && item.matchedDraftId !== draft.id)
+  )
+    return false;
+  const leg = draft.legs.find((leg) => leg.id === item.tripId);
+  if (!leg) return false;
+  const mode = (transport: string) => {
+    if (/铁路|火车|高铁|动车/.test(transport)) return '火车';
+    if (/机票|航空|航班|飞机/.test(transport)) return '飞机';
+    if (/客车|客运|大巴|汽车/.test(transport)) return '汽车';
+    if (/轮船|船票|渡轮/.test(transport)) return '轮船';
+    if (/地铁/.test(transport)) return '地铁';
+    return '';
+  };
+  const ticketMode = item.tripMode || mode(item.transport ?? '');
+  const legMode = mode(leg.transport);
+  const city = (value: string) => value.trim().replace(/市$/, '');
+  const departureDate = item.departureDate || item.start || item.date;
+  return (
+    (!item.departureCity ||
+      city(item.departureCity) === city(leg.departureCity)) &&
+    (!item.arrivalCity || city(item.arrivalCity) === city(leg.arrivalCity)) &&
+    (!departureDate || departureDate === leg.departureDate) &&
+    (!ticketMode || !legMode || ticketMode === legMode) &&
+    !draft.expenses.some(
+      (expense) => expense.id !== item.id && expense.tripId === item.tripId,
+    )
+  );
 }
 
 function importedExpense(
   item: MaterialExpenseImport['items'][number],
   incoming: MaterialExpenseImport,
   batchId: string,
+  draft?: SubmissionDraft,
+  duplicateTrip = false,
 ): ExpenseItem {
-  const draftId = item.group === 'daily' ? 'personal' : 'expense';
-  const expense = createBlankExpense(importCategory(item, draftId));
+  const type = item.group === 'daily' ? 'personal' : 'expense';
+  let categoryId = materialCategoryId(item, type);
+  if (
+    categoryId === 'long-distance' &&
+    (duplicateTrip || !matchesAvailableMaterialTrip(item, draft))
+  )
+    categoryId = 'other-long-distance';
+  const expense = createBlankExpense(categoryId);
   const template = getExpenseCategory(expense.categoryId)?.template;
   const lodging = template && lodgingTemplates.includes(template);
+  const route = template === 'T08' || (!template && item.category === '交通');
   return {
     ...expense,
     id: item.id,
@@ -850,25 +920,23 @@ function importedExpense(
         : '',
     reason: item.purpose ?? '',
     reasonOption: item.purpose ? '其他' : '',
-    date: lodging ? '' : item.date,
+    date: lodging || template === 'T01' || template === 'T08' ? '' : item.date,
     checkIn: item.checkIn ?? (lodging ? (item.start ?? item.date) : ''),
     checkOut: item.checkOut ?? (lodging ? (item.end ?? '') : ''),
-    departureDate:
-      item.departureDate ??
-      (template === 'T08'
-        ? (item.start ?? item.date)
-        : item.category === '交通'
-          ? (item.start ?? '')
-          : ''),
-    arrivalDate:
-      item.arrivalDate ??
-      (template === 'T08' || item.category === '交通' ? (item.end ?? '') : ''),
-    departureCity: item.departureCity ?? '',
-    arrivalCity: item.arrivalCity ?? '',
+    departureDate: route
+      ? (item.departureDate ??
+        (template === 'T08' ? (item.start ?? item.date) : (item.start ?? '')))
+      : '',
+    arrivalDate: route ? (item.arrivalDate ?? item.end ?? '') : '',
+    departureCity: route ? (item.departureCity ?? '') : '',
+    arrivalCity: route ? (item.arrivalCity ?? '') : '',
     city: item.city ?? '',
-    transport: item.transport ?? '',
-    tripId: item.tripId ?? '',
-    oaId: item.oaId ?? '',
+    transport: route ? (item.transport ?? '') : '',
+    tripId: template === 'T01' ? (item.tripId ?? '') : '',
+    oaId:
+      expense.categoryId === 'reception-meal-oa' || batchId === 'legacy'
+        ? (item.oaId ?? '')
+        : '',
     nights: item.nights === undefined ? '' : String(item.nights),
     sourceFileId: item.sourceFileId,
     group: item.group ?? 'travel',
@@ -980,24 +1048,47 @@ export function importMaterialExpenses(
     const original = drafts[id]!;
     const type = getDraftType(original);
     const group = type === 'expense' ? 'travel' : 'daily';
-    const imported = items
-      .filter((item) => (item.group ?? 'travel') === group)
-      .map((item) => {
-        const value = importedExpense(item, incoming, batchId);
-        const current =
-          previousItems.find(
-            (expense) =>
-              expense.id === item.id &&
-              expense.sourceFileId === item.sourceFileId,
-          ) ??
-          previousItems.find(
-            (expense) =>
-              expense.id === item.id && expense.sourceBatchId === batchId,
-          );
-        return current
-          ? mergeImportedExpense(current, value)
-          : { ...value, sourceSnapshot: JSON.stringify(value) };
-      });
+    const targetItems = items.filter(
+      (item) => (item.group ?? 'travel') === group,
+    );
+    const tripCounts = new Map<string, number>();
+    for (const item of targetItems) {
+      if (
+        item.tripId &&
+        materialCategoryId(
+          item,
+          group === 'travel' ? 'expense' : 'personal',
+        ) === 'long-distance' &&
+        matchesAvailableMaterialTrip(item, original)
+      )
+        tripCounts.set(item.tripId, (tripCounts.get(item.tripId) ?? 0) + 1);
+    }
+    const imported = targetItems.map((item) => {
+      const duplicateTrip =
+        !!item.tripId && (tripCounts.get(item.tripId) ?? 0) > 1;
+      const value = importedExpense(
+        item,
+        incoming,
+        batchId,
+        original,
+        duplicateTrip,
+      );
+      const current =
+        previousItems.find(
+          (expense) =>
+            expense.id === item.id &&
+            expense.sourceFileId === item.sourceFileId,
+        ) ??
+        previousItems.find(
+          (expense) =>
+            expense.id === item.id && expense.sourceBatchId === batchId,
+        );
+      if (!current) return { ...value, sourceSnapshot: JSON.stringify(value) };
+      const merged = mergeImportedExpense(current, value);
+      if (current.tripId && !original.expenses.includes(current))
+        merged.tripId = value.tripId;
+      return merged;
+    });
     const retained = original.expenses.filter(
       (expense) =>
         expense.sourceBatchId !== batchId &&
@@ -1083,6 +1174,24 @@ function migrateExpense(value: unknown): ExpenseItem {
     files: readFiles(source.files),
     attachments: readFiles(source.attachments),
     generated: source.generated === true,
+    ...(Array.isArray(source.manualFields)
+      ? { manualFields: source.manualFields.filter((v): v is 'currency' | 'rental' => v === 'currency' || v === 'rental') }
+      : {}),
+    ...(source.receiptPrefill && typeof source.receiptPrefill === 'object'
+      ? { receiptPrefill: Object.fromEntries(Object.entries(asRecord(source.receiptPrefill)).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) }
+      : {}),
+    ...(Array.isArray(source.receiptManualFields)
+      ? { receiptManualFields: source.receiptManualFields.filter((v): v is ReceiptField => typeof v === 'string') }
+      : {}),
+    ...(typeof source.receiptReadKey === 'string' ? { receiptReadKey: source.receiptReadKey } : {}),
+    ...(typeof source.reimbursementBatchId === 'string' ? { reimbursementBatchId: source.reimbursementBatchId } : {}),
+    ...(Array.isArray(source.receiptInvoiceNumbers)
+      ? { receiptInvoiceNumbers: source.receiptInvoiceNumbers.filter((v): v is string => typeof v === 'string') }
+      : {}),
+    ...(source.receiptEvidence && typeof source.receiptEvidence === 'object'
+      ? { receiptEvidence: Object.fromEntries(Object.entries(asRecord(source.receiptEvidence)).filter((entry): entry is [string, ReceiptEvidence[string]] =>
+            Array.isArray(entry[1]) && entry[1].every((v) => v && typeof v.fileId === 'string' && typeof v.quote === 'string'))) }
+      : {}),
     ...(typeof source.sourceFileId === 'string'
       ? { sourceFileId: source.sourceFileId }
       : {}),
@@ -1190,6 +1299,7 @@ export function migrateLegacyDrafts(input: unknown): SubmissionDrafts {
     ] as const) {
       if (typeof source[field] === 'string') draft[field] = source[field];
     }
+    if (typeof source.documentNumber === 'string') draft.documentNumber = source.documentNumber;
     draft.files = readFiles(source.files);
     draft.expenses = Array.isArray(source.expenses)
       ? source.expenses.map(migrateExpense)
@@ -1218,7 +1328,7 @@ export function migrateLegacyDrafts(input: unknown): SubmissionDrafts {
           expiryDate: textValue(item.expiryDate),
           allocation: textValue(item.allocation),
           oaUrl: textValue(item.oaUrl),
-          ...(item.source === 'manual' || item.source === 'sample'
+          ...(item.source === 'manual' || item.source === 'sample' || item.source === 'receipt'
             ? { source: item.source }
             : {}),
         };

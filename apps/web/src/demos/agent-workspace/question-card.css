@@ -6,7 +6,7 @@
   padding: 9px 0;
   border: 0;
   background: transparent;
-  color: #525257;
+  color: var(--enterprise-link);
   font: inherit;
   font-size: 13px;
   text-align: left;
@@ -19,7 +19,7 @@
   overflow-wrap: anywhere;
 }
 .question-pending-link:hover:not(:disabled) {
-  color: #b62f3a;
+  color: var(--enterprise-link);
 }
 .question-pending-link:disabled {
   cursor: default;
@@ -27,14 +27,14 @@
 }
 .question-pending-link:focus-visible,
 .question-history > summary:focus-visible {
-  outline: 2px solid #8c8782;
+  outline: 2px solid var(--enterprise-focus);
   outline-offset: 3px;
 }
 .question-history {
   max-width: 620px;
   margin: 12px 0 4px;
-  border-bottom: 1px solid #e5e5e1;
-  color: #525257;
+  border-bottom: 1px solid var(--line);
+  color: var(--enterprise-text);
 }
 .question-history > summary {
   display: flex;

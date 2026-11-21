@@ -1,5 +1,5 @@
 .expense-summary {
-  color: #29292d;
+  color: var(--ink);
   max-width: 1000px;
   padding: 8px 0 32px;
   font-size: 13px;
@@ -17,9 +17,9 @@
 .expense-summary-result-heading { justify-content: space-between; }
 .expense-summary h2 { margin: 0; font-size: 20px; font-weight: 600; }
 .expense-summary h3 { margin: 0; font-size: 14px; font-weight: 600; }
-.expense-summary a { color: #55555b; text-decoration: underline; text-underline-offset: 3px; }
+.expense-summary a { color: var(--enterprise-secondary); text-decoration: underline; text-underline-offset: 3px; }
 .expense-summary .btn { flex-shrink: 0; }
-.expense-summary-form { padding: 24px 0; border-bottom: 1px solid #e5e5e3; }
+.expense-summary-form { padding: 24px 0; border-bottom: 1px solid var(--line); }
 .expense-summary-form > label { display: block; font-weight: 550; margin-bottom: 9px; }
 .expense-summary-file-controls > select {
   flex: 1;
@@ -35,7 +35,7 @@
 .expense-summary-form p,
 .expense-summary-result-heading p,
 .expense-summary-history > p,
-.expense-summary-status { color: #66666c; line-height: 1.7; font-size: 12px; }
+.expense-summary-status { color: var(--muted); line-height: 1.7; font-size: 12px; }
 .expense-summary-form p { margin: 10px 0 0; }
 .expense-summary-error { padding: 12px 14px; margin-top: 16px; background: #fff1f1; color: #a33237; border-radius: 6px; overflow-wrap: anywhere; }
 .expense-summary-result { margin-top: 25px; }
@@ -45,23 +45,23 @@
 .expense-summary table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .expense-summary caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .expense-summary th,
-.expense-summary td { text-align: left; padding: 13px 16px; border-bottom: 1px solid #e8e8e5; }
-.expense-summary thead { background: #f4f4f2; color: #55555b; }
+.expense-summary td { text-align: left; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.expense-summary thead { background: var(--enterprise-hover); color: var(--enterprise-secondary); }
 .expense-summary thead th { font-weight: 500; }
 .expense-summary tbody th { font-weight: 400; white-space: pre-wrap; overflow-wrap: anywhere; }
 .expense-summary tr > :nth-child(n + 2) { text-align: right; white-space: nowrap; }
-.expense-summary tfoot { background: #fafaf9; font-weight: 600; }
+.expense-summary tfoot { background: var(--canvas); font-weight: 600; }
 .expense-summary-history { margin-top: 32px; }
 .expense-summary-history ul { padding: 0; margin: 12px 0 0; list-style: none; max-height: 350px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #c6c5c2 transparent; }
-.expense-summary-history li { border-bottom: 1px solid #e8e8e5; }
+.expense-summary-history li { border-bottom: 1px solid var(--line); }
 .expense-summary-history button { display: flex; justify-content: space-between; align-items: center; gap: 20px; width: 100%; padding: 13px 12px; text-align: left; border-radius: 5px; }
 .expense-summary-history button:hover,
 .expense-summary-history button[aria-current] { background: #f1f1ef; }
 .expense-summary-history button > span { min-width: 0; overflow-wrap: anywhere; }
-.expense-summary-history small { display: block; color: #66666c; font-size: 11px; margin-top: 5px; }
+.expense-summary-history small { display: block; color: var(--muted); font-size: 11px; margin-top: 5px; }
 .expense-summary-history strong { flex: none; font-weight: 500; }
-.expense-summary :is(button, a, select):focus-visible { outline: 2px solid #8c8782; outline-offset: 3px; }
-.expense-summary ::selection { background: #f7d7ce; color: #29292d; }
+.expense-summary :is(button, a, select):focus-visible { outline: 2px solid var(--enterprise-focus); outline-offset: 3px; }
+.expense-summary ::selection { background: #f7d7ce; color: var(--ink); }
 @media (max-width: 700px) {
   .expense-summary-header,
   .expense-summary-result-heading { align-items: flex-start; gap: 15px; flex-wrap: wrap; }
