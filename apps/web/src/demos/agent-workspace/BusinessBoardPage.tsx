@@ -1,11 +1,20 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { api } from './runtime-client';
 import { Icon } from './ui';
 import { boardScopeFromHash } from './business-board-handoff';
 import { BusinessBoardVisuals } from './BusinessBoardVisuals';
 import {
   boardDateLabel,
+  boardViewFromHash,
   businessBoardQuery,
+  type BoardView,
   type BusinessBoardOptions,
   type BusinessBoardScope,
   type BusinessBoardSnapshot,
@@ -330,23 +339,43 @@ function DepartmentForm({
 
 interface BoardProps {
   initialScope?: BusinessBoardScope;
+  initialView: BoardView;
+  replaceBoardHash: (hash: string) => void;
   onAsk: (snapshot: BusinessBoardSnapshot) => void | Promise<void>;
 }
 
 function Dashboard({
   options,
   initialScope,
+  initialView,
+  replaceBoardHash,
   onAsk,
 }: BoardProps & { options: BusinessBoardOptions }) {
   const [scope, setScope] = useState(
     () => initialScope ?? recentScope(options),
   );
   const [asking, setAsking] = useState(false);
+  const [view, setView] = useState(initialView);
+  const edited = useRef(false);
   const [askError, setAskError] = useState('');
   const { data, error, retry } = useBoardResource<BusinessBoardSnapshot>(
     basePath + '/board?' + businessBoardQuery(scope),
   );
+  const results = useRef<HTMLDivElement>(null);
+  const pendingView = useRef<BoardView>(initialView);
+  useEffect(() => {
+    if (!data || pendingView.current === 'overview') return;
+    const figure = results.current?.querySelector<HTMLElement>(
+      `[data-board-view="${pendingView.current}"]`,
+    );
+    pendingView.current = 'overview';
+    if (figure) {
+      figure.focus({ preventScroll: true });
+      figure.scrollIntoView({ block: 'start' });
+    }
+  }, [data]);
   const update = (next: BusinessBoardScope) => {
+    edited.current = true;
     setAskError('');
     setScope(next);
   };
@@ -360,6 +389,14 @@ function Dashboard({
       }
     }
   }, [data]);
+  useEffect(() => {
+    if (data && edited.current) {
+      const query = businessBoardQuery(data.scope);
+      replaceBoardHash(
+        '#analysis?' + query + (view === 'overview' ? '' : '&view=' + view),
+      );
+    }
+  }, [data, view, replaceBoardHash]);
   const ask = async () => {
     if (!data || asking) return;
     setAsking(true);
@@ -434,13 +471,21 @@ function Dashboard({
         </div>
       </div>
       {data ? (
-        <>
+        <div ref={results}>
           <div className="bb-result-title">
             <h2>{data.title}</h2>
             <span>{data.source}</span>
           </div>
-          <BusinessBoardVisuals snapshot={data} />
-        </>
+          <BusinessBoardVisuals
+            snapshot={data}
+            showComparison
+            routeByAmount={view === 'routeSpend'}
+            onRouteSort={(byAmount) => {
+              edited.current = true;
+              setView(byAmount ? 'routeSpend' : 'travel');
+            }}
+          />
+        </div>
       ) : (
         <Feedback error={error} retry={retry} />
       )}
@@ -449,12 +494,24 @@ function Dashboard({
 }
 
 export function BusinessBoardPage({ onAsk }: Pick<BoardProps, 'onAsk'>) {
-  const [initialScope, setInitialScope] = useState(() =>
-    boardScopeFromHash(location.hash),
+  const [entry, setEntry] = useState(() => ({ hash: location.hash, key: 0 }));
+  const initialScope = boardScopeFromHash(entry.hash);
+  const replaceBoardHash = useCallback(
+    (hash: string) => {
+      if (location.hash !== entry.hash || hash === entry.hash) return;
+      history.replaceState(history.state, '', hash);
+      // Updating the current history entry keeps the active filters and scroll position.
+      setEntry({ hash, key: entry.key });
+    },
+    [entry],
   );
   useEffect(() => {
-    const readLocation = () =>
-      setInitialScope(boardScopeFromHash(location.hash));
+    const readLocation = () => {
+      const hash = location.hash;
+      setEntry((current) =>
+        hash === current.hash ? current : { hash, key: current.key + 1 },
+      );
+    };
     window.addEventListener('hashchange', readLocation);
     return () => window.removeEventListener('hashchange', readLocation);
   }, []);
@@ -465,9 +522,11 @@ export function BusinessBoardPage({ onAsk }: Pick<BoardProps, 'onAsk'>) {
     <div className="bb-page">
       {data ? (
         <Dashboard
-          key={initialScope ? businessBoardQuery(initialScope) : 'current'}
+          key={entry.key}
           options={data}
           initialScope={initialScope}
+          initialView={boardViewFromHash(entry.hash)}
+          replaceBoardHash={replaceBoardHash}
           onAsk={onAsk}
         />
       ) : (

@@ -1,5 +1,6 @@
 """费用看板、差旅看板与对话共用的只读演示台账。金额聚合使用人民币分。"""
 from collections import Counter
+from calendar import monthrange
 import csv
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -63,17 +64,16 @@ def _group_values(amounts, *, money):
             for name, value in sorted(amounts.items(), key=lambda item: (-item[1], item[0]))]
 
 
-def _trend(daily, start, end, *, money):
+def _trend(daily, start, end, *, money, grain):
     if not daily:
         return []
-    span = (end - start).days + 1
-    interval = 1 if span <= 45 else 7
+    interval = 1 if grain == 'day' else 7
     # 不将台账覆盖期之外的日期绘制成零值。
     current = max(start, COVERAGE_START)
     last = min(end, AS_OF)
     result = []
     while current <= last:
-        if span > 185:
+        if grain == 'month':
             following = (current.replace(day=28) + timedelta(days=4)).replace(day=1)
             label = f'{current.year}/{current.month:02}'
         else:
@@ -81,13 +81,37 @@ def _trend(daily, start, end, *, money):
             label = f'{current.month}/{current.day}'
         length = (min(following, last + timedelta(days=1)) - current).days
         value = sum(daily[current + timedelta(days=i)] for i in range(length))
-        result.append({'date': current.isoformat(), 'label': label, 'value': value / 100 if money else value})
+        result.append({'date': current.isoformat(), 'endDate': (current + timedelta(days=length - 1)).isoformat(),
+                       'label': label, 'value': value / 100 if money else value})
         current = following
     return result
 
 
 def _metric(key, label, value, unit):
     return {'id': key, 'label': label, 'value': value, 'unit': unit}
+
+
+def _metrics(claims, *, expense):
+    travel = [claim for claim in claims if claim.trip_days]
+    travel_amount = _metric('travelAmount', '差旅费用', sum(claim.cents for claim in travel) / 100, '元')
+    trips = _metric('tripCount', '出差行程', len(travel), '次')
+    if expense:
+        return [_metric('expenseAmount', '报销总额', sum(claim.cents for claim in claims) / 100, '元'),
+                travel_amount, _metric('claimCount', '报销单数', len(claims), '笔'), trips]
+    travelers = {(claim.employee, claim.department) for claim in travel}
+    return [trips, _metric('travelerCount', '出差人数', len(travelers), '人'), travel_amount,
+            _metric('tripDays', '出差人天', sum(claim.trip_days for claim in travel), '天')]
+
+
+def _previous_period(start, end):
+    previous_end = start - timedelta(days=1)
+    if start.day == 1 and (start.year, start.month) == (end.year, end.month):
+        first_of_previous = previous_end.replace(day=1)
+        if end.day == monthrange(end.year, end.month)[1]:
+            return first_of_previous, previous_end, 'previousMonth'
+        if end.day <= previous_end.day:
+            return first_of_previous, previous_end.replace(day=end.day), 'monthToDate'
+    return previous_end - (end - start), previous_end, 'previousPeriod'
 
 
 def query_board(system=None, start_date=None, end_date=None, department_ids=None):
@@ -115,39 +139,36 @@ def query_board(system=None, start_date=None, end_date=None, department_ids=None
         coverage_status = 'outside' if end < COVERAGE_START or start > AS_OF else 'partial'
 
     expense = system == 'expense'
+    visible = [claim for claim in _ledger() if claim.department in selected and (expense or claim.trip_days)]
+    claims = [claim for claim in visible if start <= claim.day <= end]
+    comparison = None
+    span = (end - start).days + 1
+    grain = 'day' if span <= 45 else 'sevenDays' if span <= 185 else 'month'
+    if coverage_status == 'complete':
+        previous_start, previous_end, kind = _previous_period(start, end)
+        if previous_start >= COVERAGE_START:
+            previous = [claim for claim in visible if previous_start <= claim.day <= previous_end]
+            comparison = {
+                'startDate': previous_start.isoformat(), 'endDate': previous_end.isoformat(), 'kind': kind,
+                'days': (previous_end - previous_start).days + 1,
+                'values': {item['id']: item['value'] for item in _metrics(previous, expense=expense)},
+            }
+
     daily, breakdown, departments = Counter(), Counter(), Counter()
     employee_amounts, employee_trips = Counter(), Counter()
     route_amounts, route_trips = Counter(), Counter()
-    record_count = total_cents = travel_cents = trip_days = 0
-    for claim in _ledger():
-        if claim.department not in selected or not start <= claim.day <= end:
-            continue
-        if not expense and not claim.trip_days:
-            continue
-        record_count += 1
-        total_cents += claim.cents
+    for claim in claims:
         value = claim.cents if expense else 1
         daily[claim.day] += value
         breakdown[claim.category if expense else claim.transport] += value
         departments[DEPARTMENTS[claim.department]] += value
         if claim.trip_days:
-            travel_cents += claim.cents
-            trip_days += claim.trip_days
             employee = (claim.employee, claim.department)
             employee_amounts[employee] += claim.cents
             employee_trips[employee] += 1
             route_amounts[claim.route] += claim.cents
             route_trips[claim.route] += 1
 
-    trip_count = sum(employee_trips.values())
-    travel_amount = _metric('travelAmount', '差旅费用', travel_cents / 100, '元')
-    trips = _metric('tripCount', '出差行程', trip_count, '次')
-    if expense:
-        metrics = [_metric('expenseAmount', '报销总额', total_cents / 100, '元'), travel_amount,
-                   _metric('claimCount', '报销单数', record_count, '笔'), trips]
-    else:
-        metrics = [trips, _metric('travelerCount', '出差人数', len(employee_trips), '人'),
-                   travel_amount, _metric('tripDays', '出差人天', trip_days, '天')]
     ranking = [{'name': name, 'department': DEPARTMENTS[department], 'amount': cents / 100,
                 'trips': employee_trips[name, department]}
                for (name, department), cents in sorted(employee_amounts.items(), key=lambda item: (-item[1], item[0]))]
@@ -157,7 +178,8 @@ def query_board(system=None, start_date=None, end_date=None, department_ids=None
         'scope': {'system': system, 'startDate': start_date, 'endDate': end_date, 'departmentIds': selected},
         'title': SYSTEMS[system] + '看板', 'departmentLabel': '、'.join(DEPARTMENTS[dept] for dept in selected),
         'source': SOURCE, 'coverage': options['coverage'], 'coverageStatus': coverage_status,
-        'recordCount': record_count, 'metrics': metrics,
-        'trend': _trend(daily, start, end, money=expense), 'breakdown': _group_values(breakdown, money=expense),
+        'recordCount': len(claims), 'metrics': _metrics(claims, expense=expense), 'comparison': comparison,
+        'trendGrain': grain, 'trend': _trend(daily, start, end, money=expense, grain=grain),
+        'breakdown': _group_values(breakdown, money=expense),
         'departments': _group_values(departments, money=expense), 'ranking': ranking, 'routes': routes,
     }

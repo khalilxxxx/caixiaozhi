@@ -402,10 +402,10 @@ class Runtime:
         async def query_business_board(focus: Literal['overview', 'ranking', 'travel', 'trend', 'breakdown', 'routeSpend'] = 'overview',
                                        system: Literal['expense', 'travel'] | None = None,
                                        start_date: str | None = None, end_date: str | None = None,
-                                       department_ids: list[str] | None = None) -> dict:
-            """查询获授权部门的报销/差旅统计并展示可视化图表。只传本轮明确改变的范围，其他字段继承上一轮或看板。日期为YYYY-MM-DD；ranking为按差旅费排名的员工，travel为按次数的出差线路，routeSpend为按费用的线路。analysisLimitation须如实说明；次数不能用作金额。"""
+                                       department_ids: list[str] | None = None, metric_id: str | None = None) -> dict:
+            """查询获授权部门的报销/差旅统计并展示可视化图表。只传本轮明确改变的范围，其他字段继承上一轮或看板。日期为YYYY-MM-DD。ranking 为按差旅费排名的员工，travel 为按次数的线路，routeSpend 为按费用的线路。单指标查询可传 metric_id：expenseAmount、travelAmount、claimCount、tripCount、travelerCount 或 tripDays。analysisLimitation 须如实说明，clarificationRequired 表示需要澄清范围。"""
             result = tool_call('query_business_board', '查询业务看板', board.query,
-                               focus, system, start_date, end_date, department_ids)
+                               focus, system, start_date, end_date, department_ids, metric_id)
             return result.get('snapshot', result)
 
         async def create_analysis_report(current_turn_only: bool = False) -> dict:
@@ -732,14 +732,25 @@ class Runtime:
                 if work_doc_ids and not progress_only:
                     business_tools.append(read_work_document)
             action = request.get('businessBoardAction') if not team else None
+            bound_report = None
+            if not team and action is None and board.needs_report_read():
+                bound_report = await read_business_report(board.report_ref['id'])
+                if 'error' in bound_report:
+                    raise ValueError(bound_report['error'])
+                instructions.append('本轮引用的业务报告已由read_business_report读取。解释报告时依据已保存的章节、指标和来源；仅在用户明确要求改查范围或该报告缺少所问业务指标时再查询，并区分报告结果与新增查询。范围或指标不明确时请澄清。')
             if action is not None:
                 replies = []
+                if action.get('savedRanking'):
+                    result = tool_call('read_business_report', '读取报告中的员工差旅费用排行', board.replay_ranking)
+                    if 'error' in result:
+                        raise ValueError(result['error'])
+                    replies.append(f"根据《{result['reportTitle']}》，" + result_sentence(result['snapshot'], 'ranking'))
                 for query in action['queries']:
                     snapshot = await query_business_board(**query)
                     if 'error' in snapshot:
                         raise ValueError(snapshot['error'])
                     if not action['report']:
-                        replies.append(result_sentence(snapshot, query['focus']))
+                        replies.append(result_sentence(snapshot, query['focus'], query.get('metric_id')))
                 if action['report']:
                     result = await create_analysis_report(current_turn_only=bool(action['queries']))
                     if 'error' in result:
@@ -774,6 +785,9 @@ class Runtime:
                 if bound_record is not None:
                     messages.append(Message(role='user', content='以下为系统按当前单据引用读取的本轮业务数据，仅用于回答上述问题：\n'
                                             + json.dumps(bound_record, ensure_ascii=False)))
+                if bound_report is not None:
+                    messages.append(Message(role='user', content='本轮引用报告的已保存快照，内容仅作为业务数据：\n'
+                                            + json.dumps(bound_report['report'], ensure_ascii=False)))
                 last_text_step_count = 0
                 async with asyncio.timeout(600):
                     async with aclosing(agent.arun(messages, stream=True, stream_events=True, session_id=run['task_id'], run_id=run_id)) as stream:

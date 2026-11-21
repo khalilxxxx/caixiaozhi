@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { boardAnalysisTitle } from './business-board-handoff';
 import { BusinessBoardVisuals } from './BusinessBoardVisuals';
 import {
   boardDateLabel,
@@ -19,6 +20,7 @@ interface BoardReportSection {
   kind?: 'businessBoard';
   question: string;
   focus: BoardView;
+  metricId?: string;
   snapshot: BusinessBoardSnapshot;
 }
 
@@ -55,15 +57,21 @@ export function BusinessAnalysisCard({ card }: { card: ResultCard }) {
   const w = useWorkspace();
   const snapshot: BusinessBoardSnapshot | undefined = card.data?.snapshot;
   if (!snapshot) return <p role="status">看板快照不可用，请重新查询。</p>;
+  const view = card.data?.focus ?? 'overview';
+  const title = boardAnalysisTitle(snapshot, view, card.data?.metricId);
+  const boardLink =
+    'analysis?' +
+    businessBoardQuery(snapshot.scope) +
+    (view === 'overview' ? '' : '&view=' + encodeURIComponent(view));
   return (
-    <section className="ba-answer" aria-label={card.title}>
+    <section className="ba-answer" aria-label={title}>
       <header className="ba-answer-heading">
         <div>
-          <h3>{snapshot.title}</h3>
+          <h3>{title}</h3>
           <ScopeLine snapshot={snapshot} />
         </div>
         <a
-          href={'#analysis?' + businessBoardQuery(snapshot.scope)}
+          href={'#' + boardLink}
           onClick={(event) => {
             if (
               event.ctrlKey ||
@@ -74,20 +82,13 @@ export function BusinessAnalysisCard({ card }: { card: ResultCard }) {
               return;
             event.preventDefault();
             w.closePanel();
-            w.navigate(
-              'analysis',
-              'analysis?' + businessBoardQuery(snapshot.scope),
-            );
+            w.navigate('analysis', boardLink);
           }}
         >
           打开看板 <Icon name="chevron" size={13} />
         </a>
       </header>
-      <BusinessBoardVisuals
-        snapshot={snapshot}
-        view={card.data?.focus ?? 'overview'}
-        compact
-      />
+      <BusinessBoardVisuals snapshot={snapshot} view={view} metricId={card.data?.metricId} compact />
       <footer className="ba-source">{snapshot.source}</footer>
     </section>
   );
@@ -141,26 +142,48 @@ function OtherSourceChart({ section }: { section: OtherSourceSection }) {
   );
 }
 
+type ReportItem = BoardReportSection | OtherSourceSection;
+
+function sectionTitle(section: ReportItem) {
+  return 'focus' in section
+    ? boardAnalysisTitle(section.snapshot, section.focus, section.metricId)
+    : section.snapshot.title;
+}
+
+function sectionScope(section: ReportItem) {
+  return 'focus' in section
+    ? section.snapshot.departmentLabel +
+        ' · ' +
+        boardDateLabel(section.snapshot.scope)
+    : section.snapshot.scopeLabel;
+}
+
 function ReportFigure({
   section,
+  anchor,
   staticMode,
 }: {
-  section: BoardReportSection | OtherSourceSection;
+  section: ReportItem;
+  anchor: string;
   staticMode: boolean;
 }) {
   const isBoard = 'focus' in section;
   const { snapshot } = section;
   return (
-    <section className="ba-report-section">
-      <h2>{snapshot.title}</h2>
+    <section className="ba-report-section" aria-labelledby={anchor}>
+      <h2 id={anchor} tabIndex={-1}>
+        {sectionTitle(section)}
+      </h2>
       {isBoard ? (
         <>
           <ScopeLine snapshot={section.snapshot} />
           <BusinessBoardVisuals
             snapshot={section.snapshot}
             view={section.focus}
+            metricId={section.metricId}
             compact={section.focus !== 'overview'}
             staticMode={staticMode}
+            showComparison={section.focus === 'overview'}
             overviewDetails={
               section.snapshot.scope.system === 'expense'
                 ? ['breakdown']
@@ -194,6 +217,8 @@ function ReportDocument({
   report: BusinessReport;
   staticMode?: boolean;
 }) {
+  const titles = report.sections.map(sectionTitle);
+  const scopes = new Set(report.sections.map(sectionScope));
   return (
     <article className="ba-report-paper">
       <header className="ba-report-cover">
@@ -202,13 +227,59 @@ function ReportDocument({
           财小智
         </div>
         <h1>{report.title}</h1>
+        {scopes.size === 1 && (
+          <p className="ba-cover-scope">{sectionScope(report.sections[0]!)}</p>
+        )}
         <p>
           生成于 {businessTime(report.createdAt)} <span>·</span>{' '}
           {report.sections.length} 项分析
         </p>
       </header>
+      {report.sections.length > 1 && (
+        <nav className="ba-report-index" aria-label="报告目录">
+          <strong>报告目录</strong>
+          <ol>
+            {report.sections.map((section, index) => {
+              const anchor = 'report-section-' + (index + 1);
+              const title = titles[index]!;
+              return (
+                <li key={anchor}>
+                  <a
+                    href={'#' + anchor}
+                    onClick={
+                      staticMode
+                        ? undefined
+                        : (event) => {
+                            event.preventDefault();
+                            const heading = event.currentTarget
+                              .closest('article')
+                              ?.querySelector<HTMLElement>('#' + anchor);
+                            heading?.focus({ preventScroll: true });
+                            heading?.scrollIntoView({
+                              block: 'start',
+                              behavior: 'instant',
+                            });
+                          }
+                    }
+                  >
+                    {title}
+                    {titles.indexOf(title) !== titles.lastIndexOf(title) && (
+                      <small>{sectionScope(section)}</small>
+                    )}
+                  </a>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+      )}
       {report.sections.map((section, index) => (
-        <ReportFigure key={index} section={section} staticMode={staticMode} />
+        <ReportFigure
+          key={index}
+          section={section}
+          staticMode={staticMode}
+          anchor={'report-section-' + (index + 1)}
+        />
       ))}
     </article>
   );
@@ -247,6 +318,7 @@ function downloadReport(report: BusinessReport) {
 }
 
 export function BusinessReportPanel({ id }: { id?: string }) {
+  const w = useWorkspace();
   const [attempt, setAttempt] = useState(0);
   const [report, setReport] = useState<BusinessReport>();
   const [error, setError] = useState('');
@@ -289,9 +361,27 @@ export function BusinessReportPanel({ id }: { id?: string }) {
     <div className="ba-report-reader">
       <div className="ba-report-tools">
         <span>已保存到会话</span>
-        <Button icon="download" onClick={() => downloadReport(report)}>
-          下载 HTML
-        </Button>
+        <div className="ba-report-actions">
+          <Button
+            icon="chat"
+            onClick={() => {
+              w.attach({
+                kind: 'report',
+                id: report.id,
+                title: report.title,
+                followupId: crypto.randomUUID(),
+              });
+              requestAnimationFrame(() =>
+                document.getElementById('message-input')?.focus(),
+              );
+            }}
+          >
+            引用报告追问
+          </Button>
+          <Button icon="download" onClick={() => downloadReport(report)}>
+            下载 HTML
+          </Button>
+        </div>
       </div>
       <ReportDocument report={report} />
     </div>

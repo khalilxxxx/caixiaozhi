@@ -13,6 +13,21 @@ from store import now
 
 FOCUS_TITLES = {'overview': '概览', 'ranking': '员工差旅费用排行', 'travel': '出差线路',
                 'trend': '趋势', 'breakdown': '构成', 'routeSpend': '线路差旅费用'}
+_OWN_DEPARTMENT = re.compile(r'(?:我们?|本人|自己)(?:所属|所在)?(?:的)?部门|本部门')
+_ALL_DEPARTMENTS = re.compile(r'(?:已授权|授权|全部|所有)(?:的)?部门')
+_REPORT_MENTION = re.compile(r'(?:这|那|该|本|上)(?:一)?(?:份|张|个)?(?:分析)?报告|报告(?:里|中|内)')
+_REPORT_RANKING_QUESTION = re.compile(
+    r'(?:那|请问)?(?:(?:根据|在)?(?:这份|该|本)?(?:分析)?报告(?:里|中|内)?)?'
+    r'(?:(?:谁|哪位员工)的?(?:出差|差旅)(?:费(?:用)?|金额)(?:是)?(?:最多|最高)'
+    r'|(?:出差|差旅)(?:费(?:用)?|金额)(?:最多|最高)的是(?:谁|哪位员工))(?:呢|吗)?')
+_METRIC_QUESTIONS = {
+    'travelAmount': r'(?:差旅|出差)(?:的)?(?:费用?|金额|支出)',
+    'travelerCount': r'(?:差旅|出差)(?:的)?人数|(?:多少|几)(?:位员工|人)(?:出差|参加差旅)',
+    'tripCount': r'(?:差旅|出差|行程)(?:的)?次数|(?:多少|几)次(?:出差|行程)',
+    'tripDays': r'出差人天',
+    'claimCount': r'报销单数|(?:多少|几)笔报销',
+    'expenseAmount': r'报销(?:的)?(?:总额|金额|费用)',
+}
 
 
 def _named_departments(question, options):
@@ -20,6 +35,10 @@ def _named_departments(question, options):
     allowed = {d['id'] for d in options['departments']}
     if not set(named).issubset(allowed):
         raise BusinessError('ANALYTICS_FORBIDDEN', '无权查看所选部门的数据。')
+    if _ALL_DEPARTMENTS.search(question):
+        return [d['id'] for d in options['departments']]
+    if _OWN_DEPARTMENT.search(question):
+        return list(dict.fromkeys([*options['defaultScope']['departmentIds'], *named]))
     return named
 
 
@@ -94,6 +113,8 @@ class BoardConversation:
     def __init__(self, store, task_id, refs=(), run_id=None, question=''):
         self.store, self.task_id, self.refs = store, task_id, refs
         self.run_id, self.question = run_id, question
+        self.report_ref = next((ref for ref in reversed(refs) if ref.get('kind') == 'report'
+                               and str(ref.get('id', '')).startswith('business-report-')), None)
 
     def sections(self, current_turn_only=False):
         with self.store.connect() as db:
@@ -105,27 +126,64 @@ class BoardConversation:
             _section_allowed(section)
         return sections
 
-    def scope(self):
+    def previous_views(self):
+        """Return the last query turn's views, or the source explicitly selected for this chat."""
+        report = self.report_ref or {}
         with self.store.connect() as db:
-            row = db.execute("""SELECT json_extract(b.body, '$.snapshot.scope') AS scope
-                               FROM business_board_results b JOIN runs r ON r.id=b.run_id
-                               WHERE r.task_id=? AND b.kind IN ('query','scope') ORDER BY b.rowid DESC LIMIT 1""", (self.task_id,)).fetchone()
-        if row:
-            scope = json.loads(row['scope'])
-            _assert_permitted(scope, business_options())
-            return scope
-        board = next((r for r in self.refs if r.get('kind') == 'business-board'), None)
+            rows = db.execute("""SELECT json_extract(body,'$.snapshot.scope') AS scope,
+                                 json_extract(body,'$.focus') AS focus, json_extract(body,'$.metricId') AS metric,
+                                 json_extract(body,'$.sourceReportId') AS source_report
+                                 FROM business_board_results WHERE kind IN ('query','scope') AND run_id=(
+                                     SELECT r.id FROM runs r WHERE r.task_id=? AND EXISTS (
+                                         SELECT 1 FROM business_board_results b WHERE b.run_id=r.id AND b.kind IN ('query','scope'))
+                                     AND (? IS NULL OR EXISTS (
+                                         SELECT 1 FROM json_each(r.request,'$.refs') ref
+                                         WHERE json_extract(ref.value,'$.kind')='report' AND json_extract(ref.value,'$.id')=?
+                                         AND json_extract(ref.value,'$.followupId') IS ?))
+                                     ORDER BY r.rowid DESC LIMIT 1) ORDER BY rowid""",
+                              (self.task_id, report.get('id'), report.get('id'), report.get('followupId'))).fetchall()
         options = business_options()
-        if board:
-            scope = board.get('scope')
-            _assert_permitted(scope, options)
-            return scope
-        report = next((r for r in self.refs if r.get('kind') == 'report'
-                       and str(r.get('id', '')).startswith('business-report-')), None)
+        if rows:
+            views = [{'scope': json.loads(r['scope']), 'focus': r['focus'], 'metric_id': r['metric']} for r in rows]
+            for view in views:
+                _assert_permitted(view['scope'], options)
+            return views, bool(report) and all(row['source_report'] == report['id'] for row in rows)
         if report:
             sections = get_board_report(self.store, report['id'])['sections']
-            return next((s['snapshot']['scope'] for s in reversed(sections) if 'scope' in s['snapshot']), options['defaultScope'])
-        return options['defaultScope']
+            return [{'scope': s['snapshot'].get('scope'), 'focus': s.get('focus'), 'metric_id': s.get('metricId')}
+                    for s in sections], True
+        board = next((r for r in self.refs if r.get('kind') == 'business-board'), None)
+        scope = board.get('scope') if board else options['defaultScope']
+        _assert_permitted(scope, options)
+        return [{'scope': scope, 'focus': 'overview'}], False
+
+    def needs_report_read(self):
+        return bool(self.report_ref and (_REPORT_MENTION.search(self.question) or self.previous_views()[1]))
+
+    def saved_ranking(self):
+        """A single employee-spend chart in a single ledger, period and department selection."""
+        report = get_board_report(self.store, self.report_ref['id'])
+        ranges = set()
+        rankings = []
+        for section in report['sections']:
+            snapshot = section['snapshot']
+            scope = snapshot.get('scope')
+            if not scope or not snapshot.get('source'):
+                return None
+            ranges.add((scope['startDate'], scope['endDate'], tuple(sorted(scope['departmentIds'])), snapshot['source']))
+            if section.get('focus') == 'ranking' and isinstance(snapshot.get('ranking'), list):
+                rankings.append(snapshot)
+        if len(ranges) == 1 and len(rankings) == 1:
+            return report['title'], rankings[0]
+
+    def replay_ranking(self):
+        saved = self.saved_ranking()
+        if not saved:
+            raise ValueError('这份报告中没有可唯一确定的员工差旅费用排行。')
+        title, snapshot = saved
+        result_id = 'board-result-' + self.run_id
+        result = self._analysis_card(result_id, snapshot, 'ranking', sourceReportId=self.report_ref['id'])
+        return {**result, 'reportTitle': title}
 
     def _save(self, result_id, kind, body):
         with self.store.lock, self.store.connect() as db:
@@ -180,36 +238,57 @@ class BoardConversation:
                     origin.refs = [*origin.refs, *self.refs]
                     origin.capture('read_expense_summary', {'result': result})
 
-    def query(self, focus='overview', system=None, start_date=None, end_date=None, department_ids=None):
+    def query(self, focus='overview', system=None, start_date=None, end_date=None, department_ids=None, metric_id=None):
         spend_view = _travel_spend_view(self.question)
         if spend_view:
             focus, system = spend_view, 'travel'
         if focus not in FOCUS_TITLES and focus not in {'unavailableBreakdown', 'unavailableTrend'}:
             raise ValueError('不支持的图表类型。')
-        scope = self.scope()
         named = _named_departments(self.question, business_options())
         if named and department_ids is None:
             department_ids = named
         if named and not set(department_ids).issubset(named):
             raise ValueError('查询部门与问题中指定的部门不一致。')
+        views, from_report = self.previous_views()
+        scope = views[-1]['scope'] if views else None
+        if from_report:
+            # When a report combines periods or sources the model must resolve the
+            # requested scope explicitly, before any new totals can be computed.
+            scope = {}
+            for field, override in [('system', system), ('startDate', start_date), ('endDate', end_date),
+                                    ('departmentIds', department_ids)]:
+                if override is None:
+                    values = {_encode((v['scope'] or {}).get(field)) for v in views}
+                    if len(values) != 1 or 'null' in values:
+                        return {'clarificationRequired': '报告含有不同的统计范围，请明确要查询的业务系统、期间和部门。', 'cards': []}
+                    scope[field] = json.loads(values.pop())
         snapshot = query_board(system if system is not None else scope['system'],
                                start_date if start_date is not None else scope['startDate'],
                                end_date if end_date is not None else scope['endDate'],
                                department_ids if department_ids is not None else scope['departmentIds'])
-        digest = hashlib.sha256(_encode([self.run_id, snapshot['scope'], focus]).encode()).hexdigest()[:32]
+        if metric_id and not any(m['id'] == metric_id for m in snapshot['metrics']):
+            raise ValueError('所选业务系统未提供该指标。')
+        digest = hashlib.sha256(_encode([self.run_id, snapshot['scope'], focus, metric_id]).encode()).hexdigest()[:32]
         result_id = 'board-result-' + digest
         if focus in {'unavailableBreakdown', 'unavailableTrend'}:
-            self._save(result_id, 'scope', {'snapshot': {'scope': snapshot['scope']}})
+            self._save(result_id, 'scope', {'focus': focus, 'snapshot': {'scope': snapshot['scope']}})
             metric = next(m for m in snapshot['metrics'] if m['id'] == 'travelAmount')
             unavailable = ('台账未提供住宿、交通等费用的分类金额，无法按费用类型拆分。' if focus == 'unavailableBreakdown'
                            else '当前差旅看板按日期汇总行程次数，无法据此绘制费用走势。')
             return {'snapshot': {**snapshot, 'analysisLimitation': f"差旅费用合计 {metric['value']:,.2f} 元。{unavailable}"},
                     'cards': []}
-        section = self._save(result_id, 'query', {'question': self.question, 'focus': focus, 'snapshot': snapshot})
+        return self._analysis_card(result_id, snapshot, focus, **({'metricId': metric_id} if metric_id else {}))
+
+    def _analysis_card(self, result_id, snapshot, focus, **details):
+        section = self._save(result_id, 'query', {'question': self.question, 'focus': focus, 'snapshot': snapshot, **details})
         snapshot = section['snapshot']
         title = snapshot['title'] if focus == 'overview' else FOCUS_TITLES[focus]
         card = {'kind': 'analysis', 'id': result_id, 'title': title,
                 'data': {'businessBoard': True, 'focus': focus, 'snapshot': snapshot}}
+        if section.get('metricId'):
+            card['data']['metricId'] = section['metricId']
+        if self.report_ref and self.report_ref.get('followupId'):
+            card['data']['reportFollowupId'] = self.report_ref['followupId']
         return {'snapshot': snapshot, 'cards': [card]}
 
     def report(self, current_turn_only=False):
@@ -224,7 +303,7 @@ class BoardConversation:
                 and str(ref.get('title', '')).lower().endswith('.csv') and ref['id'] not in csv_files):
                 raise ValueError('请先汇总当前选择的 CSV 文件，再生成报告。')
         # Reopening the same view should not repeat an identical figure in the report.
-        distinct = {(_encode(s['snapshot']), s.get('focus', s.get('kind'))): s for s in history}
+        distinct = {(_encode(s['snapshot']), s.get('focus', s.get('kind')), s.get('metricId')): s for s in history}
         sections = list(distinct.values())
         if all('scope' in s['snapshot'] for s in sections):
             departments = {s['snapshot']['departmentLabel'] for s in sections}
@@ -263,6 +342,7 @@ _LOOKUP_WORDS = re.compile('|'.join(sorted((
     '可以', '请', '帮忙', '帮', '麻烦', '给', '那', '一下', '的话', '这个', '这次', '本次', '当前', '当期',
     '分析一下', '分析', '汇总', '统计', '数据', '智能', '可视化', '看板', '情况', '概况', '使用', '概览',
     '报销', '费用', '金额', '差旅', '出差', '费', '行程', '次数', '人次', '如何', '怎样', '怎么样', '多少',
+    '人数', '人天', '人', '笔', '几', '次', '位员工', '单数',
     '谁', '哪位员工', '员工', '人员', '最多', '最高', '排行榜', '排行', '排名', '趋势', '走势', '类别',
     '类型', '构成', '占比', '结构', '目的地', '线路', '路线', '里面', '部门', '以及', '和', '与', '及',
     '跟', '的', '中', '里', '呢', '是', '有', '为', '把', '以', '按', '从', '到', '至', '切换', '改成',
@@ -283,10 +363,22 @@ def lookup_plan(store, task, refs, capability, question):
     reportable = (previous_data.get('publicFinance') or previous_data.get('businessBoard') or
                   previous_data.get('businessReport') or str(previous.get('id', '')).startswith('expense-summary-'))
     simple = re.sub(r'[\s，。、！？?！,：:；;“”「」]+', '', question)
-    specific_scope = bool(_MONTH.search(simple) or _RANGE.search(simple) or any(label in simple for label in DEPARTMENTS.values())
-                          or re.search(r'只看|仅看|只要|只包含|仅包含|本月|上月|上个月|这个月|所有部门|全部部门', simple))
-    if (capability in {None, 'analysis'} and _REPORT.search(simple) and not specific_scope
-        and not _LOOKUP_WORDS.sub('', simple)):
+    specific_scope = bool(_MONTH.search(simple) or _RANGE.search(simple) or _OWN_DEPARTMENT.search(simple)
+                          or _ALL_DEPARTMENTS.search(simple) or any(label in simple for label in DEPARTMENTS.values())
+                          or re.search(r'只看|仅看|只要|只包含|仅包含|本月|上月|上个月|这个月', simple))
+    context = BoardConversation(store, (task or {}).get('id', ''), refs, question=question)
+    if capability not in {None, 'analysis'}:
+        return None
+    if (context.report_ref and _REPORT_RANKING_QUESTION.fullmatch(simple)
+        and all(r == context.report_ref or r.get('kind') == 'business-board' for r in refs)
+        and context.needs_report_read()):
+        if context.saved_ranking():
+            return {'savedRanking': True, 'queries': [], 'report': False}
+        return None
+    if context.report_ref and _REPORT_MENTION.search(simple):
+        return None
+    if (_REPORT.search(simple) and not specific_scope
+        and not _LOOKUP_WORDS.sub('', simple) and not context.report_ref):
         if not reportable and task:
             with store.connect() as db:
                 reportable = db.execute("""SELECT 1 FROM business_board_results b JOIN runs r ON r.id=b.run_id
@@ -294,18 +386,17 @@ def lookup_plan(store, task, refs, capability, question):
                                         (task['id'],)).fetchone()
         if reportable:
             return {'queries': [], 'report': True}
-    if capability not in {None, 'analysis'} or any(
+    if any(
         r.get('kind') != 'business-board' and not (r.get('kind') == 'report' and str(r.get('id', '')).startswith('business-report-'))
         for r in refs
     ):
         return None
-    last_card = next((c for m in reversed((task or {}).get('messages', [])) for c in reversed(m.get('cards', []))
-                      if c.get('kind') in {'analysis', 'report'}), None)
-    last_data = (last_card or {}).get('data') or {}
-    has_context = bool(last_data.get('businessBoard') or last_data.get('businessReport')) if last_card else bool(refs)
-    if not has_context and not re.search(r'(?:费用|报销|差旅|出差|行程)(?:情况|费|数据|使用|分析|概览|趋势|最多|最高|排行|金额|总额|支出|结构|构成|目的地|主要花在哪)|部门.*(?:费用|报销|出差|差旅)', question):
+    has_context = bool(context.report_ref or previous_data.get('businessBoard') or previous_data.get('businessReport')
+                       or (not previous and refs))
+    metrics = [key for key, pattern in _METRIC_QUESTIONS.items() if re.search(pattern, simple)]
+    if not has_context and not metrics and not re.search(r'(?:费用|报销|差旅|出差|行程)(?:情况|费|数据|使用|分析|概览|趋势|最多|最高|排行|金额|总额|支出|结构|构成|目的地|主要花在哪)|部门.*(?:费用|报销|出差|差旅)', question):
         return None
-    text = re.sub(r'[\s，。、！？?！,：:；;“”「」]+', '', question)
+    text = simple
     dates = {}
     matched_range = _RANGE.search(text)
     months = list(_MONTH.finditer(text))
@@ -319,15 +410,19 @@ def lookup_plan(store, task, refs, capability, question):
         month = int(matched[2]) if matched[2].isdigit() else _MONTHS.index(matched[2]) + 1
         text = text[:matched.start()] + text[matched.end():]
     options = business_options()
-    selected = _named_departments(question, options)
+    selected = _named_departments(text, options)
     for department in options['departments']:
         if department['name'] in text:
             text = text.replace(department['name'], '')
-    all_depts = bool(re.search(r'(?:已授权|授权|全部|所有)部门', text))
-    if _LOOKUP_WORDS.sub('', text):
+    text = _OWN_DEPARTMENT.sub('', text)
+    if (_LOOKUP_WORDS.sub('', text) or re.search(r'人次|(?:我|本人|自己)的(?:报销|费用|出差|差旅)', text)):
         return None
-    context = BoardConversation(store, (task or {}).get('id', ''), refs)
-    scope = context.scope()
+    views, from_report = context.previous_views()
+    if from_report and (not specific_scope or len(views) != 1 or not views[0]['scope']):
+        # Interpret saved results via read_business_report. A new filtered query
+        # needs a single source chart before its omitted filters can be inherited.
+        return None
+    scope = views[-1]['scope']
     if not dates and months:
         year = int(matched[1] or scope['endDate'][:4])
         dates = dict(start_date=date(year, month, 1).isoformat(),
@@ -338,29 +433,43 @@ def lookup_plan(store, task, refs, capability, question):
         if '上月' in text or '上个月' in text:
             end = end.replace(day=1) - timedelta(days=1)
         dates = dict(start_date=end.replace(day=1).isoformat(), end_date=end.isoformat())
-    if all_depts:
-        selected = [d['id'] for d in options['departments']]
     has_travel = bool(re.search(r'出差|差旅|行程', question))
-    has_expense = bool(re.search(r'报销|(?<!差旅)(?<!出差)费用', question))
+    has_expense = bool(re.search(r'报销|费用', re.sub(_METRIC_QUESTIONS['travelAmount'], '', question)))
     report = bool(_REPORT.search(question))
     ranking = bool(re.search(r'排行|排名|谁|哪位员工', question))
     focus = ('ranking' if ranking else 'trend' if re.search(r'走势|趋势', question) else
              'breakdown' if re.search(r'构成|结构|占比|类别|类型|主要花在哪', question) else
              'travel' if re.search(r'路线|线路|目的地', question) else 'overview')
     focus = _travel_spend_view(question) or focus
-    if focus == 'ranking' and (re.search(r'次数|行程|人次', question) or
+    if focus == 'ranking' and (re.search(r'次数|行程|人数|人天|单数|笔', question) or
                     (has_travel and not re.search(r'费|金额|花', question)) or
-                    (not has_travel and (has_expense or not has_context))):
+                    (not has_travel and (has_expense or views[-1]['focus'] != 'ranking'))):
         return None
     if report and has_context and not (selected or dates or specific_scope):
         return {'queries': [] if context.sections() else [{'focus': 'overview'}], 'report': True}
     systems = ['expense', 'travel'] if has_expense and has_travel and not ranking else [
         'travel' if has_travel else 'expense' if has_expense else scope['system']]
-    return {'queries': [dict(focus=focus, system=system, **dates, **({'department_ids': selected} if selected else {}))
-                        for system in systems], 'report': report}
+    filter_only = (bool(dates or selected) and not has_travel and not has_expense and focus == 'overview'
+                   and not re.search(r'概览|概况|情况|金额|总额|费用|次数|人数|多少', text))
+    if filter_only:
+        targets = views
+    else:
+        if focus == 'overview' and len(metrics) > 1:
+            return None
+        metric_id = metrics[0] if metrics and focus == 'overview' and len(systems) == 1 else None
+        targets = [{'scope': {**scope, 'system': system}, 'focus': focus, 'metric_id': metric_id} for system in systems]
+    queries = []
+    for target in targets:
+        if not target['focus']:  # Old scope-only entries have no verified analysis topic.
+            return None
+        original = target['scope']
+        queries.append(dict(focus=target['focus'], system=original['system'], department_ids=selected or original['departmentIds'],
+                            start_date=dates.get('start_date', original['startDate']), end_date=dates.get('end_date', original['endDate']),
+                            **({'metric_id': target['metric_id']} if target.get('metric_id') else {})))
+    return {'queries': queries, 'report': report}
 
 
-def result_sentence(snapshot, focus):
+def result_sentence(snapshot, focus, metric_id=None):
     if snapshot.get('coverageStatus') == 'outside':
         period = snapshot['coverage']
         return f"所选日期超出台账覆盖期（{period['startDate']} 至 {period['endDate']}）。"
@@ -385,7 +494,7 @@ def result_sentence(snapshot, focus):
         value = f"{top['value']:,.2f} 元" if snapshot['scope']['system'] == 'expense' else f"{top['value']} 次"
         return f"{top['name']}占比最高，合计 {value}。" + coverage_note
     metrics = snapshot['metrics']
-    selected = metrics[:2] if focus == 'overview' else []
+    selected = [m for m in metrics if m['id'] == metric_id] if metric_id else metrics[:2] if focus == 'overview' else []
     if not selected:
         return f"已按所选范围汇总{FOCUS_TITLES[focus]}。" + coverage_note
     return '，'.join(f"{m['label']} {m['value']:,.2f} 元" if m['unit'] == '元' else

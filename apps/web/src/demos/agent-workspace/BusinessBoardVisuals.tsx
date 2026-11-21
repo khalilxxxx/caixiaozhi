@@ -33,16 +33,24 @@ const metricIcons: Record<string, string> = {
 function ChartFrame({
   title,
   meta,
+  view,
   children,
 }: {
   title: string;
-  meta?: string;
+  meta?: ReactNode;
+  view?: BoardView;
   children: ReactNode;
 }) {
+  const titleId = useId();
   return (
-    <section className="bb-figure">
+    <section
+      className="bb-figure"
+      data-board-view={view}
+      aria-labelledby={titleId}
+      tabIndex={-1}
+    >
       <header className="bb-figure-heading">
-        <h3>{title}</h3>
+        <h3 id={titleId}>{title}</h3>
         {meta && <span>{meta}</span>}
       </header>
       {children}
@@ -50,22 +58,72 @@ function ChartFrame({
   );
 }
 
-function Metrics({ snapshot }: { snapshot: BusinessBoardSnapshot }) {
+function metricChange(current: number, previous: number) {
+  if (current === previous) return '持平';
+  if (previous === 0) return '本期新增';
+  const percent = Math.abs((current - previous) / previous) * 100;
+  const value = percent < 0.1 ? '<0.1' : number(Number(percent.toFixed(1)));
+  return `${current > previous ? '增加' : '减少'} ${value}%`;
+}
+
+function Metrics({
+  snapshot,
+  compare,
+  selected,
+}: {
+  snapshot: BusinessBoardSnapshot;
+  compare: boolean;
+  selected?: BusinessBoardSnapshot['metrics'][number];
+}) {
+  const comparison = compare ? snapshot.comparison : undefined;
+  const comparisonLabels = {
+    previousMonth: '上个自然月',
+    monthToDate: '上月同期',
+    previousPeriod: `前 ${comparison?.days} 天`,
+  };
   return (
-    <dl className="bb-metrics">
-      {snapshot.metrics.map((metric) => (
-        <div key={metric.id}>
-          <dt>
-            <Icon name={metricIcons[metric.id] || 'chart'} size={15} />
-            {metric.label}
-          </dt>
-          <dd>
-            {metric.unit === '元' ? amount(metric.value) : number(metric.value)}
-            <small>{metric.unit}</small>
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <>
+      {comparison && (
+        <p className="bb-comparison-period">
+          对比{comparisonLabels[comparison.kind]}{' '}
+          <span>{boardDateLabel(comparison)}</span>
+        </p>
+      )}
+      {comparison === null && (
+        <p className="bb-comparison-period">
+          前期超出台账覆盖期，暂无前期对比。
+        </p>
+      )}
+      <dl className={selected ? 'bb-metrics bb-single-metric' : 'bb-metrics'}>
+        {(selected ? [selected] : snapshot.metrics).map((metric) => {
+          const previous = comparison?.values[metric.id];
+          return (
+            <div key={metric.id}>
+              <dt>
+                <Icon name={metricIcons[metric.id] || 'chart'} size={15} />
+                {metric.label}
+              </dt>
+              <dd>
+                {metric.unit === '元'
+                  ? amount(metric.value)
+                  : number(metric.value)}
+                <small>{metric.unit}</small>
+              </dd>
+              {previous !== undefined && (
+                <dd className="bb-metric-comparison">
+                  <span>
+                    前期{' '}
+                    {metric.unit === '元' ? amount(previous) : number(previous)}{' '}
+                    {metric.unit}
+                  </span>
+                  <b>{metricChange(metric.value, previous)}</b>
+                </dd>
+              )}
+            </div>
+          );
+        })}
+      </dl>
+    </>
   );
 }
 
@@ -103,6 +161,10 @@ function TrendChart({
     .map(([px, py], i) => `${i ? 'L' : 'M'}${px},${py}`)
     .join(' ');
   const row = active == null ? null : trend[active];
+  const period = (item: (typeof trend)[number]) =>
+    item.endDate && item.endDate !== item.date
+      ? boardDateLabel({ startDate: item.date, endDate: item.endDate })
+      : item.label;
   const axisIndices = Array.from(
     new Set([
       0,
@@ -122,7 +184,7 @@ function TrendChart({
         'aria-valuemax': trend.length,
         'aria-valuenow': (active ?? 0) + 1,
         'aria-valuetext': selected
-          ? `${selected.label}，${number(selected.value)}${unit}`
+          ? `${period(selected)}，${number(selected.value)}${unit}`
           : undefined,
         tabIndex: 0,
         onBlur: () => setActive(null),
@@ -152,8 +214,9 @@ function TrendChart({
       };
   return (
     <ChartFrame
+      view="trend"
       title={expense ? '报销费用走势' : '出差频次走势'}
-      meta={`单位 · ${unit}`}
+      meta={`${snapshot.trendGrain ? { day: '按日', sevenDays: '每 7 天汇总', month: '按月' }[snapshot.trendGrain] : '单位'} · ${unit}`}
     >
       {trend.length > 0 && (
         <div className="bb-trend">
@@ -225,7 +288,7 @@ function TrendChart({
                         : { left: x(active) + '%' }
                     }
                   >
-                    {row.label}
+                    {period(row)}
                     <b>
                       {number(row.value)} {unit}
                     </b>
@@ -275,6 +338,7 @@ function Breakdown({ snapshot }: { snapshot: BusinessBoardSnapshot }) {
   let offset = 0;
   return (
     <ChartFrame
+      view="breakdown"
       title={expense ? '费用构成' : '出行方式'}
       meta={expense ? '按费用类型' : '按行程次数'}
     >
@@ -345,6 +409,7 @@ function Ranking({ snapshot }: { snapshot: BusinessBoardSnapshot }) {
   const highest = Math.max(1, ...rows.map((r) => r.amount));
   return (
     <ChartFrame
+      view="ranking"
       title="员工差旅费用排行"
       meta={snapshot.ranking.length > 5 ? '金额前 5 名' : '按金额排序'}
     >
@@ -382,9 +447,11 @@ function Ranking({ snapshot }: { snapshot: BusinessBoardSnapshot }) {
 function Routes({
   snapshot,
   byAmount = false,
+  onSort,
 }: {
   snapshot: BusinessBoardSnapshot;
   byAmount?: boolean;
+  onSort?: (byAmount: boolean) => void;
 }) {
   const ordered = byAmount
     ? [...snapshot.routes].sort(
@@ -394,13 +461,28 @@ function Routes({
   const rows = ordered.slice(0, 5);
   return (
     <ChartFrame
+      view={byAmount ? 'routeSpend' : 'travel'}
       title={byAmount ? '线路差旅费用' : '差旅行程分布'}
       meta={
-        byAmount
-          ? '按差旅费用排序'
-          : snapshot.routes.length > 5
-            ? '行程前 5 条线路'
-            : '按行程次数排序'
+        onSort ? (
+          <label className="bb-route-sort">
+            {ordered.length > rows.length && <span>前 {rows.length} 条</span>}
+            <select
+              aria-label="线路排序"
+              value={byAmount ? 'amount' : 'trips'}
+              onChange={(event) => onSort(event.target.value === 'amount')}
+            >
+              <option value="trips">按行程次数</option>
+              <option value="amount">按差旅费用</option>
+            </select>
+          </label>
+        ) : byAmount ? (
+          '按差旅费用排序'
+        ) : snapshot.routes.length > 5 ? (
+          '行程前 5 条线路'
+        ) : (
+          '按行程次数排序'
+        )
       }
     >
       {rows.length ? (
@@ -458,14 +540,22 @@ function Departments({ snapshot }: { snapshot: BusinessBoardSnapshot }) {
 export function BusinessBoardVisuals({
   snapshot,
   view = 'overview',
+  metricId,
   compact = false,
   staticMode = false,
+  showComparison = false,
+  routeByAmount = false,
+  onRouteSort,
   overviewDetails = compact ? [] : ['breakdown', 'ranking', 'travel'],
 }: {
   snapshot: BusinessBoardSnapshot;
   view?: BoardView;
+  metricId?: string;
   compact?: boolean;
   staticMode?: boolean;
+  showComparison?: boolean;
+  routeByAmount?: boolean;
+  onRouteSort?: (byAmount: boolean) => void;
   overviewDetails?: BoardView[];
 }) {
   const { scope, coverage } = snapshot;
@@ -475,21 +565,32 @@ export function BusinessBoardVisuals({
   const partial =
     coverage &&
     (scope.startDate < coverage.startDate || scope.endDate > coverage.endDate);
-  if (!snapshot.recordCount)
-    return (
-      <div className="bb-empty" role="status">
-        <Icon name="chart" size={26} />
-        <strong>
-          {outside ? '所选日期超出台账覆盖期' : '所选范围暂无业务记录'}
-        </strong>
-        <span>
-          {coverage
-            ? `台账覆盖 ${boardDateLabel(coverage)}，可调整日期或部门。`
-            : '可调整统计日期或部门范围。'}
-        </span>
-      </div>
-    );
+  const empty = (
+    <div className="bb-empty" role="status">
+      <Icon name="chart" size={26} />
+      <strong>
+        {outside
+          ? '所选日期超出台账覆盖期'
+          : partial
+            ? '已覆盖日期内暂无业务记录'
+            : '所选范围暂无业务记录'}
+      </strong>
+      <span>
+        {coverage
+          ? `台账覆盖 ${boardDateLabel(coverage)}，可调整日期或部门。`
+          : '可调整统计日期或部门范围。'}
+      </span>
+    </div>
+  );
+  if (
+    !snapshot.recordCount &&
+    (!showComparison || snapshot.comparison === undefined || outside)
+  )
+    return empty;
   const overview = view === 'overview';
+  const selected = overview && metricId
+    ? snapshot.metrics.find((metric) => metric.id === metricId)
+    : undefined;
   return (
     <div
       className={`bb-visuals${compact ? ' bb-compact' : ''}${overview ? '' : ' bb-focused'}`}
@@ -507,24 +608,38 @@ export function BusinessBoardVisuals({
                 ? scope.endDate
                 : coverage.endDate,
           })}
-          。
+          {showComparison && snapshot.comparison === null
+            ? '，暂无前期对比。'
+            : '。'}
         </p>
       )}
-      {overview && <Metrics snapshot={snapshot} />}
-      <div className="bb-chart-grid">
-        {(overview || view === 'trend') && (
-          <TrendChart snapshot={snapshot} staticMode={staticMode} />
-        )}
-        {((overview && overviewDetails.includes('breakdown')) ||
-          view === 'breakdown') && <Breakdown snapshot={snapshot} />}
-        {((overview && overviewDetails.includes('ranking')) ||
-          view === 'ranking') && <Ranking snapshot={snapshot} />}
-        {((overview && overviewDetails.includes('travel')) ||
-          view === 'travel') && <Routes snapshot={snapshot} />}
-        {((overview && overviewDetails.includes('routeSpend')) ||
-          view === 'routeSpend') && <Routes snapshot={snapshot} byAmount />}
-      </div>
-      {overview &&
+      {overview && (!partial || snapshot.recordCount > 0) && (
+        <Metrics snapshot={snapshot} compare={showComparison && !partial} selected={selected} />
+      )}
+      {snapshot.recordCount === 0 ? (
+        empty
+      ) : !selected && (
+        <div className="bb-chart-grid">
+          {(overview || view === 'trend') && (
+            <TrendChart snapshot={snapshot} staticMode={staticMode} />
+          )}
+          {((overview && overviewDetails.includes('breakdown')) ||
+            view === 'breakdown') && <Breakdown snapshot={snapshot} />}
+          {((overview && overviewDetails.includes('ranking')) ||
+            view === 'ranking') && <Ranking snapshot={snapshot} />}
+          {((overview && overviewDetails.includes('travel')) ||
+            view === 'travel') && (
+            <Routes
+              snapshot={snapshot}
+              byAmount={routeByAmount}
+              onSort={onRouteSort}
+            />
+          )}
+          {((overview && overviewDetails.includes('routeSpend')) ||
+            view === 'routeSpend') && <Routes snapshot={snapshot} byAmount />}
+        </div>
+      )}
+      {overview && !selected &&
         !compact &&
         snapshot.scope.departmentIds.length > 1 &&
         snapshot.departments.length > 0 && <Departments snapshot={snapshot} />}

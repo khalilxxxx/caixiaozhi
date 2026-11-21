@@ -1,7 +1,9 @@
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
 
-from business_analytics import business_options, query_board
+from business_analytics import _previous_period, business_options, query_board
 from server import create_app
 from store import Store
 
@@ -63,6 +65,53 @@ def test_september_finance_story_and_extended_date_range():
     assert year['coverage'] == {'startDate': '2026-08-01', 'endDate': '2026-11-22'}
     assert [row['date'] for row in year['trend']] == [f'2026-{month:02}-01' for month in range(8, 12)]
     assert year['trend'][1]['value'] == values(september)['expenseAmount']
+    assert year['trendGrain'] == 'month'
+    assert year['trend'][-1]['endDate'] == '2026-11-22'
+
+
+@pytest.mark.parametrize('system', ['expense', 'travel'])
+@pytest.mark.parametrize('start,end,prior_start,prior_end,kind', [
+    ('2026-09-01', '2026-09-30', '2026-08-01', '2026-08-31', 'previousMonth'),
+    ('2026-11-01', '2026-11-22', '2026-10-01', '2026-10-22', 'monthToDate'),
+    ('2026-10-27', '2026-11-03', '2026-10-19', '2026-10-26', 'previousPeriod'),
+])
+def test_comparison_matches_independent_query_for_same_authorized_scope(system, start, end, prior_start, prior_end, kind):
+    departments = ['finance', 'research']
+    comparison = query_board(system, start, end, departments)['comparison']
+    assert comparison['kind'] == kind
+    assert (comparison['startDate'], comparison['endDate']) == (prior_start, prior_end)
+    assert comparison['values'] == values(query_board(system, prior_start, prior_end, departments))
+
+
+@pytest.mark.parametrize('start,end', [
+    ('2026-07-01', '2026-07-31'), ('2026-08-01', '2026-08-31'), ('2026-11-01', '2026-11-30'),
+])
+def test_incomplete_source_periods_hide_comparison(start, end):
+    assert query_board('expense', start, end, ['finance'])['comparison'] is None
+
+
+def test_preceding_short_month_and_calendar_year_boundary():
+    assert _previous_period(date(2026, 3, 1), date(2026, 3, 30)) == (
+        date(2026, 1, 30), date(2026, 2, 28), 'previousPeriod')
+    assert _previous_period(date(2026, 1, 1), date(2026, 1, 31)) == (
+        date(2025, 12, 1), date(2025, 12, 31), 'previousMonth')
+
+
+def test_zero_record_period_is_comparable_when_covered():
+    empty = query_board('expense', '2026-11-02', '2026-11-02', ['finance'])
+    assert empty['recordCount'] == 0
+    assert empty['comparison']['values']['expenseAmount'] == 1766
+    after_empty = query_board('expense', '2026-11-04', '2026-11-04', ['finance'])
+    assert not any(after_empty['comparison']['values'].values())
+    assert values(after_empty)['expenseAmount'] == 7572.3
+
+
+def test_weekly_trend_labels_include_the_partial_final_bucket():
+    result = query_board('expense', '2026-09-01', '2026-10-16', ['finance'])
+    assert result['trendGrain'] == 'sevenDays'
+    assert result['trend'][0]['endDate'] == '2026-09-07'
+    assert result['trend'][-1]['date'] == '2026-10-13'
+    assert result['trend'][-1]['endDate'] == '2026-10-16'
 
 
 @pytest.mark.parametrize('start,end', [('2026-11-22', '2026-11-21'), ('2026-02-30', '2026-03-01'), ('20260901', '2026-09-02')])

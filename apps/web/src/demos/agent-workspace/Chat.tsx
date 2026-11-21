@@ -4,6 +4,7 @@ import type { ContextRef, ResultCard, Task } from './workspace';
 import { useWorkspace } from './workspace';
 import { Badge, Icon, Button } from './ui';
 import { DocumentResults, materialBatchId } from './Documents';
+import { lastBoardScopeLabels } from './business-board-handoff';
 import { BusinessAnalysisCard } from './BusinessAnalysisResults';
 import { AnalysisCard } from './AnalyticsSkills';
 import { PublicFinancialCard } from './PublicFinancials';
@@ -308,6 +309,13 @@ export function Composer({
   const selectedSkills = refs.filter((ref) => ref.kind === 'skill');
   const materialRefs = refs.filter((ref) => ref.kind !== 'skill')
     .map((ref) => withWorkDocumentTitle(ref, workspace.state.data));
+  const task = compact && !expertTeam && (!capability || capability === 'analysis')
+    ? workspace.state.tasks.find(item => item.id === workspace.state.activeTask)
+    : undefined;
+  const activeReport = refs.find(ref => ref.kind === 'report' && ref.followupId);
+  const lastScopes = task ? lastBoardScopeLabels(task.messages, activeReport?.followupId) : [];
+  const sourceBoard = materialRefs.find(ref => ref.kind === 'business-board');
+  const showLastScope = lastScopes.length > 0;
   const skillLabel =
     selectedSkills.length === 1
       ? selectedSkills[0]!.title
@@ -353,11 +361,19 @@ export function Composer({
   return (
     <div className={`composer ${compact ? 'composer-compact' : ''}`} data-expert-team={expertTeam?.id}>
       <div className="refs">
-        {materialRefs.map((ref) => (
-          <span className="ref-chip" key={`${ref.kind}/${ref.id}`}>
+        {showLastScope && (sourceBoard && !activeReport ? (
+          <details className="ba-composer-scope">
+            <summary>上次查询 · {lastScopes.join(' / ')}</summary>
+            <div>来源看板 · {sourceBoard.title}
+              <button type="button" onClick={() => onRemove(sourceBoard)} aria-label="移除来源看板">移除引用</button>
+            </div>
+          </details>
+        ) : <span className="ba-composer-scope">上次查询 · {lastScopes.join(' / ')}</span>)}
+        {materialRefs.filter(ref => !(ref.kind === 'business-board' && (showLastScope || activeReport))).map((ref) => (
+          <span className={`ref-chip${ref.kind === 'business-board' || ref.followupId ? ' ba-wrapped-ref' : ''}`} key={`${ref.kind}/${ref.id}`}>
             <Icon name={ref.kind === 'file' ? 'attach' : 'link'} size={13} />
             <span>
-              {ref.kind === 'business-board' ? '来源看板 · ' : ''}{ref.title}
+              {ref.kind === 'business-board' ? '来源看板 · ' : ref.followupId ? '引用报告 · ' : ''}{ref.title}
               {ref.version ? ` · ${ref.version}` : ''}
             </span>
             <button
@@ -658,6 +674,7 @@ export function ChatPage({
     content = useRef<HTMLDivElement>(null),
     followLatest = useRef(true);
   const [showLatest, setShowLatest] = useState(false);
+  const latestQuestionId = task.messages.filter((message) => message.role === 'user').at(-1)?.id;
   const scrollToLatest = () => {
     followLatest.current = true;
     setShowLatest(false);
@@ -666,7 +683,7 @@ export function ChatPage({
 
   useEffect(() => {
     scrollToLatest();
-  }, [task.id]);
+  }, [task.id, latestQuestionId]);
 
   useEffect(() => {
     if (followLatest.current && scroll.current)
@@ -708,7 +725,7 @@ export function ChatPage({
   const boardRef = task.refs.find(ref => ref.kind === 'business-board');
   const suggestions =
     latestCard?.data?.businessBoard
-      ? (latestCard.data.focus === 'ranking' ? ['查看费用趋势', '生成报告'] : ['谁的差旅费最高？', '生成报告'])
+      ? (latestCard.data.focus === 'ranking' ? ['哪些线路的差旅费用最高？', '生成报告'] : ['谁的差旅费最高？', '生成报告'])
       : latestCard?.data?.publicFinance
       ? ['查看成本费用结构', '生成会话报告']
       : kind === 'tool' && latestCard?.id?.startsWith('expense-summary-')

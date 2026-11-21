@@ -255,3 +255,90 @@
   min-width: 6ch;
   text-align: end;
 }
+.ba-report-cover .ba-cover-scope {
+  font-size: 14px;
+  color: #284762;
+  margin-bottom: 6px;
+}
+.ba-report-index {
+  border-bottom: 1px solid var(--ba-border);
+  padding: 14px clamp(18px, 3vw, 36px);
+}
+.ba-report-index > strong {
+  color: var(--ba-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.ba-report-index ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 0;
+  margin: 6px 0 0;
+  list-style: none;
+}
+.ba-report-index a {
+  display: inline-block;
+  color: #275478;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.ba-report-index a small {
+  display: block;
+  color: var(--ba-muted);
+}
+.ba-report-section h2 {
+  scroll-margin-top: 12px;
+}
+.ba-report-section h2:focus-visible {
+  outline: 2px solid #376488;
+  outline-offset: 3px;
+}
+.ba-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ba-answer .bb-focused .bb-figure,
+.ba-report-section .bb-focused .bb-figure {
+  padding-inline: 0;
+  border: 0;
+}
+.ba-answer .bb-focused .bb-figure-heading h3,
+.ba-report-section .bb-focused .bb-figure-heading h3 {
+  display: none;
+}
+.composer .ba-wrapped-ref > span {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+.composer .ba-wrapped-ref > svg,
+.composer .ba-wrapped-ref button {
+  flex-shrink: 0;
+}
+.ba-composer-scope {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #3c5267;
+}
+.ba-composer-scope summary {
+  cursor: pointer;
+}
+.ba-composer-scope > div {
+  padding: 4px 0;
+}
+.ba-composer-scope button {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #385c84;
+  background: transparent;
+  border: 0;
+  text-decoration: underline;
+}

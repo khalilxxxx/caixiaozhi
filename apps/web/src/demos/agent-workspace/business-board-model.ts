@@ -21,9 +21,17 @@ export interface BusinessBoardSnapshot {
   departmentLabel: string;
   source: string;
   coverage?: { startDate: string; endDate: string };
+  comparison?: {
+    startDate: string;
+    endDate: string;
+    kind: 'previousMonth' | 'monthToDate' | 'previousPeriod';
+    days: number;
+    values: Record<string, number>;
+  } | null;
   recordCount: number;
   metrics: { id: string; label: string; value: number; unit: string }[];
-  trend: { date: string; label: string; value: number }[];
+  trendGrain?: 'day' | 'sevenDays' | 'month';
+  trend: { date: string; endDate?: string; label: string; value: number }[];
   breakdown: { name: string; value: number }[];
   ranking: {
     name: string;
@@ -35,8 +43,20 @@ export interface BusinessBoardSnapshot {
   departments: { name: string; value: number }[];
 }
 
-export type BoardView =
-  'overview' | 'ranking' | 'travel' | 'routeSpend' | 'trend' | 'breakdown';
+const boardViews = [
+  'overview',
+  'ranking',
+  'travel',
+  'routeSpend',
+  'trend',
+  'breakdown',
+] as const;
+export type BoardView = (typeof boardViews)[number];
+
+export function boardViewFromHash(hash: string): BoardView {
+  const view = new URLSearchParams(hash.split('?')[1]).get('view');
+  return boardViews.find((item) => item === view) ?? 'overview';
+}
 
 export function businessBoardQuery(scope: BusinessBoardScope) {
   return new URLSearchParams({

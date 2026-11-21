@@ -918,9 +918,13 @@ export default function App() {
   function attach(ref: ContextRef) {
     function addReference(refs: ContextRef[], capability?: CapabilityId | null) {
       const single = ref.kind === 'submission' || (ref.kind === 'audit' && isExpertTeam(capability));
-      return [...refs.filter((item) =>
-        item.kind !== ref.kind || (!single && item.id !== ref.id)
-      ), ref];
+      return [...refs.filter((item) => {
+        if (ref.kind === 'report' && ref.followupId &&
+            item.kind === 'report' && item.id.startsWith('business-report-')) {
+          return false;
+        }
+        return item.kind !== ref.kind || (!single && item.id !== ref.id);
+      }), ref];
     }
     if (page === 'home') {
       setHomeRefs((current) => addReference(current, homeCapability));

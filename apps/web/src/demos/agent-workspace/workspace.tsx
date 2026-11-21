@@ -35,6 +35,7 @@ export interface ContextRef {
   version?: string;
   fileIds?: string[];
   scope?: BusinessBoardScope;
+  followupId?: string;
 }
 export interface ResultCard {
   kind: string;
