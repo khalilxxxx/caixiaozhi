@@ -1,348 +1,570 @@
-// Browser interaction verification uses an isolated HTTP fixture, never writes the user workspace.
+// Exercise the real agent entry point with isolated SSE and workspace fixtures.
 import { chromium, expect } from '@playwright/test';
-import http from 'node:http';
+import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import http from 'node:http';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
-const out = process.env.PROGRESS_ARTIFACT_DIR || 'artifacts/single-agent-progress-20261117';
-await fs.mkdir(out, { recursive: true });
-const base = await fetch('http://127.0.0.1:5191/api/local/workspace').then(r => r.json());
-let snapshot, task, runId, runStatus, history, clients, sequence, submitted;
-function reset(status = 'running') {
-  for (const client of clients ?? []) client.end();
-  clients = new Set(); history = []; sequence = 0; submitted = [];
-  runId = 'qa-run'; runStatus = status;
-  task = { id: 'qa-progress', title: '费用对比与报表', status: status === 'running' ? '处理中' : '已暂停', type: 'assistant', input: '', refs: [], updated: '刚刚', activeRunId: status === 'running' ? runId : null,
-    messages: [{ id: 'qa-user', role: 'user', text: '对比两个月的费用，核对金额后生成报表。' }, { id: `assistant-${runId}`, runId, runStatus: status, role: 'assistant', text: '', tools: [] }] };
-  snapshot = { ...structuredClone(base), revision: 1, state: { ...structuredClone(base.state), activeTask: task.id, tasks: [task] } };
+const webRequire = createRequire(new URL('../apps/web/package.json', import.meta.url));
+const { createServer } = webRequire('vite');
+const out = process.env.PROGRESS_ARTIFACT_DIR || 'artifacts/agent-activity-feed';
+const seed = JSON.parse(await fs.readFile(new URL('../apps/agno-service/seed.json', import.meta.url), 'utf8'));
+const clients = new Set();
+let snapshot, task, runId, runStatus, history, sequence, submitted;
+const responseTo = () => task.messages.find(message => message.runId === runId);
+
+async function sampleActionText(activity, times, seekAnimations = false) {
+  const label = activity.getByRole('status');
+  const frames = [];
+  const start = performance.now();
+  for (const ms of times) {
+    if (seekAnimations) {
+      await activity.evaluate(async (row, time) => {
+        const animations = row.getAnimations({ subtree: true });
+        for (const animation of animations) animation.pause();
+        await Promise.all(animations.map(animation => animation.ready));
+        for (const animation of animations) animation.currentTime = time;
+      }, ms);
+    } else {
+      // Observe reduced-motion playback without advancing an intentionally paused animation.
+      await new Promise(resolve => setTimeout(resolve, Math.max(0, start + ms - performance.now())));
+    }
+    const png = await label.screenshot();
+    if (process.env.CAPTURE_PROGRESS_GIF === '1')
+      await fs.writeFile(out + '/text-' + times.length + '-' + ms + '.png', png);
+    frames.push(await label.evaluate(async (_, data) => {
+      const image = new Image();
+      image.src = 'data:image/png;base64,' + data;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width; canvas.height = image.height;
+      const context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, image.width, image.height).data;
+      const lightness = [];
+      for (let i = 0; i < pixels.length; i += 4)
+        lightness.push(Math.round(.2126 * pixels[i] + .7152 * pixels[i + 1] + .0722 * pixels[i + 2]));
+      return { width: image.width, lightness };
+    }, png.toString('base64')));
+  }
+  return frames;
 }
-reset();
+
+function measureTextSweep(frames, reference) {
+  const { width, lightness } = reference;
+  const paper = lightness[0];
+  // The still frame identifies the letters independently of the animation.
+  // Measure changes against each pixel's darkest sample to locate the moving highlight.
+  const darkest = lightness.map((_, i) => Math.min(...frames.map(frame => frame.lightness[i])));
+  const centers = [];
+  let maxGlyphChange = 0, maxPaperChange = 0;
+  for (const frame of frames) {
+    assert.equal(frame.lightness.length, lightness.length);
+    let weightedX = 0, weight = 0, visiblePixels = 0;
+    for (let i = 0; i < lightness.length; i++) {
+      const change = frame.lightness[i] - darkest[i];
+      if (lightness[i] >= paper - 3) maxPaperChange = Math.max(maxPaperChange, change);
+      if (lightness[i] > paper - 45) continue;
+      maxGlyphChange = Math.max(maxGlyphChange, change);
+      if (change < 18) continue;
+      weightedX += (i % width) * change;
+      weight += change;
+      visiblePixels++;
+    }
+    if (visiblePixels >= 8) centers.push(weightedX / weight / width);
+  }
+  const travel = centers.length ? centers.at(-1) - centers[0] : 0;
+  return { maxGlyphChange, maxPaperChange, travel: Number(travel.toFixed(2)), visibleFrames: centers.length };
+}
+
+function reset(elapsedMs = 0) {
+  for (const client of clients) client.end();
+  clients.clear();
+  history = []; sequence = 0; submitted = [];
+  runId = 'qa-run'; runStatus = 'running';
+  const runStartedAt = Date.now() - elapsedMs;
+  task = {
+    id: 'qa-progress', title: '费用核对', type: 'assistant', status: '处理中', updated: '刚刚',
+    refs: [], input: '', activeRunId: runId,
+    messages: [
+      { id: 'qa-user', role: 'user', text: '核对费用材料和报销草稿，看看是否可以提交。' },
+      { id: 'assistant-' + runId, runId, runStatus, role: 'assistant', text: '', tools: [], createdAt: runStartedAt, runStartedAt },
+    ],
+  };
+  snapshot = { revision: 1, state: { ...structuredClone(seed), activeTask: task.id, tasks: [task] } };
+}
+
 function emit(kind, data, replayId) {
   const id = replayId ?? ++sequence;
-  const entry = `id: ${id}\nevent: ${kind}\ndata: ${JSON.stringify(data)}\n\n`;
+  const entry = 'id: ' + id + '\nevent: ' + kind + '\ndata: ' + JSON.stringify(data) + '\n\n';
   if (!replayId) history.push({ id, entry });
   for (const client of clients) client.write(entry);
   return id;
 }
-function step(id, name, label, status, durationMs, itinerary) {
-  const entry = { id, name, label, status, ...(itinerary && { itinerary }), startedAt: Date.now() - 1500, ...(status === 'running' ? {} : { finishedAt: Date.now(), durationMs }) };
-  const message = task.messages.find(m => m.runId === runId);
-  const index = message.tools.findIndex(s => s.id === id);
-  if (index < 0) message.tools.push(entry); else message.tools[index] = entry;
+
+function step(id, name, label, status, extra = {}) {
+  const tools = responseTo().tools;
+  const index = tools.findIndex(entry => entry.id === id);
+  const startedAt = tools[index]?.startedAt ?? Date.now() - (extra.durationMs ?? 0);
+  const entry = { id, name, label, status, startedAt, ...extra };
+  if (status !== 'running') entry.finishedAt = startedAt + (extra.durationMs ?? 0);
+  if (index < 0) tools.push(entry);
+  else tools[index] = entry;
   snapshot.revision++;
   return emit('tool', entry);
 }
-function finish(status = 'completed', text = '费用报表已生成，金额已核对。') {
-  runStatus = status; task.activeRunId = null;
-  task.status = status === 'completed' ? '已完成' : status === 'cancelled' ? '已暂停' : '执行失败';
-  const message = task.messages.find(m => m.runId === runId);
-  message.text = text; message.runStatus = status;
-  message.tools = message.tools.map(s => s.status === 'running' ? { ...s, status: 'cancelled', finishedAt: Date.now(), durationMs: 1500 } : s);
+
+function finish(status, text, { elapsedMs, question } = {}) {
+  const message = responseTo();
+  const runFinishedAt = elapsedMs === undefined ? Date.now() : message.runStartedAt + elapsedMs;
+  runStatus = status;
+  task.activeRunId = null;
+  task.status = { completed: '已完成', cancelled: '已暂停', failed: '执行失败', awaiting_input: '待你回答' }[status];
+  Object.assign(message, { text, runStatus: status, runFinishedAt });
+  if (question) message.question = question;
+  message.tools = message.tools.map(entry => entry.status === 'running'
+    ? { ...entry, status: status === 'failed' ? 'failed' : 'cancelled', finishedAt: runFinishedAt }
+    : entry);
   snapshot.revision++;
-  emit('result', { workspace: snapshot, text, status: task.status, runStatus: status });
+  if (status === 'cancelled' || status === 'failed') emit('error', { runId, runStatus, message: text });
+  else emit('result', { runId, runStatus, text, tools: message.tools, status: task.status, workspace: snapshot });
   emit('done', {});
   for (const client of clients) client.end();
   clients.clear();
 }
-const server = http.createServer(async (request, response) => {
-  response.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:5190');
-  response.setHeader('Access-Control-Allow-Credentials', 'true');
-  response.setHeader('Access-Control-Allow-Headers', 'content-type,last-event-id');
-  response.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
-  if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
+
+const server = http.createServer();
+const vite = await createServer({
+  configFile: fileURLToPath(new URL('../apps/web/vite.agent.config.ts', import.meta.url)),
+  cacheDir: fileURLToPath(new URL('../.runtime/progress-browser-vite', import.meta.url)),
+  server: { middlewareMode: true, watch: null, hmr: { server } },
+  logLevel: 'error',
+});
+server.on('request', async (request, response) => {
   const path = new URL(request.url, 'http://fixture').pathname;
+  if (!path.startsWith('/api/local/')) return vite.middlewares(request, response);
   const json = value => { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(value)); };
   if (path.endsWith('/events')) {
     response.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
-    response.write(': connected\n\n'); clients.add(response);
+    response.write(': connected\n\n');
+    clients.add(response);
     const after = Number(request.headers['last-event-id'] ?? 0);
     for (const event of history) if (event.id > after) response.write(event.entry);
     if (runStatus !== 'running') response.end();
-    request.on('close', () => clients.delete(response)); return;
+    response.on('close', () => clients.delete(response));
+    return;
   }
   let body = ''; for await (const chunk of request) body += chunk;
   const payload = body ? JSON.parse(body) : {};
-  if (path.endsWith('/health')) return json({ status: 'ready', modelConfigured: true, model: 'fixture', framework: 'Agno', version: '3.2.0' });
+  if (path.endsWith('/health')) return json({ status: 'ready', modelConfigured: true, model: 'fixture', framework: 'Agno' });
   if (path.endsWith('/workspace')) {
     if (request.method === 'PATCH') {
-      const incoming = payload.tasks?.find(t => t.id === task.id);
-      if (incoming) for (const key of ['input', 'title', 'refs']) if (key in incoming) task[key] = incoming[key];
+      const incoming = payload.tasks?.find(item => item.id === task.id);
+      if (incoming) {
+        for (const key of ['input', 'title', 'refs']) if (key in incoming) task[key] = incoming[key];
+        for (const message of incoming.messages ?? []) {
+          if (message.role === 'user' && !task.messages.some(previous => previous.id === message.id))
+            task.messages.push(message);
+        }
+      }
       snapshot.revision++;
     }
     return json(snapshot);
   }
-  if (path.endsWith('/cancel')) { finish('cancelled', '任务已暂停，已保存内容仍保留。'); return json({ cancelled: true }); }
+  if (path.endsWith('/cancel')) {
+    finish('cancelled', '任务已暂停，已保存内容仍保留。');
+    return json({ cancelled: true });
+  }
   if (path.endsWith('/runs') && request.method === 'POST') {
-    submitted.push(payload); history = []; sequence = 0; runId = `qa-run-${submitted.length}`; runStatus = 'running';
-    task.activeRunId = runId; task.status = '处理中';
-    task.messages.push({ id: `u-${runId}`, role: 'user', text: payload.message });
-    task.messages.push({ id: `assistant-${runId}`, runId, runStatus, role: 'assistant', text: '', tools: [] });
+    const previous = responseTo();
+    if (previous?.question && payload.questionAnswer) {
+      previous.question.status = 'answered';
+      previous.question.answer = payload.questionAnswer;
+    }
+    submitted.push(payload); history = []; sequence = 0;
+    runId = 'qa-run-' + submitted.length; runStatus = 'running';
+    const now = Date.now();
+    task.status = '处理中'; task.activeRunId = runId;
+    if (!payload.useSavedComposer) task.refs = payload.refs;
+    if (!payload.preserveComposerDraft && !payload.questionAnswer) task.input = '';
+    const last = task.messages.at(-1);
+    if (last?.role !== 'user' || last.text !== payload.message)
+      task.messages.push({ id: 'user-' + runId, role: 'user', text: payload.message });
+    task.messages.push({ id: 'assistant-' + runId, runId, runStatus, role: 'assistant', text: '', tools: [], createdAt: now, runStartedAt: now });
+    snapshot.revision++;
     return json({ taskId: task.id, runId, workspace: snapshot });
   }
   if (path.includes('/runs/')) return json({ id: runId, status: runStatus });
-  response.statusCode = 404; json({ message: '未提供测试接口' });
+  response.statusCode = 404; return json({ message: '未提供测试接口' });
 });
+
+reset();
+await fs.mkdir(out, { recursive: true });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const port = server.address().port;
-const browser = await chromium.launch({ channel: 'chrome', headless: true });
-const errors = [];
-const results = [];
+const url = 'http://127.0.0.1:' + server.address().port + '/agent.html#chat';
+let browser;
 try {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
-  await context.route('**/api/local/**', route => route.continue({ url: `http://127.0.0.1:${port}${new URL(route.request().url()).pathname}` }));
+  browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const context = await browser.newContext({
+    viewport: { width: 1360, height: 900 },
+    deviceScaleFactor: process.env.CAPTURE_PROGRESS_GIF === '1' ? 2 : 1,
+  });
   const page = await context.newPage();
-  page.on('pageerror', error => errors.push(String(error)));
-  await page.goto('http://127.0.0.1:5190/agent.html#chat');
-  await expect(page.locator('.chat-titlebar h1')).toHaveText(task.title);
-  await expect.poll(() => clients.size).toBeGreaterThan(0);
-  emit('status', { phase: 'thinking', label: '正在分析任务' });
-  step('read', 'read_uploaded_file', '读取费用材料', 'running');
-  step('read', 'read_uploaded_file', '读取费用材料', 'completed', 120);
-  const duplicate = step('sum', 'summarize_expense_csv', '核对费用合计', 'running');
-  await expect(page.locator('.run-progress-summary').last()).toContainText('核对费用合计');
-  await expect(page.locator('.run-progress-details').last()).toHaveAttribute('open', '');
-  await expect(page.locator('.run-progress-step')).toHaveCount(2);
-  await page.locator('.run-progress-toggle').click();
-  await expect(page.locator('.run-progress-steps')).toBeHidden();
-  emit('status', { phase: 'working', label: '核对费用合计' });
-  await expect(page.locator('.run-progress-steps')).toBeHidden();
-  await page.locator('.run-progress-toggle').focus();
-  await page.keyboard.press('Enter');
-  await expect(page.locator('.run-progress-steps')).toBeVisible();
-  emit('tool', task.messages.at(-1).tools.at(-1), duplicate);
-  await expect(page.locator('.run-progress-step')).toHaveCount(2);
-  emit('delta', { text: '已完成费用归类，正在核对合计。' });
-  await expect(page.locator('.assistant-name').last().locator('..')).toContainText('已完成费用归类');
-  await expect(page.locator('.run-progress-step')).toHaveCount(2);
-  await page.locator('.composer textarea').fill('请保留我还没有发送的补充说明');
-  await page.screenshot({ path: `${out}/desktop-running.png`, fullPage: true });
-  results.push('运行中的真实动作、步骤去重、文字与进度并存、输入草稿');
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const message = page.locator('.message.assistant').last();
+  const progress = message.locator('.run-progress');
+  const activity = progress.locator('.run-progress-summary');
+  const disclosure = progress.locator('details > summary');
+  const findings = progress.locator('.run-progress-finding');
+  const thread = page.locator('.chat-thread');
+  const hasMotion = async () => activity.evaluate(el => el.getAnimations({ subtree: true }).some(a => a.playState === 'running'));
+  async function open() {
+    if (page.url() === url) await page.reload();
+    else await page.goto(url);
+    await expect(page.locator('.chat-titlebar h1')).toHaveText(task.title);
+    if (runStatus === 'running') await expect.poll(() => clients.size).toBeGreaterThan(0);
+  }
 
-  await page.reload();
-  await expect(page.locator('.run-progress-summary').last()).toContainText('核对费用合计');
-  await expect(page.locator('.run-progress-details').last()).toHaveAttribute('open', '');
-  await expect(page.locator('.run-progress-step')).toHaveCount(2);
-  await expect(page.locator('.composer textarea')).toHaveValue('请保留我还没有发送的补充说明');
-  step('sum', 'summarize_expense_csv', '核对费用合计', 'failed', 1800);
-  step('sum-retry', 'summarize_expense_csv', '核对费用合计', 'running');
-  step('sum-retry', 'summarize_expense_csv', '核对费用合计', 'completed', 800);
-  step('publish', 'publish_skill_artifact', '保存生成文件', 'completed', 220);
-  finish();
-  await expect(page.locator('.chat-titlebar')).toContainText('已完成');
-  await expect(page.locator('.run-progress-details').last()).not.toHaveAttribute('open', '');
-  await page.locator('.run-progress-toggle').last().click();
-  await expect(page.locator('.run-progress-step')).toHaveCount(4);
-  await expect(page.locator('.run-progress-step.is-failed')).toHaveCount(1);
-  await expect(page.locator('.composer textarea')).toHaveValue('请保留我还没有发送的补充说明');
-  await page.screenshot({ path: `${out}/desktop-completed.png`, fullPage: true });
-  results.push('刷新恢复、失败重试分开、终态收起与历史展开、输入保留');
+  // A single quick lookup finishes directly. Actual backend timestamps, not tool durations, drive elapsed time.
+  task.title = '查询差旅制度';
+  task.messages[0].text = '境内出差可以按什么座席订票？';
+  await open();
+  step('rule', 'search_policies', '检索差旅制度', 'running');
+  await expect(activity).toContainText('检索差旅制度');
+  await expect(activity.locator('.run-progress-face')).toBeVisible();
+  await expect(message.locator('.assistant-name img')).toBeVisible();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const still = await sampleActionText(activity, [0, 400, 1000]);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect.poll(() => activity.getByRole('status').evaluate(el =>
+    el.getAnimations({ subtree: true }).some(animation => animation.playState === 'running')
+  )).toBe(true);
+  const animated = await sampleActionText(activity, Array.from({ length: 11 }, (_, i) => i * 100), true);
+  const sweep = measureTextSweep(animated, still[0]);
+  const reducedSweep = measureTextSweep(still, still[0]);
+  console.log('首秒文字像素', JSON.stringify({ sweep, reducedSweep }));
+  assert.ok(sweep.travel >= .35 && sweep.maxGlyphChange >= 25 && sweep.visibleFrames >= 5,
+    '首秒应在至少 5 帧中看到亮带沿字形向右移动超过三分之一行宽：' + JSON.stringify(sweep));
+  assert.ok(sweep.maxPaperChange <= 4, '亮带应只照亮字形，不改变文字背景');
+  assert.equal(reducedSweep.maxGlyphChange, 0, '减少动态时文字应保持完全静止');
+  step('rule', 'search_policies', '检索差旅制度', 'completed', { durationMs: 60 });
+  finish('completed', '境内出差可以按二等座标准订票。', { elapsedMs: 1500 });
+  await expect(message).toContainText('二等座标准');
+  await expect(disclosure).toHaveCount(0);
+  await expect(message.getByText(/办理记录|执行记录/)).toHaveCount(0);
+  await expect(message.locator('.run-progress-face')).toBeHidden();
 
+  // Let a single lookup actually cross the threshold without sending a new SSE event.
   reset();
-  step('long', 'read_uploaded_file', '读取材料', 'running');
+  await open();
+  step('policy', 'search_policies', '查询差旅制度', 'running');
+  await expect(activity).toContainText('查询差旅制度');
+  await expect(disclosure).toHaveCount(0);
+  const scope = progress.getByText('我先查找与这次咨询相关的制度条款。', { exact: true });
+  await expect(scope).toBeVisible({ timeout: 11000 });
+  await expect(disclosure).toContainText(/用时\s*\d+\s*秒/);
+  await disclosure.focus();
+  await page.keyboard.press('Space');
+  await expect(scope).toBeHidden();
+  step('policy', 'search_policies', '查询差旅制度', 'completed', { finding: '查到 2 份相关制度。' });
+  step('draft', 'get_submission_draft', '读取草稿', 'running');
+  await expect(activity).toContainText('读取草稿');
+  await expect(scope).toBeHidden();
+  await expect(disclosure).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(progress.getByText('查到 2 份相关制度。', { exact: true })).toBeVisible();
+  step('draft', 'get_submission_draft', '读取草稿', 'completed');
+  finish('completed', '已根据两份制度核对差旅草稿。');
+  await expect(message).toContainText('已根据两份制度核对差旅草稿。');
+  await expect(scope).toBeHidden();
+
+  // Keep facts while subsequent operations run, across live events, reconnect and history.
+  reset(470000);
+  await open();
+  step('materials', 'list_materials', '查看材料', 'completed', { durationMs: 90, finding: '已列出 2 份材料。' });
+  const fact = '2 条费用记录合计 900.00 元。';
+  const readId = step('read', 'read_expense_summary', '读取费用汇总', 'completed', { durationMs: 180, finding: fact });
+  emit('tool', responseTo().tools.at(-1), readId);
+  step('check', 'validate_submission', '检查报销草稿', 'running');
+  await expect(activity).toContainText('检查报销草稿');
+  await expect(findings.filter({ hasText: fact })).toHaveCount(1);
+  await expect(page.getByText(fact, { exact: true })).toBeVisible();
+  await expect.poll(hasMotion).toBe(true);
+  const roleImage = message.locator('.assistant-name img');
+  await roleImage.evaluate(el => { window.qaAvatar = el; });
+  await page.screenshot({ path: out + '/desktop-running.png' });
+  await message.screenshot({ path: out + '/running-message.png' });
+  await page.locator('.composer textarea').fill('还没有发送的补充说明');
+  if (process.env.CAPTURE_PROGRESS_GIF === '1') {
+    await fs.mkdir(out + '/motion-frames', { recursive: true });
+    const faceBox = await activity.locator('.run-progress-face').boundingBox();
+    const labelBox = await activity.getByRole('status').boundingBox();
+    const x = Math.floor(faceBox.x - 8);
+    const y = Math.floor(Math.min(faceBox.y, labelBox.y) - 5);
+    const clip = {
+      x, y,
+      width: Math.ceil(labelBox.x + labelBox.width + 8) - x,
+      height: Math.ceil(Math.max(faceBox.y + faceBox.height, labelBox.y + labelBox.height) + 5) - y,
+    };
+    const period = await activity.getByRole('status').evaluate(el =>
+      Math.max(0, ...el.getAnimations({ subtree: true }).map(a => Number(a.effect.getTiming().duration)))
+    );
+    for (let frame = 0; frame * 50 < (period || 2200); frame++) {
+      await activity.evaluate((el, ms) => {
+        for (const animation of el.getAnimations({ subtree: true })) {
+          animation.pause(); animation.currentTime = ms;
+        }
+      }, frame * 50);
+      await page.screenshot({ clip, path: out + '/motion-frames/frame-' + String(frame).padStart(3, '0') + '.png' });
+    }
+    await activity.evaluate(el => el.getAnimations({ subtree: true }).forEach(a => a.play()));
+  }
+  await disclosure.click();
+  await expect(page.getByText(fact, { exact: true })).toBeHidden();
+  emit('status', { phase: 'working', label: '检查报销草稿' });
+  await expect(page.getByText(fact, { exact: true })).toBeHidden();
+  await disclosure.focus(); await page.keyboard.press('Enter');
+  await expect(page.getByText(fact, { exact: true })).toBeVisible();
+  emit('delta', { text: '正在检查草稿字段。' });
+  await expect(message).toContainText('正在检查草稿字段。');
+  assert.ok(await roleImage.evaluate(el => el === window.qaAvatar));
   await page.reload();
-  await expect(page.getByRole('button', { name: '停止当前任务' })).toBeVisible();
-  await page.getByRole('button', { name: '停止当前任务' }).click();
-  await expect(page.getByRole('button', { name: '继续处理', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '继续处理', exact: true }).click();
+  await expect(activity).toContainText('检查报销草稿');
+  await expect(page.getByText(fact, { exact: true })).toBeVisible();
+  await expect(page.locator('.composer textarea')).toHaveValue('还没有发送的补充说明');
+  step('check', 'validate_submission', '检查报销草稿', 'failed', { durationMs: 900 });
+  step('retry', 'validate_submission', '检查报销草稿', 'completed', { durationMs: 650, finding: '草稿有 1 项字段需要核对。' });
+  finish('completed', '费用汇总为 900.00 元，报销草稿中仍有 1 项字段需要核对。', { elapsedMs: 474000 });
+  await expect(message).toContainText('费用汇总为 900.00 元');
+  await expect(disclosure).toContainText(/用时\s*7\s*分(?:钟)?\s*54\s*秒/);
+  await expect(page.getByText(fact, { exact: true })).toBeHidden();
+  await expect(activity.locator('.run-progress-face')).toBeHidden();
+  await message.screenshot({ path: out + '/completed-message.png' });
+  await disclosure.click();
+  await expect(page.getByText(fact, { exact: true })).toBeVisible();
+  await expect(progress.locator('.run-progress-steps')).toContainText(/失败|未成功|未完成|未能/);
+  await page.screenshot({ path: out + '/desktop-history.png' });
+  await page.reload();
+  await expect(disclosure).toContainText(/用时\s*7\s*分(?:钟)?\s*54\s*秒/);
+  await expect(page.getByText(fact, { exact: true })).toBeHidden();
+  await disclosure.focus(); await page.keyboard.press('Enter');
+  await expect(page.getByText(fact, { exact: true })).toBeVisible();
+
+  // Waiting for a real question stops the face immediately. The question remains actionable in the composer.
+  reset(16000);
+  task.title = '北京差旅申请';
+  task.messages[0].text = '11 月 22 日从杭州去北京，帮我准备差旅申请。';
+  await open();
+  step('lookup', 'get_submission_draft', '读取差旅草稿', 'completed', {
+    durationMs: 140, finding: '差旅申请中已有 1 段行程。', itinerary: { destination: '北京', transport: '高铁' },
+  });
+  emit('status', { status: '待你回答', label: '等待回答' });
+  await expect(activity.locator('.run-progress-face')).toBeHidden();
+  const question = { id: 'q-trip', title: '这次需要另起一份申请吗？', multiple: false, status: 'pending', options: [{ id: 'new', label: '另起一份申请' }, { id: 'existing', label: '我指的是已有申请' }] };
+  finish('awaiting_input', question.title, { question, elapsedMs: 17000 });
+  await expect(page.getByRole('radio', { name: '我指的是已有申请' })).toBeVisible();
+  const tripFact = page.getByText('差旅申请中已有 1 段行程。', { exact: true });
+  await expect(tripFact).toBeVisible();
+  await disclosure.focus();
+  await page.keyboard.press('Space');
+  await expect(tripFact).toBeHidden();
+  await expect(progress.getByRole('status')).toContainText('待你回答');
+  const send = page.getByRole('button', { name: '发送回答' });
+  await expect(send).toBeDisabled();
+  await page.getByRole('radio', { name: '我指的是已有申请' }).focus();
+  await page.keyboard.press('Space');
+  await expect(send).toBeEnabled();
+  await send.focus();
+  await page.keyboard.press('Enter');
   await expect.poll(() => submitted.length).toBe(1);
   await expect.poll(() => clients.size).toBeGreaterThan(0);
-  step('resumed', 'read_uploaded_file', '读取已保存材料', 'running');
-  await expect(page.locator('.run-progress-summary').last()).toContainText('读取已保存材料');
-  finish('failed', '材料缺少金额列，请补充后继续。');
-  await expect(page.locator('.chat-titlebar')).toContainText('执行失败');
-  await expect(page.getByRole('button', { name: /继续处理|重试/ }).last()).toBeVisible();
-  results.push('停止保留记录、主动继续、失败恢复入口');
+  finish('completed', '原申请已提交待受理。');
+  await expect(message).toContainText('原申请已提交待受理。');
 
-  reset();
-  for (let i = 0; i < 28; i++) step(`history-${i}`, 'read_uploaded_file', `核对第 ${i + 1} 份费用材料`, 'completed', 100 + i);
-  step('current', 'validate_submission', '检查单据', 'running');
-  await page.reload();
-  await expect(page.locator('.run-progress-details').last()).toHaveAttribute('open', '');
-  const thread = page.locator('.chat-thread');
-  await thread.evaluate(element => { element.scrollTop = 0; element.dispatchEvent(new Event('scroll')); });
-  const top = await thread.evaluate(element => element.scrollTop);
-  emit('delta', { text: '已核对材料，继续检查。' });
-  await expect.poll(() => thread.evaluate(element => element.scrollTop)).toBe(top);
-  await expect(page.getByRole('button', { name: '回到最新' })).toBeVisible();
-  await page.getByRole('button', { name: '回到最新' }).click();
-  await expect.poll(() => thread.evaluate(e => e.scrollHeight - e.clientHeight - e.scrollTop)).toBeLessThan(120);
-  results.push('向上阅读不抢滚动、回到最新');
-
-  reset();
-  step('mobile-one', 'read_uploaded_file', '读取费用材料', 'completed', 1700);
-  step('mobile-two', 'validate_submission', '检查费用金额与附件完整性', 'running');
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.reload();
-  await expect(page.locator('.run-progress-details').last()).toHaveAttribute('open', '');
-  await expect(page.locator('.run-progress-step')).toHaveCount(2);
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
-  if (overflow) throw new Error('窄屏存在横向溢出');
-  await page.screenshot({ path: `${out}/mobile-running.png`, fullPage: true });
-  finish('cancelled', '任务已暂停，已保存内容仍保留。');
-  await expect(page.getByRole('button', { name: '继续处理', exact: true })).toBeVisible();
-  await page.screenshot({ path: `${out}/mobile-paused.png`, fullPage: true });
-  results.push('390px布局、暂停与继续操作可达');
-
-  // Exercise the real CSS animation path separately from the existing reduced-motion journeys.
-  reset();
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await page.reload();
-  await expect.poll(() => clients.size).toBeGreaterThan(0);
-  const progress = page.locator('.run-progress').last();
-  const summary = progress.locator('.run-progress-summary');
-  const activityLabel = summary.locator('.run-progress-label');
-  const hasRunningAnimation = locator => locator.evaluate(element =>
-    element.getAnimations({ subtree: true }).some(animation => animation.playState === 'running'));
-  const icon = summary.locator('.run-progress-activity-icon');
-  const glint = activityLabel.locator('.run-progress-glint');
-  const orbit = icon.locator('.run-progress-orbit-light');
-  const animations = locator => locator.evaluate(element =>
-    element.getAnimations({ subtree: true }).map(animation => animation.animationName));
-  const expectActivity = async (kind, label) => {
-    await expect(summary).toHaveAttribute('data-activity', kind);
-    await expect(icon).toBeVisible();
-    await expect(progress.getByRole('status')).toHaveText(label);
-    await expect(activityLabel).toContainText(label);
-    await expect(glint).toHaveAttribute('aria-hidden', 'true');
-    await expect.poll(() => animations(glint)).toContain('run-progress-glint');
-    await expect.poll(() => hasRunningAnimation(summary)).toBe(true);
-    if (kind === 'thinking') {
-      await expect(orbit).toBeVisible();
-      await expect.poll(() => animations(orbit)).toContain('run-progress-orbit');
-    } else {
-      await expect(orbit).toHaveCount(0);
-    }
-  };
-  emit('status', { phase: 'thinking', label: '正在分析任务' });
-  await expectActivity('thinking', '正在分析任务');
-  await page.screenshot({ path: `${out}/desktop-thinking-motion.png`, fullPage: true });
-  await page.locator('.message.assistant').last().screenshot({ path: `${out}/thinking-status-detail.png` });
-  const captureMotionFrames = async (firstFrame, count) => {
-    if (process.env.CAPTURE_PROGRESS_GIF !== '1') return;
-    const frames = `${out}/motion-frames`;
-    await fs.mkdir(frames, { recursive: true });
-    try {
-      for (let frame = 0; frame < count; frame++) {
-        await summary.evaluate((element, time) => {
-          for (const animation of element.getAnimations({ subtree: true })) {
-            animation.pause();
-            animation.currentTime = time;
-          }
-        }, frame * 100);
-        const number = String(firstFrame + frame).padStart(2, '0');
-        await summary.screenshot({ path: `${frames}/frame-${number}.png` });
-      }
-    } finally {
-      await summary.evaluate(element => element.getAnimations({ subtree: true }).forEach(animation => animation.play()));
-    }
-  };
-  await captureMotionFrames(0, 38);
-  const activities = [
-    ['reading', 'read_uploaded_file', '读取费用材料'],
-    ['searching', 'search_policies', '检索差旅制度'],
-    ['calculating', 'summarize_expense_csv', '汇总费用金额'],
-    ['writing', 'write_skill_file', '保存工作文件'],
-    ['checking', 'validate_skill_artifact', '核对成果金额'],
-  ];
-  const symbols = new Set();
-  for (const [kind, name, label] of activities) {
-    step(kind, name, label, 'running');
-    emit('status', { phase: 'working', label });
-    await expectActivity(kind, label);
-    symbols.add(await icon.locator('svg').innerHTML());
-    const details = progress.locator('.run-progress-details');
-    if (kind === 'reading') {
-      await captureMotionFrames(38, 19);
-      await details.locator('summary').click();
-    }
-    await expect(details).not.toHaveAttribute('open', '');
-    step(kind, name, label, 'completed', 180);
-  }
-  if (symbols.size !== activities.length) throw new Error('不同业务动作使用了相同图标');
-  await progress.locator('.run-progress-toggle').click();
-  await expect(progress.locator('.run-progress-steps')).toBeVisible();
-  await expect.poll(() => hasRunningAnimation(progress.locator('.run-progress-details'))).toBe(false);
-  emit('status', { phase: 'thinking', label: '正在思考' });
-  await expectActivity('thinking', '正在思考');
-  emit('status', { phase: 'responding', label: '正在整理回复' });
-  await expectActivity('writing', '正在整理回复');
-  emit('status', { phase: 'checking', label: '正在核对结果' });
-  await expectActivity('checking', '正在核对结果');
-  await page.screenshot({ path: `${out}/desktop-checking-motion.png`, fullPage: true });
-  await page.locator('.message.assistant').last().screenshot({ path: `${out}/checking-status-detail.png` });
-  results.push('思考光轨、五类动作图标和当前动作扫光；新增步骤保留手动折叠状态，步骤和计数保持静态');
-
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await expect.poll(() => hasRunningAnimation(progress)).toBe(false);
-  await expect(progress.getByRole('status')).toHaveText('正在核对结果');
-  await page.emulateMedia({ reducedMotion: 'no-preference', forcedColors: 'active' });
-  await expect.poll(() => hasRunningAnimation(progress)).toBe(false);
-  await expect(activityLabel).toBeVisible();
-  await page.emulateMedia({ forcedColors: 'none', contrast: 'more' });
-  await expect.poll(() => hasRunningAnimation(progress)).toBe(false);
-  await expect(icon).toBeVisible();
-  await page.emulateMedia({ contrast: 'no-preference' });
-  await expectActivity('checking', '正在核对结果');
-  emit('status', { status: '待你回答', label: '等待回答' });
-  await expect(activityLabel).toHaveText('等待回答');
-  await expect(glint).toHaveCount(0);
-  await expect(orbit).toHaveCount(0);
-  await expect.poll(() => hasRunningAnimation(progress)).toBe(false);
-  results.push('服务端等待回答事件停止动效，即使尚未收到本轮终态');
-  finish();
-  await expect(progress).toHaveClass(/is-completed/);
-  await expect(glint).toHaveCount(0);
-  await expect(orbit).toHaveCount(0);
-  await expect.poll(() => hasRunningAnimation(progress)).toBe(false);
-  await expect(progress.locator('.run-progress-toggle')).toContainText('已完成');
-  results.push('减少动态、增强对比度和强制色彩时保持静态且文字可读，完成后停止进度动效');
-
-  // A long conversation provides real scroll clipping for IntersectionObserver pause/resume.
-  reset();
-  task.messages.unshift(...Array.from({ length: 18 }, (_, index) => ({
-    id: `motion-history-${index}`, role: index % 2 ? 'assistant' : 'user',
-    text: `第 ${index + 1} 条历史核对记录。\n已核对费用类型与归集月份。\n保留原始材料和业务依据。\n继续处理最新事项。`,
+  // Users can read older messages, stop a run, resume it, and see an actionable failure at narrow widths.
+  reset(12000);
+  task.messages.unshift(...Array.from({ length: 20 }, (_, i) => ({
+    id: 'earlier-' + i, role: i % 2 ? 'assistant' : 'user', text: '历史对话 ' + (i + 1) + '，查看上次核对的数据。\n费用材料已归入原单。',
   })));
-  await page.reload();
-  await expect.poll(() => clients.size).toBeGreaterThan(0);
-  emit('status', { phase: 'thinking', label: '正在分析任务' });
-  await expectActivity('thinking', '正在分析任务');
-  await thread.evaluate(element => { element.scrollTop = 0; element.dispatchEvent(new Event('scroll')); });
-  await expect(progress).toHaveAttribute('data-motion-paused', 'true');
-  await expect.poll(() => hasRunningAnimation(progress)).toBe(false);
+  step('receipt', 'list_materials', '查看材料', 'completed', { durationMs: 100, finding: '已列出 2 份材料。' });
+  step('amount', 'validate_submission', '核对金额字段', 'running');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await open();
+  await expect(activity).toContainText('核对金额字段');
+  await expect.poll(hasMotion).toBe(false);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.screenshot({ path: out + '/mobile-running.png' });
+  await page.emulateMedia({ reducedMotion: 'no-preference', forcedColors: 'active' });
+  await expect.poll(hasMotion).toBe(false);
+  await page.emulateMedia({ forcedColors: 'none', contrast: 'more' });
+  await expect.poll(hasMotion).toBe(false);
+  await page.emulateMedia({ contrast: 'no-preference' });
+  await expect.poll(hasMotion).toBe(true);
+  await thread.evaluate(el => { el.scrollTop = 0; el.dispatchEvent(new Event('scroll')); });
+  await expect(page.getByRole('button', { name: '回到最新' })).toBeVisible();
+  await expect.poll(hasMotion).toBe(false);
+  emit('delta', { text: '正在核对金额字段。' });
+  await expect(message).toContainText('正在核对金额字段。');
+  await expect.poll(() => thread.evaluate(el => el.scrollTop)).toBe(0);
   await page.getByRole('button', { name: '回到最新' }).click();
-  await expect(progress).not.toHaveAttribute('data-motion-paused', 'true');
-  await expectActivity('thinking', '正在分析任务');
-  results.push('向上阅读使活动行离屏后暂停、回到最新恢复动效');
-
-  step('motion-stop', 'read_uploaded_file', '读取费用材料', 'running');
-  await expectActivity('reading', '读取费用材料');
-  await page.getByRole('button', { name: '停止办理', exact: true }).click();
-  await expect(progress).toHaveClass(/is-paused|is-cancelled/);
-  await expect(glint).toHaveCount(0);
-  await expect(orbit).toHaveCount(0);
-  await expect.poll(() => hasRunningAnimation(progress)).toBe(false);
+  await expect.poll(hasMotion).toBe(true);
+  await message.getByRole('button', { name: '停止办理', exact: true }).click();
   await expect(page.getByRole('button', { name: '继续处理', exact: true })).toBeVisible();
-  results.push('卡内停止后无活动动画，保留继续处理入口');
+  await expect(message.locator('.run-progress-face')).toBeHidden();
+  await page.getByRole('button', { name: '继续处理', exact: true }).click();
+  await expect.poll(() => clients.size).toBeGreaterThan(0);
+  step('extract', 'extract_expense_materials', '提取费用材料', 'running');
+  await expect(activity).toContainText('提取费用材料');
+  finish('failed', '材料缺少金额列，请补充附件后继续。');
+  await expect(message).toContainText('材料缺少金额列');
+  await expect(page.locator('.chat-titlebar .badge.red')).toHaveText('执行失败');
+  const resume = page.getByRole('button', { name: '继续处理', exact: true });
+  await expect(resume).toBeVisible();
+  await expect(message.locator('.run-progress-face')).toBeHidden();
+  await page.setViewportSize({ width: 320, height: 740 });
+  await disclosure.focus();
+  await page.keyboard.press('Enter');
+  await expect(progress.locator('.run-progress-steps')).toBeHidden();
+  await expect(progress.getByRole('status')).toContainText('提取费用材料未成功');
+  await expect(progress.getByRole('status').locator('.run-problem-action')).toBeVisible();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.screenshot({ path: out + '/mobile-failure.png' });
+  await resume.focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(() => submitted.length).toBe(2);
+  await expect.poll(() => clients.size).toBeGreaterThan(0);
+  finish('completed', '已重新读取补充的材料。');
+  await expect(message).toContainText('已重新读取补充的材料。');
+
+  // A terminal notification can arrive while the reader has keyboard focus on a closed disclosure.
+  for (const terminalStatus of ['awaiting_input', 'failed']) {
+    reset(12000);
+    await open();
+    step('files', 'list_materials', '查看材料', 'completed', { finding: '已列出 2 份材料。' });
+    step('validate', 'validate_submission', '检查单据', 'running');
+    await expect(activity).toContainText('检查单据');
+    await disclosure.focus();
+    await page.keyboard.press('Space');
+    await expect(progress.locator('details')).toHaveJSProperty('open', false);
+    if (terminalStatus === 'failed') {
+      step('validate', 'validate_submission', '检查单据', 'failed');
+      step('policy', 'search_policies', '查询制度说明', 'completed');
+      finish('failed', '办理未完成，可稍后继续处理。');
+      await expect(message).toContainText('办理未完成，可稍后继续处理。');
+    } else {
+      finish('awaiting_input', question.title, { question: { ...question, status: 'pending' } });
+      await expect(page.getByRole('radio', { name: '我指的是已有申请' })).toBeVisible();
+    }
+    await expect(progress.getByRole('status')).toContainText(terminalStatus === 'failed' ? '办理未完成' : '待你回答');
+    await expect(progress.locator('details')).toHaveJSProperty('open', false);
+    await expect(disclosure).toBeFocused();
+    if (terminalStatus === 'failed')
+      await expect(progress.getByRole('status').getByText(/检查单据未成功/)).toBeVisible();
+  }
+
+  // The run does not exist yet. Hold the actual POST until the user has typed another draft.
   reset();
-  task.title = '准备一份差旅申请';
-  task.messages[0].text = '帮我准备去上海的差旅申请。';
-  step('attachment', 'read_uploaded_file', '读取行程附件', 'completed', 800);
-  step('travel', 'get_submission_draft', '读取差旅草稿', 'completed', 1100,
-    { destination: '上海', transport: '高铁二等座' });
-  step('prepare', 'update_submission_draft', '正在更新差旅申请草稿', 'running');
-  await page.reload();
-  await expect(progress.locator('.run-progress-count')).toHaveText('2/3 项已完成');
-  await expect(progress.locator('.run-progress-context')).toContainText('上海');
-  await expect(progress.getByText('0.8 秒')).toBeVisible();
-  await page.locator('.message.assistant').last().screenshot({ path: `${out}/stitch-execution-card.png` });
-  await page.screenshot({ path: `${out}/stitch-execution-desktop.png` });
-  results.push('与本轮绑定的行程摘要、完成数量及毫秒级耗时');
-  if (errors.length) throw new Error(errors.join('\n'));
-  await fs.writeFile(`${out}/browser-verification.json`, JSON.stringify({ fixture: true, results, errors, status: 'passed' }, null, 2));
-  console.log(JSON.stringify({ status: 'passed', results, errors }, null, 2));
+  finish('completed', '上一轮核对已完成。');
+  const sourceFile = { kind: 'file', id: 'qa-expenses', title: '费用清单.pdf' };
+  task.refs = [sourceFile];
+  await open();
+  const input = page.locator('.composer textarea');
+  const originalText = '请根据费用清单核对本次报销金额。';
+  const nextDraft = '稍后再帮我准备一份新的差旅申请。';
+  const failureText = '服务暂时不可用，请稍后重试。';
+  let releaseRequest;
+  const holdFirstPost = new Promise(resolve => { releaseRequest = resolve; });
+  await page.route('**/api/local/runs', async route => {
+    await holdFirstPost;
+    await route.fulfill({ status: 503, json: { message: failureText } });
+  }, { times: 1 });
+  const firstRequest = page.waitForRequest(request =>
+    request.method() === 'POST' && request.url().endsWith('/api/local/runs')
+  );
+  await input.fill(originalText);
+  await input.press('Enter');
+  const firstPayload = (await firstRequest).postDataJSON();
+  try {
+    await expect(page.getByRole('button', { name: '正在发送请求' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: /停止当前任务|停止办理/ })).toHaveCount(0);
+    await input.fill(nextDraft);
+  } finally {
+    releaseRequest();
+  }
+  await expect(message.getByText(failureText, { exact: true })).toBeVisible();
+  await expect(page.locator('.chat-titlebar .badge.red')).toHaveText('发送失败');
+  await expect(page.locator('.toast').filter({ hasText: failureText })).toHaveCount(0);
+  await expect(input).toHaveValue(nextDraft);
+  await page.getByRole('button', { name: '移除费用清单.pdf' }).click();
+  assert.equal(firstPayload.message, originalText);
+  assert.deepEqual(firstPayload.refs, [sourceFile]);
+  await page.getByRole('button', { name: '重新发送', exact: true }).click();
+  await expect.poll(() => submitted.length).toBe(1);
+  assert.equal(submitted[0].message, originalText);
+  assert.deepEqual(submitted[0].refs, [sourceFile]);
+  assert.equal(submitted[0].preserveComposerDraft, true);
+  await expect.poll(() => clients.size).toBeGreaterThan(0);
+  await expect(input).toHaveValue(nextDraft);
+  await expect(page.getByRole('button', { name: '移除费用清单.pdf' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '停止当前任务' })).toBeEnabled();
+  finish('completed', '已根据费用清单核对报销金额。');
+  await expect(message).toContainText('已根据费用清单核对报销金额。');
+  await expect(input).toHaveValue(nextDraft);
+  await expect(page.locator('.message.user').getByText(originalText, { exact: true })).toHaveCount(1);
+
+  // A newly typed draft can reach workspace PATCH before an ordinary POST reaches the service.
+  let acceptRequest;
+  const holdOrdinaryPost = new Promise(resolve => { acceptRequest = resolve; });
+  await page.route('**/api/local/runs', async route => {
+    await holdOrdinaryPost;
+    await route.continue();
+  }, { times: 1 });
+  const ordinaryRequest = page.waitForRequest(request =>
+    request.method() === 'POST' && request.url().endsWith('/api/local/runs')
+  );
+  await input.press('Enter');
+  assert.equal((await ordinaryRequest).postDataJSON().message, nextDraft);
+  const laterDraft = '新申请请补充出发地和目的地。';
+  try {
+    await input.fill(laterDraft);
+    await expect.poll(() => task.input).toBe(laterDraft);
+  } finally {
+    acceptRequest();
+  }
+  await expect.poll(() => submitted.length).toBe(2);
+  assert.deepEqual(submitted[1].refs, []);
+  await expect.poll(() => clients.size).toBeGreaterThan(0);
+  await expect(input).toHaveValue(laterDraft);
+  finish('completed', '差旅申请已准备好。');
+  await expect(message).toContainText('差旅申请已准备好。');
+  await expect(input).toHaveValue(laterDraft);
+  assert.deepEqual(errors, []);
+  const results = [
+    '短任务直接呈现结果',
+    '首秒文字光扫逐帧可见且横移，减少动态时字形静止',
+    '单项任务超过 8 秒自动展示范围',
+    '手动折叠经过工具切换仍保持可键盘展开',
+    '动作、发现和当前面屏同屏',
+    '事件去重及刷新恢复',
+    '整轮耗时与键盘回看',
+    '待答停动、收起后键盘应答',
+    '窄屏和减少动态',
+    '阅读位置与停止/继续',
+    '失败收起后仍可读原因并键盘重试',
+    '转为待答或失败保留折叠及键盘焦点',
+    '失败后其他步骤成功仍保留实际失败原因',
+    '创建运行前的发送状态与可编辑草稿',
+    '发送失败后仅提示一次，重发原话与引用并保留新草稿',
+    '普通发送成功后保留请求途中已暂存的新草稿',
+  ];
+  await fs.writeFile(out + '/browser-verification.json', JSON.stringify({ fixture: true, results, firstSecond: { sweep, reducedSweep }, errors, status: 'passed' }, null, 2));
+  console.log(JSON.stringify({ status: 'passed', results }, null, 2));
 } finally {
   for (const client of clients) client.end();
-  await browser.close();
+  await browser?.close();
+  await vite.close();
   await new Promise(resolve => server.close(resolve));
 }

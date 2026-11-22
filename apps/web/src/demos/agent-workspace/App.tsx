@@ -182,10 +182,21 @@ function makeTask(title = '新会话'): Task {
     updated: '刚刚',
   };
 }
+interface SendAttempt {
+  text: string;
+  refs: ContextRef[];
+  capability?: CapabilityId | null;
+}
+
+interface RunFailure {
+  message: string;
+  retry?: SendAttempt;
+}
+
 export default function App() {
   const [savedState, setSavedState] = useState<WorkspaceState>(initial),
     [ready, setReady] = useState(false),
-    [runFailures, setRunFailures] = useState<Record<string, string>>({}),
+    [runFailures, setRunFailures] = useState<Record<string, RunFailure>>({}),
     [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>({
       state: 'loading',
     }),
@@ -240,7 +251,7 @@ export default function App() {
         status: busyIds.includes(task.id)
           ? '处理中'
           : failure
-            ? '执行失败'
+            ? (failure.retry ? '发送失败' : '执行失败')
             : task.status,
         messages: failure
           ? [
@@ -249,7 +260,7 @@ export default function App() {
                 id: `failure-${task.id}`,
                 role: 'assistant' as const,
                 runStatus: 'failed',
-                text: failure,
+                text: failure.message,
               },
             ]
           : messages,
@@ -563,18 +574,15 @@ export default function App() {
       return next;
     });
     setBusyIds((old) => (old.includes(taskId) ? old : [...old, taskId]));
-    const savedRun = resumedTask?.messages.find(
-      (message) =>
-        message.runId === runId || message.id === `assistant-${runId}`,
-    );
     setStreams((old) => ({
       ...old,
-      [taskId]: createRunStream(runId, savedRun?.tools),
+      [taskId]: createRunStream(runId),
     }));
     const seen = new Set<string>();
     let terminal = false;
     const clear = () => {
       source.close();
+      if (connections.current.get(taskId)?.source !== source) return;
       connections.current.delete(taskId);
       setBusyIds((old) => old.filter((id) => id !== taskId));
       setStreams((old) => {
@@ -617,7 +625,8 @@ export default function App() {
     event('error', (value) => {
       terminal = true;
       progressEvent('error', value);
-      notify(value.message || '处理失败，请重试。');
+      if (stateRef.current.activeTask !== taskId || readPage() !== 'chat')
+        notify(value.message || '处理失败，请重试。');
     });
     event('done', () => {
       terminal = true;
@@ -650,7 +659,7 @@ export default function App() {
               clear();
               setRunFailures((old) => ({
                 ...old,
-                [taskId]: '任务已不可用，请重新发送。',
+                [taskId]: { message: '任务已不可用，请重新发送。' },
               }));
               void refresh().catch(() => {});
             }
@@ -981,6 +990,7 @@ export default function App() {
     text: string,
     explicitRefs?: ContextRef[],
     questionAnswer?: QuestionAnswerInput,
+    retry?: SendAttempt,
   ) {
     if (!text.trim() || !ready) {
       if (questionAnswer) throw new Error('服务尚未就绪，请稍后重试。');
@@ -1016,7 +1026,7 @@ export default function App() {
       notify('请先处理当前待回答的问题。');
       return;
     }
-    const preserveComposerDraft = selectedTeam && !!task.input && task.input !== text;
+    const preserveComposerDraft = !!task.input && task.input !== text;
     starting.current.add(id);
     setRunFailures((old) => {
       const next = { ...old };
@@ -1036,7 +1046,7 @@ export default function App() {
       activePanel && isReimbursementPanel(activePanel) ? {
         id: String(activePanel.data!.draftId), title: '费用报销',
       } : null;
-    const refs =
+    const refs = retry?.refs ?? (
       openSubmission && !explicitRefs && !answering
         ? [
             ...baseRefs.filter((ref) => ref.kind !== 'submission'),
@@ -1046,8 +1056,9 @@ export default function App() {
               title: openSubmission.title,
             },
           ]
-        : baseRefs;
-    const capability = answering || selectedTeam
+        : baseRefs
+    );
+    const capability = retry ? retry.capability : answering || selectedTeam
       ? task.capability
       : explicitRefs?.some((ref) => ref.kind === 'document')
         ? 'documents'
@@ -1062,8 +1073,8 @@ export default function App() {
         ? text.slice(0, 24)
         : current.title,
       input: questionAnswer || preserveComposerDraft ? current.input : '',
-      capability,
-      refs,
+      capability: retry ? current.capability : capability,
+      refs: retry ? current.refs : refs,
       updated: '刚刚',
       messages:
         questionAnswer ||
@@ -1139,7 +1150,10 @@ export default function App() {
         message: text,
         refs,
         capability,
-        ...(preserveComposerDraft ? { preserveComposerDraft: true } : {}),
+        // The submitted draft was cleared before flushWorkspace. A newer draft
+        // may already have been saved while this POST was in transit.
+        preserveComposerDraft: true,
+        ...(retry ? { useSavedComposer: true } : {}),
         ...(questionAnswer ? { questionAnswer } : {}),
       });
       if (result.workspace) acceptWorkspace(result.workspace);
@@ -1163,15 +1177,25 @@ export default function App() {
         );
       else if (!connections.current.has(id)) {
         setBusyIds((old) => old.filter((value) => value !== id));
-        const receivedAnswer = current?.messages.at(-1)?.role === 'assistant';
-        if (!receivedAnswer) {
-          setRunFailures((old) => ({ ...old, [id]: (error as Error).message }));
-          if (!questionAnswer && !preserveComposerDraft)
-            updateTask(id, (value) => ({ ...value, input: text }));
+        const latest = current?.messages.at(-1);
+        const receivedAnswer = latest?.role === 'assistant' &&
+          !task.messages.some((message) => message.id === latest.id);
+        if (!receivedAnswer && !questionAnswer) {
+          setRunFailures((old) => ({
+            ...old,
+            [id]: { message: (error as Error).message, retry: { text, refs, capability } },
+          }));
+          if (!preserveComposerDraft)
+            updateTask(id, (value) => ({ ...value, input: value.input || text }));
         }
       }
-      notify((error as Error).message);
-      if (questionAnswer && !current?.activeRunId) throw error;
+      if (questionAnswer && !current?.activeRunId) {
+        const confirmed = current?.messages.some((message) =>
+          message.question?.id === questionAnswer.questionId &&
+          ['answered', 'deferred'].includes(message.question.status),
+        );
+        if (!confirmed) throw error;
+      }
     } finally {
       starting.current.delete(id);
     }
@@ -1209,11 +1233,9 @@ export default function App() {
     }
   }
   async function stop() {
-    if (!active) return;
-    const run = connections.current.get(active.id);
-    if (!run) return;
+    if (!active?.activeRunId) return;
     try {
-      await runtimeApi(`/runs/${encodeURIComponent(run.runId)}/cancel`, {});
+      await runtimeApi(`/runs/${encodeURIComponent(active.activeRunId)}/cancel`, {});
       await refresh();
     } catch (error) {
       notify((error as Error).message);
@@ -1351,6 +1373,14 @@ export default function App() {
       }
     }
   }, [ready, state.tasks]);
+  const activeFailure = active && runFailures[active.id]?.retry;
+  const retrySend = activeFailure
+    ? () => send(activeFailure.text, activeFailure.refs, undefined, activeFailure)
+    : undefined;
+  const activeStream = active && streams[active.id];
+  const stopActive = active?.activeRunId && (!activeStream || activeStream.runStatus === 'running')
+    ? stop
+    : undefined;
   const composer =
     answerQuestionAtInput && chatVisible ? (
       <QuestionComposer
@@ -1358,7 +1388,7 @@ export default function App() {
         taskId={active.id}
         question={answerQuestionAtInput}
         busy={busyIds.includes(active.id)}
-        onStop={stop}
+        onStop={stopActive}
       />
     ) : (
       <Composer
@@ -1400,7 +1430,7 @@ export default function App() {
               )
         }
         busy={!!chatVisible && busyIds.includes(active.id)}
-        onStop={stop}
+        onStop={stopActive}
         onUpload={upload}
         compact={!!chatVisible}
       />
@@ -1766,12 +1796,14 @@ export default function App() {
               <div className="work-main">
                 {chatVisible ? (
                   <ChatPage
+                    streamingRunId={streams[active.id]?.runId}
                     task={active}
                     composer={composer}
                     busy={busyIds.includes(active.id)}
                     activity={streams[active.id]?.activity}
                     phase={streams[active.id]?.phase}
-                    onStop={stop}
+                    onStop={stopActive}
+                    onRetrySend={retrySend}
                     onRename={() =>
                       openPanel({ kind: 'rename', title: '重命名会话' })
                     }

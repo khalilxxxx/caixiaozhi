@@ -1,6 +1,6 @@
 import { MessageText } from './MessageText';
 import { useEffect, useId, useRef, useState } from 'react';
-import type { ContextRef, ResultCard, Task } from './workspace';
+import type { ChatMessage, ContextRef, ResultCard, Task } from './workspace';
 import { useWorkspace } from './workspace';
 import { Badge, Icon, Button } from './ui';
 import { DocumentResults, materialBatchId } from './Documents';
@@ -25,8 +25,38 @@ import {
   visibleMessageCards,
 } from './submission-conversation';
 import { QuestionCard } from './QuestionCard';
-import { pendingQuestion, resumeQuestionMessage } from './question-model';
+import {
+  pendingQuestion,
+  questionState,
+  resumeQuestionMessage,
+} from './question-model';
 import { RunProgress } from './RunProgress';
+
+function taskStatusTone(status: string) {
+  if (/失败|未完成|异常/.test(status)) return 'red';
+  if (/待你回答|补充|核对/.test(status)) return 'amber';
+  if (/暂停|停止|中断/.test(status)) return 'neutral';
+  if (/已完成|已受理/.test(status)) return 'green';
+  return 'blue';
+}
+
+function messageProgressStatus(
+  message: ChatMessage,
+  pendingId?: string,
+  latestTaskStatus?: string,
+) {
+  const { question, runStatus } = message;
+  if (
+    question &&
+    (!runStatus || ['awaiting_input', 'waiting', '待你回答'].includes(runStatus))
+  )
+    return question.id === pendingId ? 'awaiting_input' : 'completed';
+  if (runStatus && runStatus !== 'running') return runStatus;
+  if (latestTaskStatus === '已暂停') return 'paused';
+  if (/中断/.test(latestTaskStatus ?? '')) return 'interrupted';
+  if (/未完成|失败|异常/.test(latestTaskStatus ?? '')) return 'failed';
+  return runStatus;
+}
 
 export const logo = '/agent-assets/caixiaozhi.png';
 function XiaozhiMark({ className = '' }: { className?: string }) {
@@ -291,7 +321,7 @@ export function Composer({
   onAdd: (ref: ContextRef) => void;
   onRemove: (ref: ContextRef) => void;
   busy: boolean;
-  onStop: () => void;
+  onStop?: () => void;
   onUpload: (files: FileList) => void;
   compact?: boolean;
   capability: CapabilityId | null;
@@ -528,10 +558,11 @@ export function Composer({
           {busy ? (
             <button
               className="send-button"
-              aria-label="停止当前任务"
+              aria-label={onStop ? '停止当前任务' : '正在发送请求'}
+              disabled={!onStop}
               onClick={onStop}
             >
-              <Icon name="stop" size={16} />
+              <Icon name={onStop ? 'stop' : 'clock'} size={16} />
             </button>
           ) : (
             <button
@@ -658,16 +689,20 @@ export function ChatPage({
   busy,
   activity,
   phase,
+  streamingRunId,
   onRename,
   onStop,
+  onRetrySend,
 }: {
   task: Task;
   composer: React.ReactNode;
   busy: boolean;
   activity?: string;
   phase?: string;
+  streamingRunId?: string;
   onRename: () => void;
-  onStop: () => void;
+  onStop?: () => void;
+  onRetrySend?: () => void;
 }) {
   const w = useWorkspace(),
     scroll = useRef<HTMLDivElement>(null),
@@ -702,27 +737,40 @@ export function ChatPage({
   }, []);
 
   const last = task.messages.filter((m) => m.role === 'assistant').at(-1);
-  const isRunningMessage = (message: Task['messages'][number]) =>
-    busy &&
+  const currentRunId = task.activeRunId ?? streamingRunId;
+  const belongsToCurrentRun = (message: ChatMessage) =>
     message.role === 'assistant' &&
-    Boolean(task.activeRunId) &&
-    (message.runId === task.activeRunId ||
-      message.id === task.activeRunId ||
-      message.id === `assistant-${task.activeRunId}`);
-  const hasRunningMessage = task.messages.some(isRunningMessage);
+    Boolean(currentRunId) &&
+    (message.runId === currentRunId ||
+      message.id === currentRunId ||
+      message.id === `assistant-${currentRunId}`);
+  const isRunningMessage = (message: ChatMessage) =>
+    busy &&
+    belongsToCurrentRun(message) &&
+    (!message.runStatus || message.runStatus === 'running');
+  const hasCurrentMessage = task.messages.some(belongsToCurrentRun);
   const latestSubmissions = latestSubmissionCards(task);
   const pending = pendingQuestion(task);
+  const pendingId =
+    pending && questionState(pending, w.state.data) === 'pending'
+      ? pending.id
+      : undefined;
   const activeTeam = isExpertTeam(task.capability)
     ? getCapability(task.capability, task.expertTeamName)?.label
     : undefined;
   const canResume =
     !busy &&
-    !pending &&
+    !pendingId &&
     (/暂停|未完成|失败|中断|异常/.test(task.status) ||
       ['failed', 'interrupted', 'cancelled'].includes(last?.runStatus ?? ''));
   const latestCard = last ? visibleMessageCards(last)[0]?.card : undefined;
   const kind = latestCard?.kind;
   const boardRef = task.refs.find(ref => ref.kind === 'business-board');
+  const resumeTask = () => w.send(
+    task.status === '已暂停'
+      ? resumeQuestionMessage(task)
+      : '继续处理当前事项，保留已保存的草稿和成果，先核对当前办理状态，再继续尚未完成的步骤，不要重复提交已提交的单据。',
+  );
   const suggestions =
     latestCard?.data?.businessBoard
       ? (latestCard.data.focus === 'ranking' ? ['哪些线路的差旅费用最高？', '生成报告'] : ['谁的差旅费最高？', '生成报告'])
@@ -748,15 +796,7 @@ export function ChatPage({
         <div className="inline-actions">
           {pending && activeTeam && <span className="chat-question-team">{activeTeam}</span>}
           {!busy && (
-            <Badge
-              tone={
-                task.status.includes('补充') ||
-                task.status.includes('核对') ||
-                task.status === '待你回答'
-                  ? 'amber'
-                  : 'blue'
-              }
-            >
+            <Badge tone={taskStatusTone(task.status)}>
               {task.status}
             </Badge>
           )}
@@ -797,19 +837,15 @@ export function ChatPage({
           {task.messages.map((message) => {
             const visibleCards = visibleMessageCards(message);
             const messageRunning = isRunningMessage(message);
+            const sendFailed = onRetrySend && message.id === last?.id;
             const author = isExpertTeam(message.capability)
               ? getCapability(message.capability, message.expertTeamName)?.label
               : messageRunning ? activeTeam : undefined;
-            const latestStatus =
-              message.id === last?.id && !busy
-                ? pending
-                  ? 'awaiting_input'
-                  : task.status === '已暂停'
-                    ? 'paused'
-                    : /未完成|失败|中断|异常/.test(task.status)
-                      ? 'failed'
-                      : undefined
-                : undefined;
+            const progressStatus = messageProgressStatus(
+              message,
+              pendingId,
+              !busy && message.id === last?.id ? task.status : undefined,
+            );
             if (
               message.role === 'assistant' &&
               message.submissionPhase === 'collecting' &&
@@ -830,14 +866,18 @@ export function ChatPage({
                       <XiaozhiMark className="reply-mark" />
                       <span>{author ?? '财小智'}</span>
                     </div>
-                    <RunProgress
-                      steps={message.tools}
-                      running={messageRunning}
-                      onStop={onStop}
-                      status={latestStatus ?? message.runStatus}
-                      activity={messageRunning ? activity : undefined}
-                      phase={messageRunning ? phase : undefined}
-                    />
+                    {!sendFailed && (
+                      <RunProgress
+                        steps={message.tools}
+                        runStartedAt={message.runStartedAt}
+                        runFinishedAt={message.runFinishedAt}
+                        running={messageRunning}
+                        onStop={onStop}
+                        status={progressStatus}
+                        activity={messageRunning ? activity : undefined}
+                        phase={messageRunning ? phase : undefined}
+                      />
+                    )}
                     {message.text.trim() &&
                       (!message.question ||
                         message.text !== message.question.title) && (
@@ -890,7 +930,7 @@ export function ChatPage({
               </article>
             );
           })}
-          {busy && !hasRunningMessage && (
+          {busy && !hasCurrentMessage && (
             <article className="message assistant" data-team-author={activeTeam}>
               <div>
                 <div className="assistant-name">
@@ -906,20 +946,14 @@ export function ChatPage({
               </div>
             </article>
           )}
-          {canResume && (
+          {(onRetrySend || canResume) && (
             <div className="chat-resume-action">
               <Button
                 variant="primary"
                 icon="refresh"
-                onClick={() =>
-                  w.send(
-                    task.status === '已暂停'
-                      ? resumeQuestionMessage(task)
-                      : '继续处理当前事项，保留已保存的草稿和成果，先核对当前办理状态，再继续尚未完成的步骤，不要重复提交已提交的单据。',
-                  )
-                }
+                onClick={onRetrySend ?? resumeTask}
               >
-                继续处理
+                {onRetrySend ? '重新发送' : '继续处理'}
               </Button>
             </div>
           )}

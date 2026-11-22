@@ -76,7 +76,7 @@ export function QuestionComposer({
   question: ClarificationQuestion;
   taskId: string;
   busy: boolean;
-  onStop: () => void;
+  onStop?: () => void;
 }) {
   const w = useWorkspace();
   const titleId = useId();
@@ -277,7 +277,7 @@ export function QuestionComposer({
           </p>
         )}
         <footer className="question-composer-toolbar">
-          {busy && (
+          {busy && onStop && (
             <Button type="button" variant="ghost" icon="stop" onClick={onStop}>
               停止处理
             </Button>

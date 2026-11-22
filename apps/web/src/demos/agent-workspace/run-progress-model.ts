@@ -11,6 +11,7 @@ export interface ToolStep {
   finishedAt?: number | string | null;
   durationMs?: number | null;
   itinerary?: { destination?: string; transport?: string };
+  finding?: string;
 }
 
 export interface RunStream {
@@ -21,19 +22,15 @@ export interface RunStream {
   phase?: string;
   runStatus: string;
   createdAt: number;
+  runStartedAt?: number;
+  runFinishedAt?: number;
 }
 
-export function createRunStream(
-  runId: string,
-  steps: ToolStep[] = [],
-): RunStream {
+export function createRunStream(runId: string): RunStream {
   return {
     runId,
     text: '',
-    steps: steps.flatMap((step) => {
-      const safe = readStep(step);
-      return safe ? [safe] : [];
-    }),
+    steps: [],
     runStatus: 'running',
     createdAt: Date.now(),
   };
@@ -86,6 +83,12 @@ function readStep(value: unknown): ToolStep | null {
     item.durationMs >= 0
   )
     step.durationMs = item.durationMs;
+  if (
+    step.status === 'completed' &&
+    typeof item.finding === 'string' &&
+    item.finding.trim()
+  )
+    step.finding = item.finding.trim().slice(0, 320);
   if (item.itinerary && typeof item.itinerary === 'object') {
     const values = item.itinerary as Record<string, unknown>;
     step.itinerary = {};
@@ -98,6 +101,12 @@ function readStep(value: unknown): ToolStep | null {
   return step;
 }
 
+function updateStep(previous: ToolStep, next: ToolStep): ToolStep {
+  if (previous.status !== 'running' && next.status === 'running')
+    return previous;
+  return { ...previous, ...next };
+}
+
 export function mergeToolStep(steps: ToolStep[], value: unknown): ToolStep[] {
   const next = readStep(value);
   if (!next) return steps;
@@ -108,12 +117,34 @@ export function mergeToolStep(steps: ToolStep[], value: unknown): ToolStep[] {
           !step.id && step.name === next.name && step.status === 'running',
       );
   if (index < 0) return [...steps, next];
-  const previous = steps[index]!;
-  // Replayed starts cannot turn a persisted terminal step back into a spinner.
-  if (previous.status !== 'running' && next.status === 'running') return steps;
-  return steps.map((step, i) =>
-    i === index ? { ...previous, ...next } : step,
-  );
+  const merged = updateStep(steps[index]!, next);
+  if (merged === steps[index]) return steps;
+  return steps.map((step, i) => (i === index ? merged : step));
+}
+
+function reconcileToolSteps(saved: ToolStep[], replay: ToolStep[]): ToolStep[] {
+  const remaining = [...replay];
+  const steps: ToolStep[] = [];
+  for (const value of saved) {
+    const previous = readStep(value);
+    if (!previous) continue;
+    // Both histories start at the beginning. Older calls without IDs match
+    // the next unconsumed occurrence of that name, including separate retries.
+    const index = remaining.findIndex((step) =>
+      previous.id
+        ? step.id === previous.id
+        : !step.id && step.name === previous.name,
+    );
+    if (index < 0) steps.push(previous);
+    else steps.push(updateStep(previous, remaining.splice(index, 1)[0]!));
+  }
+  return [...steps, ...remaining];
+}
+
+function runTimestamp(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+    ? value
+    : undefined;
 }
 
 export function reduceRunEvent(
@@ -150,6 +181,7 @@ export function reduceRunEvent(
     return {
       ...stream,
       phase,
+      runStartedAt: stream.runStartedAt ?? runTimestamp(item.runStartedAt),
       activity:
         running?.label ??
         (typeof item.label === 'string'
@@ -158,7 +190,19 @@ export function reduceRunEvent(
     };
   }
   if (kind === 'error')
-    return { ...stream, runStatus: 'failed', activity: '执行未完成' };
+    return {
+      ...stream,
+      text: typeof item.message === 'string' && item.message.trim()
+        ? item.message
+        : stream.text,
+      runStatus:
+        item.runStatus === 'cancelled' || item.runStatus === 'interrupted'
+          ? item.runStatus
+          : 'failed',
+      runStartedAt: stream.runStartedAt ?? runTimestamp(item.runStartedAt),
+      runFinishedAt: runTimestamp(item.runFinishedAt),
+      activity: '执行未完成',
+    };
   return stream;
 }
 
@@ -173,11 +217,6 @@ export function mergeRunMessages(
   );
   const saved = index < 0 ? undefined : messages[index];
   if (saved?.runStatus && terminal.has(saved.runStatus)) return messages;
-  let steps = (saved?.tools ?? []).flatMap((step) => {
-    const safe = readStep(step);
-    return safe ? [safe] : [];
-  });
-  for (const step of stream.steps) steps = mergeToolStep(steps, step);
   const message: ChatMessage = {
     ...saved,
     id,
@@ -185,8 +224,10 @@ export function mergeRunMessages(
     runId: stream.runId,
     runStatus: stream.runStatus,
     text: stream.text || saved?.text || '',
-    tools: steps,
+    tools: reconcileToolSteps(saved?.tools ?? [], stream.steps),
     createdAt: saved?.createdAt ?? stream.createdAt,
+    runStartedAt: saved?.runStartedAt ?? stream.runStartedAt,
+    runFinishedAt: saved?.runFinishedAt ?? stream.runFinishedAt,
   };
   return index < 0
     ? [...messages, message]

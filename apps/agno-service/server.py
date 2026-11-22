@@ -46,6 +46,7 @@ class RunRequest(BaseModel):
     capability: str | None = None
     questionAnswer: QuestionAnswer | None = None
     preserveComposerDraft: bool = False
+    useSavedComposer: bool = False
 
 
 class MaterialExtractRequest(BaseModel):
@@ -224,7 +225,7 @@ def create_app(store=None, rule_service=None):
                     # An answer belongs to the run which asked the question. The composer is editable.
                     origin = store.run(pending.get('runId'))
                     capability = origin['request'].get('capability') if origin else current.get('capability')
-                elif 'capability' not in payload.model_fields_set and is_team(current.get('capability')):
+                elif not payload.useSavedComposer and 'capability' not in payload.model_fields_set and is_team(current.get('capability')):
                     capability = current['capability']
             team = runtime.expert_teams.resolve(capability)
             request_data['capability'] = capability
@@ -258,7 +259,9 @@ def create_app(store=None, rule_service=None):
                 elif not messages or messages[-1].get('role') != 'user' or messages[-1].get('text') != user_text:
                     messages.append(user_message)
                 request_data['message'] = user_text
-                if context or 'refs' not in payload.model_fields_set:
+                keep_composer = bool(payload.useSavedComposer and current is not None and not context)
+                request_data['useSavedComposer'] = keep_composer
+                if context or ('refs' not in payload.model_fields_set and not keep_composer):
                     request_data['refs'] = task.get('refs', [])
                 if team:
                     request_data['expertTeamName'] = team.name
@@ -268,10 +271,11 @@ def create_app(store=None, rule_service=None):
                         messages.append({'id': 'assistant-' + run_id, 'role': 'assistant', 'text': '',
                                          'runId': run_id, 'runStatus': 'running', 'createdAt': int(time.time()*1000),
                                          'capability': team.id, 'expertTeamName': team.name})
-                task['expertTeamName'] = team.name if team else None
-                task.update(activeRunId=run_id, status='已暂停' if deferred else '处理中', refs=request_data['refs'],
-                            capability=request_data['capability'],
-                            input=task.get('input', '') if payload.questionAnswer is not None or payload.preserveComposerDraft else '', updated='刚刚')
+                if not keep_composer:
+                    task.update(expertTeamName=team.name if team else None, refs=request_data['refs'],
+                                capability=request_data['capability'],
+                                input=task.get('input', '') if payload.questionAnswer is not None or payload.preserveComposerDraft else '')
+                task.update(activeRunId=run_id, status='已暂停' if deferred else '处理中', updated='刚刚')
                 state['activeTask'] = task['id']
             if deferred:
                 store.mutate(begin)

@@ -4,7 +4,6 @@ import copy
 import json
 import sqlite3
 import threading
-import time
 from pathlib import Path
 from datetime import datetime, timezone
 from rule_catalog import migrate_rules
@@ -38,19 +37,76 @@ def migrate_reimbursement_numbers(data):
     return changed
 
 
-def finish_message_steps(message, run_status):
+def run_timing(created, finished=None):
+    timing = {'runStartedAt': int(datetime.fromisoformat(created).timestamp() * 1000)} if created else {}
+    if finished:
+        timing['runFinishedAt'] = int(datetime.fromisoformat(finished).timestamp() * 1000)
+    return timing
+
+
+def finish_message_steps(message, run_status, finished):
     """Close interrupted operations without discarding earlier outcomes/cards."""
     message['runStatus'] = run_status
-    finished = int(time.time() * 1000)
     changed = []
     for step in message.get('tools', []):
         if step.get('status') != 'running':
             continue
         started = step.get('startedAt')
         step.update(status='cancelled', finishedAt=finished,
-                    durationMs=max(0, finished - started) if isinstance(started, (int, float)) else 0)
+                    durationMs=max(0, finished - started) if finished is not None and isinstance(started, (int, float)) else None)
         changed.append(copy.deepcopy(step))
     return changed
+
+
+def restore_result(task, run_id, message, result, status):
+    # Only the matching reply can be restored. Later business activity and the
+    # user's answer to a question may have changed since this event was saved.
+    snapshot = result.get('workspace', {}).get('state', {})
+    archived_task = next((item for item in snapshot.get('tasks', []) if item['id'] == task['id']), {})
+    message_id = 'assistant-' + run_id
+    archived = archived_task.get('messages', [])
+    position = next((i for i, entry in enumerate(archived) if entry.get('id') == message_id), len(archived))
+    archive = archived[position] if position < len(archived) else result
+    if message is None:
+        message = {'id': message_id, 'role': 'assistant', 'runId': run_id}
+        messages = task.setdefault('messages', [])
+        if position < len(archived):
+            before = {entry.get('id') for entry in archived[:position]}
+            index = max((i + 1 for i, entry in enumerate(messages) if entry.get('id') in before), default=0)
+            messages.insert(index, message)
+        else:
+            messages.append(message)
+    for key in ('text', 'cards', 'tools', 'createdAt', 'capability', 'expertTeamName', 'submissionPhase'):
+        if key in archive:
+            message[key] = archive[key]
+    question = archive.get('question')
+    if question and not message.get('question'):
+        answered = next((m.get('questionAnswer') for m in task['messages']
+                         if (m.get('questionAnswer') or {}).get('questionId') == question['id']), None)
+        if answered and answered.get('deferred'):
+            question = {**question, 'status': 'deferred'}
+        elif answered:
+            question = {**question, 'status': 'answered', 'answer': {k: answered[k] for k in ('text', 'optionIds') if k in answered}}
+        message['question'] = question
+    message['runStatus'] = 'awaiting_input' if archive.get('runStatus') == 'awaiting_input' or message.get('question') else status
+    return message
+
+
+def clear_finished_run(task, run_id, status, result):
+    if not task or task.get('activeRunId') != run_id:
+        return
+    task['activeRunId'] = None
+    if task.get('status') not in (None, '处理中'):
+        return
+    if pending_question(task):
+        task['status'] = '待你回答'
+    elif status in ('failed', 'cancelled', 'interrupted'):
+        task['status'] = '执行失败' if status == 'failed' else '已暂停'
+    elif result.get('status') in ('本地已受理', '待我核对', '已完成'):
+        task['status'] = result['status']
+    else:
+        review = task.get('type') in ('submission', 'materials', 'audit') or status == 'awaiting_input'
+        task['status'] = '待我核对' if review else '已完成'
 
 
 def migrate_travel_application_fixture(data, seeded_data):
@@ -464,12 +520,24 @@ class Store:
             if not row:
                 return None
             result = dict(row)
+            result.update(run_timing(row['created_at'], row['updated_at'] if row['status'] != 'running' else None))
             result['request'] = json.loads(result['request'])
             return result
 
-    def finish_run(self, run_id, status):
-        with self.lock, self.connect() as db:
-            db.execute('UPDATE runs SET status=?,updated_at=? WHERE id=?', (status, now(), run_id))
+    def finish_run(self, run_id, status, update=None):
+        # The run and its visible reply must publish the same terminal boundary,
+        # including when cancellation races a retry or a process exits mid-write.
+        def finish(state, db):
+            row = db.execute(
+                "UPDATE runs SET status=?,updated_at=? WHERE id=? AND status='running' RETURNING created_at,updated_at",
+                (status, now(), run_id)).fetchone()
+            if row is None:
+                return None
+            timing = run_timing(row['created_at'], row['updated_at'])
+            if update is not None:
+                update(state, timing)
+            return timing
+        return self.mutate_with_db(finish, only_if_changed=True)
 
     def append_event(self, run_id, kind, data):
         with self.lock, self.connect() as db:
@@ -491,34 +559,75 @@ class Store:
                     interrupted.setdefault(task['activeRunId'], task['id'])
             if not interrupted:
                 return
-            changed_steps = []
-            def recover_state(state):
+            def recover_state(state, db):
+                detected = now()
+                messages = {
+                    'interrupted': '服务已重启，上次任务已暂停，可重新发送继续。',
+                    'failed': '上次任务执行失败，已保存的内容仍保留，请重试。',
+                    'cancelled': '任务已暂停，已保存内容仍保留。',
+                }
+                def event(run_id, kind, data):
+                    db.execute('INSERT INTO events(run_id,kind,data,created_at) VALUES(?,?,?,?)',
+                               (run_id, kind, encode(data), detected))
                 for run_id, task_id in interrupted.items():
+                    run = db.execute('SELECT status,created_at,updated_at FROM runs WHERE id=?', (run_id,)).fetchone()
                     task = next((item for item in state['tasks'] if item['id'] == task_id), None)
-                    if task is None:
-                        continue
                     message_id = 'assistant-' + run_id
-                    existing = next((m for m in task.get('messages', []) if m.get('id') == message_id), None)
-                    if existing is None:
-                        existing = {'id': message_id, 'role': 'assistant', 'createdAt': int(time.time()*1000)}
-                        task.setdefault('messages', []).append(existing)
-                    existing['runId'] = run_id
-                    changed_steps.extend((run_id, step) for step in finish_message_steps(existing, 'interrupted'))
-                    if not existing.get('question'):
-                        existing['text'] = '服务已重启，上次任务已暂停，可重新发送继续。'
-                        if any(card.get('kind') == 'submission' for card in existing.get('cards', [])):
-                            existing['submissionPhase'] = 'collecting' if pending_question(task) else 'ready'
-                    if task.get('activeRunId') in {None, run_id}:
-                        task['activeRunId'] = None
-                        task['status'] = '待你回答' if pending_question(task) else '已暂停'
-            self.mutate(recover_state)
-            for run_id in interrupted:
-                self.finish_run(run_id, 'interrupted')
-            for run_id, step in changed_steps:
-                self.append_event(run_id, 'tool', step)
-            for run_id in interrupted:
-                self.append_event(run_id, 'error', {'message': '服务已重启，上次任务已暂停，可重新发送继续。'})
-                self.append_event(run_id, 'done', {})
+                    existing = next((m for m in (task or {}).get('messages', []) if m.get('id') == message_id), None)
+                    saved = (existing or {}).get('runStatus')
+                    result_row = db.execute("SELECT data FROM events WHERE run_id=? AND kind='result' ORDER BY id DESC LIMIT 1",
+                                            (run_id,)).fetchone()
+                    result = json.loads(result_row['data']) if result_row else {}
+                    if run and run['status'] in ('completed', 'awaiting_input') and saved in (None, 'running'):
+                        if task is not None:
+                            existing = restore_result(task, run_id, existing, result, run['status'])
+                            existing.update(run_timing(run['created_at'], run['updated_at']))
+                            if not existing.get('text'):
+                                existing['text'] = '本轮已结束，完整回复未保存。'
+                            saved = existing['runStatus']
+                        clear_finished_run(task, run_id, saved, result)
+                        continue
+                    if saved in ('completed', 'awaiting_input', 'failed', 'cancelled', 'interrupted'):
+                        # Earlier versions wrote the reply and the run in separate transactions.
+                        # A committed reply is final, even if the process stopped between the two.
+                        if run and run['status'] == 'running':
+                            status = 'completed' if saved == 'awaiting_input' else saved
+                            timestamp = existing.get('runFinishedAt')
+                            if timestamp is None and saved in ('completed', 'awaiting_input'):
+                                timestamp = existing.get('createdAt')
+                            start = run_timing(run['created_at'])
+                            # A legacy failure reply's createdAt is the first progress write.
+                            # Empty updated_at marks a terminal row whose end time is unknown.
+                            finish = ''
+                            if type(timestamp) is int and start['runStartedAt'] <= timestamp <= run_timing(detected)['runStartedAt']:
+                                finish = datetime.fromtimestamp(timestamp / 1000, timezone.utc).isoformat()
+                            existing.update(run_timing(run['created_at'], finish))
+                            db.execute('UPDATE runs SET status=?,updated_at=? WHERE id=?', (status, finish, run_id))
+                            if not db.execute("SELECT 1 FROM events WHERE run_id=? AND kind='done'", (run_id,)).fetchone():
+                                event(run_id, 'done', {})
+                        clear_finished_run(task, run_id, saved, result)
+                        continue
+                    status = run['status'] if run and run['status'] in messages else 'interrupted'
+                    finish = run['updated_at'] if run and run['status'] != 'running' else detected
+                    timing = run_timing(run['created_at'] if run else None, finish)
+                    if run and run['status'] == 'running':
+                        db.execute("UPDATE runs SET status='interrupted',updated_at=? WHERE id=?", (finish, run_id))
+                    if task is not None:
+                        if existing is None:
+                            existing = {'id': message_id, 'role': 'assistant',
+                                        'createdAt': timing.get('runFinishedAt') or run_timing(detected)['runStartedAt']}
+                            task.setdefault('messages', []).append(existing)
+                        existing.update(runId=run_id, **timing)
+                        for step in finish_message_steps(existing, status, timing.get('runFinishedAt')):
+                            event(run_id, 'tool', step)
+                        if not existing.get('question'):
+                            existing['text'] = messages[status]
+                            if any(card.get('kind') == 'submission' for card in existing.get('cards', [])):
+                                existing['submissionPhase'] = 'collecting' if pending_question(task) else 'ready'
+                        clear_finished_run(task, run_id, status, result)
+                    event(run_id, 'error', {'message': messages[status], 'runStatus': status, **timing})
+                    event(run_id, 'done', {})
+            self.mutate_with_db(recover_state)
 
     def add_file(self, metadata, storage_name):
         with self.lock, self.connect() as db:

@@ -20,18 +20,10 @@ function render(props: Record<string, unknown>) {
 }
 
 describe('会话内真实执行进度', () => {
-  it('团队执行步骤保留实际使用的技能和来源', () => {
-    const html = render({running: false, steps: [{name: 'search_policies', status:'completed',
-      expertSkill: '制度条款核对', expertConnector: '财务制度库'}]});
-    expect(html).toContain('制度条款核对');
-    expect(html).toContain('财务制度库');
-    expect(html).not.toContain('企查查');
-  });
-
-  it('使用真实业务动作，并且不输出原始工具名、参数和结果', () => {
+  it('短任务使用单个面屏跟随实际动作，保留停止操作且不暴露工具参数', () => {
     const html = render({
       running: true,
-      activity: '正在处理',
+      onStop() {},
       steps: [
         {
           id: 'secret-call-id',
@@ -43,73 +35,203 @@ describe('会话内真实执行进度', () => {
         },
       ],
     });
-    expect(html).toContain('核对费用金额');
-    expect(html).toContain('执行中');
-    expect(html).not.toMatch(
-      /secret-(call-id|input|output)|secret_internal_tool/,
-    );
-    expect(html).toContain('<summary');
-    expect(html).toMatch(/<details[^>]*\sopen/);
-    expect(html).toContain('0/1 项已完成');
-  });
-
-  it('运行中的卡头提供停止操作，已读取的行程显示在记录页脚', () => {
-    const html = render({
-      running: true,
-      onStop() {},
-      steps: [
-        {
-          id: 'one',
-          name: 'get_submission_draft',
-          status: 'completed',
-          durationMs: 800,
-          itinerary: { destination: '南京', transport: '高铁二等座' },
-        },
-        { id: 'two', name: 'validate_submission', status: 'running' },
-      ],
-    });
+    expect(html).toContain('正在核对费用金额');
+    expect(html).toContain('run-progress-face');
     expect(html).toContain('停止办理');
-    expect(html).toContain('1/2 项已完成');
-    expect(html).toContain('0.8 秒');
-    expect(html).toContain('南京');
-    expect(html).toContain('高铁二等座');
+    expect(html).not.toMatch(/secret|<details|执行记录|办理记录/);
     expect(
       render({
         running: false,
         status: 'completed',
         steps: [{ name: 'query_documents', status: 'completed' }],
+        runStartedAt: 1000,
+        runFinishedAt: 4500,
       }),
-    ).not.toContain('停止办理');
+    ).toBe('');
   });
 
-  it('成功终态默认收起，并保留失败后重试的两次真实记录及耗时', () => {
+  it('跨阶段依发生顺序保留范围、真实业务发现、当前动作', () => {
+    const html = render({
+      running: true,
+      steps: [
+        {
+          name: 'get_submission_draft',
+          status: 'completed',
+          finding: '原单已提交。',
+          itinerary: { destination: '南京', transport: '高铁二等座' },
+        },
+        { name: 'validate_submission', status: 'running' },
+      ],
+    });
+    expect(html).toMatch(/<details[^>]* open/);
+    expect(html).toContain('南京');
+    expect(html).toContain('高铁二等座');
+    expect(html.indexOf('原单已提交。')).toBeGreaterThan(html.indexOf('<li'));
+    expect(html.indexOf('原单已提交。')).toBeLessThan(
+      html.lastIndexOf('正在检查单据'),
+    );
+  });
+
+  it('连续成功读取合并，区分失败和重试；总用时采用服务端时间而非工具耗时之和', () => {
+    const read = {
+      name: 'read_uploaded_file',
+      status: 'completed',
+      finding: '已读到住宿票据。',
+      durationMs: 100,
+    };
     const html = render({
       running: false,
       status: 'completed',
+      runStartedAt: 10000,
+      runFinishedAt: 484000,
+      steps: [
+        { ...read, id: '1' },
+        { ...read, id: '2' },
+        { ...read, id: '3', status: 'failed', finding: undefined },
+        { ...read, id: '4', finding: '已读到车票。' },
+      ],
+    });
+    expect(html).toContain('用时 7 分 54 秒');
+    expect(html.match(/<li\b/g)).toHaveLength(3);
+    expect(html.match(/已读到住宿票据。/g)).toHaveLength(1);
+    expect(html).toContain('未成功');
+    expect(html).not.toMatch(/<details[^>]* open|run-progress-face/);
+  });
+
+  it('旧步骤与团队来源可核验，但缺少本轮起止就不声称总用时', () => {
+    const html = render({
+      running: false,
       steps: [
         {
-          id: 'first',
-          name: 'query',
-          label: '查询单据',
-          status: 'failed',
-          durationMs: 1200,
-        },
-        {
-          id: 'retry',
-          name: 'query',
-          label: '查询单据',
+          name: 'search_policies',
           status: 'completed',
-          durationMs: 2400,
+          startedAt: '2026-11-20T05:11:00Z',
+          finishedAt: '2026-11-20T05:11:01Z',
+          expertSkill: '制度条款核对',
+          expertConnector: '财务制度库',
+        },
+        { name: 'internal_unknown', status: 'completed' },
+      ],
+    });
+    expect(html).toContain('制度条款核对');
+    expect(html).toContain('财务制度库');
+    expect(html).not.toMatch(/用时|internal_unknown|T05:/);
+  });
+
+  it('只加载技能再执行一个业务动作仍为短任务，保留仅有的真实来源', () => {
+    const html = render({
+      running: false,
+      status: 'completed',
+      runStartedAt: 1000,
+      runFinishedAt: 3000,
+      steps: [
+        { name: 'get_skill_instructions', status: 'completed' },
+        {
+          name: 'query_documents',
+          status: 'completed',
+          expertConnector: '差旅单据库',
         },
       ],
     });
-    expect(html).toContain('已完成');
-    expect(html).toContain('未成功');
-    expect(html).toContain('1.2 秒');
-    expect(html).toContain('2.4 秒');
-    expect(html.match(/<li\b/g)).toHaveLength(2);
-    expect(html).not.toMatch(/<details[^>]*\sopen/);
+    expect(html).not.toContain('<details');
+    expect(html).toContain('差旅单据库');
   });
+
+  it('长任务等到首个业务动作实际启动后说明范围，未知动作不借用随后动作的范围', () => {
+    const props = { running: true, runStartedAt: Date.now() - 10000 };
+    const preparation = [
+      { name: 'list_available_skills', status: 'completed' },
+      { name: 'get_skill_instructions', status: 'completed' },
+    ];
+    const lookup = { name: 'search_policies', status: 'running' };
+    const scope = '我先查找与这次咨询相关的制度条款。';
+    expect(render({ ...props, steps: preparation })).not.toContain(scope);
+    expect(render({ ...props, steps: [...preparation, lookup] })).toContain(
+      scope,
+    );
+    expect(
+      render({
+        ...props,
+        steps: [
+          ...preparation,
+          { name: 'other_action', status: 'completed' },
+          lookup,
+        ],
+      }),
+    ).not.toContain(scope);
+  });
+
+  it('同一制度查询返回不同命中数时，每条发现归在对应的查询下', () => {
+    const read = { name: 'search_policies', status: 'completed' };
+    const html = render({
+      running: false,
+      status: 'completed',
+      runStartedAt: 1000,
+      runFinishedAt: 16000,
+      steps: [
+        { ...read, finding: '查到 1 份相关制度。' },
+        { ...read, finding: '查到 3 份相关制度。' },
+        { ...read, finding: '查到 3 份相关制度。' },
+      ],
+    });
+    const rows = html.match(/<li\b.*?<\/li>/g) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain('查到 1 份相关制度。');
+    expect(rows[0]).not.toContain('查到 3 份相关制度。');
+    expect(rows[1]).toContain('已查询制度（2 次）');
+    expect(rows[1]).toContain('查到 3 份相关制度。');
+  });
+
+  it('刷新时已完成的工具不会因重播进度文案重新显示为当前动作', () => {
+    const html = render({
+      running: true,
+      phase: 'working',
+      activity: '正在查询制度',
+      steps: [{ name: 'search_policies', status: 'completed' }],
+    });
+    expect(html).toContain('正在处理');
+    expect(html).not.toContain('正在查询制度');
+  });
+
+  it('收起后保留最近尚未恢复的具体操作，已经重试成功的操作不再作为失败原因', () => {
+    const check = { name: 'validate_submission', status: 'failed' };
+    const lookup = { name: 'search_policies', status: 'completed' };
+    function failureSummary(steps: (typeof check)[]) {
+      return render({ running: false, status: 'failed', steps }).match(
+        /<p class="run-progress-state".*?<\/p>/,
+      )?.[0];
+    }
+    expect(failureSummary([check, lookup])).toContain('检查单据未成功');
+    const otherCheck = { ...check, label: '检查补充单据', status: 'completed' };
+    expect(failureSummary([check, otherCheck])).toContain('检查单据未成功');
+    expect(
+      failureSummary([check, lookup, { ...check, status: 'completed' }]),
+    ).not.toContain('检查单据未成功');
+  });
+
+  it.each(['interrupted', 'incomplete'])(
+    '中断发现时间不能作为本轮 %s 的结束时间',
+    (status) => {
+      const html = render({
+        running: false,
+        status,
+        runStartedAt: 1000,
+        runFinishedAt: 9000000,
+        steps: [
+          {
+            name: 'read_expense_summary',
+            status: 'completed',
+            finding: '费用合计 900 元。',
+          },
+          { name: 'query_documents', status: 'failed' },
+        ],
+      });
+      expect(html).toContain('本轮进展');
+      expect(html).toContain('费用合计 900 元。');
+      expect(html).toContain('查询单据未成功');
+      expect(html).not.toContain('用时');
+    },
+  );
 
   it.each([
     ['awaiting_input', '待你回答'],
@@ -117,49 +239,40 @@ describe('会话内真实执行进度', () => {
     ['failed', '未完成'],
     ['interrupted', '未完成'],
     ['cancelled', '已停止'],
-  ])('本轮 %s 不被已成功工具误标为全部完成', (status, expected) => {
+  ])('本轮 %s 的状态可直接读到，面屏退出', (status, expected) => {
     const html = render({
       running: false,
       status,
-      steps: [{ name: 'query', label: '查询单据', status: 'completed' }],
+      steps: [{ name: 'query_documents', status: 'completed' }],
     });
-    expect(html.match(/<summary[\s\S]*?<\/summary>/)?.[0]).toContain(expected);
-    expect(html.match(/<summary[\s\S]*?<\/summary>/)?.[0]).not.toContain(
-      '已完成',
-    );
+    expect(html).toContain(expected);
+    expect(html).not.toContain('run-progress-face');
   });
 
-  it('没有运行终态时，完整工具记录也只作为执行记录展示', () => {
-    const html = render({
-      running: false,
-      steps: [{ name: 'unrecognized_python_function', status: 'completed' }],
-    });
-    expect(html.match(/<summary[\s\S]*?<\/summary>/)?.[0]).toContain(
-      '执行记录',
+  it('等待用户和终态无动效，长耗时的纯文字回复不编造工具步骤', () => {
+    expect(render({ running: true, phase: 'awaiting_input' })).not.toMatch(
+      /run-progress-face|run-progress-glint/,
     );
-    expect(html).not.toContain('unrecognized_python_function');
-  });
-
-  it('无步骤的当前运行呈现实际阶段，结束后不保留空进度块', () => {
     expect(
       render({ running: true, phase: 'responding', activity: '正在整理回复' }),
     ).toContain('正在整理回复');
+    expect(
+      render({
+        running: false,
+        status: 'completed',
+        runStartedAt: 1000,
+        runFinishedAt: 17000,
+      }),
+    ).toContain('用时 16 秒');
+    expect(
+      render({
+        running: false,
+        status: 'completed',
+        runStartedAt: 1000,
+        runFinishedAt: 17000,
+      }),
+    ).not.toMatch(/<details|<li\b/);
     expect(render({ running: false, status: 'completed' })).toBe('');
-  });
-
-  it('思考轨迹与业务动作跟随本轮事件，等用户回答时立即切成静态', () => {
-    const thinking = render({ running: true, phase: 'thinking', activity: '正在分析任务' });
-    expect(thinking).toContain('data-activity="thinking"');
-    expect(thinking).toContain('run-progress-orbit-light');
-    expect(thinking).toContain('run-progress-glint');
-
-    const steps = [{ id: 'read', name: 'read_uploaded_file', status: 'running' }];
-    const working = render({ running: true, phase: 'working', steps });
-    expect(working).toContain('data-activity="reading"');
-    expect(working).not.toContain('run-progress-orbit-light');
-    const waiting = render({ running: true, phase: 'awaiting_input', activity: '待你回答', steps });
-    expect(waiting).toContain('data-activity="waiting"');
-    expect(waiting).not.toMatch(/run-progress-(orbit-light|glint)/);
   });
 
   it('没有正文的真实工具记录仍保留在会话，失败后可主动继续', () => {
@@ -247,26 +360,8 @@ describe('会话内真实执行进度', () => {
       ),
     );
     expect(html.match(/class="run-progress is-running"/g)).toHaveLength(1);
-    expect(html.match(/class="run-progress is-completed"/g)).toHaveLength(1);
+    expect(html).not.toContain('class="run-progress is-completed"');
     expect(html).toContain('分析费用');
     expect(html).not.toContain('正在处理');
-  });
-
-  it('兼容毫秒时间戳与空耗时，不将时间戳作为业务内容显示', () => {
-    const html = render({
-      running: false,
-      status: 'completed',
-      steps: [
-        {
-          name: 'query_documents',
-          status: 'completed',
-          startedAt: 1794880000000,
-          finishedAt: 1794880002500,
-          durationMs: null,
-        },
-      ],
-    });
-    expect(html).toContain('2.5 秒');
-    expect(html).not.toContain('1794880000000');
   });
 });
