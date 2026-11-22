@@ -102,6 +102,9 @@ import {
 } from './AnalyticsSkills';
 import {
   apps,
+  workspaceApps,
+  frequentAppStorageKey,
+  readFrequentApps,
   KnowledgePage,
   KnowledgePanel,
   AppsPanel,
@@ -111,9 +114,6 @@ import {
   RenamePanel,
 } from './Supporting';
 
-const workspaceApps: PageId[] = ['skills', 'light-apps', 'schedules'];
-const frequentApps: PageId[] = ['todos', 'rules', 'analysis'];
-const directoryOnlyApps = apps.filter((app) => !workspaceApps.includes(app.id) && !frequentApps.includes(app.id));
 const uid = () => crypto.randomUUID();
 const initial: WorkspaceState = { data: {}, tasks: [], activeTask: null };
 function BrandWordmark() {
@@ -209,6 +209,7 @@ export default function App() {
       }
     }),
     [mobileOpen, setMobileOpen] = useState(false),
+    [frequentApps, setFrequentApps] = useState(readFrequentApps),
     [notificationsOpen, setNotificationsOpen] = useState(false),
     [notificationRefreshFailed, setNotificationRefreshFailed] = useState(false),
     [toast, setToast] = useState(''),
@@ -419,6 +420,14 @@ export default function App() {
     const resized = () => setViewportWidth(window.innerWidth);
     window.addEventListener('resize', resized);
     return () => window.removeEventListener('resize', resized);
+  }, []);
+  useEffect(() => {
+    const syncFrequentApps = (event: StorageEvent) => {
+      if (event.key === frequentAppStorageKey || event.key === null)
+        setFrequentApps(readFrequentApps());
+    };
+    window.addEventListener('storage', syncFrequentApps);
+    return () => window.removeEventListener('storage', syncFrequentApps);
   }, []);
   useEffect(() => {
     document.title = `财小智 · ${notificationsOpen ? '消息中心' : pageTitles[page]}`;
@@ -1436,7 +1445,18 @@ export default function App() {
       ) : panel.kind === 'knowledge' ? (
         <KnowledgePanel panel={panel} />
       ) : panel.kind === 'apps' ? (
-        <AppsPanel />
+        <AppsPanel
+          frequentApps={frequentApps}
+          onSaveFrequentApps={(ids) => {
+            try {
+              localStorage.setItem(frequentAppStorageKey, JSON.stringify(ids));
+            } catch {
+              return false;
+            }
+            setFrequentApps(ids);
+            return true;
+          }}
+        />
       ) : panel.kind === 'context' ? (
         <ContextPanel />
       ) : panel.kind === 'help' ? (
@@ -1488,6 +1508,10 @@ export default function App() {
       </button>
     );
   }
+  const browsingDirectory = !notificationsOpen && (
+    panel?.kind === 'apps' ||
+    (apps.some((app) => app.id === page) && !workspaceApps.includes(page) && !frequentApps.includes(page))
+  );
   const skillReader = panel?.kind === 'skill' && !panel.data?.toolId;
   const panelHeader = (
     <header className="panel-header">
@@ -1556,7 +1580,7 @@ export default function App() {
                 {frequentApps.map(sidebarApp)}
                 <button
                   type="button"
-                  className={`nav-item sidebar-all-apps ${!notificationsOpen && (panel?.kind === 'apps' || directoryOnlyApps.some((app) => app.id === page)) ? 'active' : ''}`}
+                  className={`nav-item sidebar-all-apps ${browsingDirectory ? 'active' : ''}`}
                   aria-expanded={panel?.kind === 'apps'}
                   onClick={() => {
                     setMobileOpen(false);

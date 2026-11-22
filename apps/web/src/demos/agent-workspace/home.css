@@ -68,11 +68,11 @@
   padding-top: 8px;
 }
 
-@media (max-height: 700px) {
-  .agent-first.mode-assistant .sidebar-scroll {
-    overflow-y: auto;
-  }
+.agent-first.mode-assistant .sidebar-scroll {
+  overflow-y: auto;
+}
 
+@media (max-height: 700px) {
   .agent-first.mode-assistant .recent-navigation {
     flex: none;
   }

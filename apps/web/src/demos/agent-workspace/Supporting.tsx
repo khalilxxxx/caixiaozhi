@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { SkillsGuide } from './SkillsGuide';
 import { catalogArea } from './skills-catalog-model';
 import {
@@ -21,6 +21,24 @@ export const apps: { id: PageId; label: string; icon: string; keywords?: string[
   { id: 'knowledge', label: '制度知识', icon: 'book' },
   { id: 'files', label: '材料与文件', icon: 'folder' },
 ];
+export const workspaceApps: PageId[] = ['skills', 'light-apps', 'schedules'];
+export const frequentAppStorageKey = 'cx.agent.frequent-apps';
+const defaultFrequentApps: PageId[] = ['todos', 'rules', 'analysis'];
+const configurableApps = apps.filter((app) => !workspaceApps.includes(app.id));
+
+export function readFrequentApps(): PageId[] {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(frequentAppStorageKey) ?? 'null');
+    if (Array.isArray(stored)) {
+      const validIds = new Set(configurableApps.map((app) => app.id));
+      return [...new Set(stored.filter((id): id is PageId => validIds.has(id)))];
+    }
+  } catch {
+    // Use the default list when browser storage cannot be read.
+  }
+  return defaultFrequentApps;
+}
+
 export const policies = [
   {
     id: 'travel-policy',
@@ -202,9 +220,69 @@ export function KnowledgePanel({ panel }: { panel: PanelSpec }) {
     </>
   );
 }
-export function AppsPanel() {
+export function AppsPanel({ frequentApps, onSaveFrequentApps }: {
+  frequentApps: PageId[];
+  onSaveFrequentApps: (ids: PageId[]) => boolean;
+}) {
   const w = useWorkspace();
   const [query, setQuery] = useState('');
+  const [selection, setSelection] = useState<PageId[] | null>(null);
+  const [saveError, setSaveError] = useState(false);
+  const configure = useRef<HTMLButtonElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const editing = selection !== null;
+  useLayoutEffect(() => {
+    if (editing) heading.current?.focus();
+  }, [editing]);
+
+  function finishEditing() {
+    setSelection(null);
+    setSaveError(false);
+    requestAnimationFrame(() => configure.current?.focus());
+  }
+
+  if (selection) {
+    const changed = selection.length !== frequentApps.length ||
+      selection.some((id, index) => id !== frequentApps[index]);
+    return (
+      <section className="frequent-app-editor" aria-labelledby="frequent-app-editor-title">
+        <header>
+          <h3 id="frequent-app-editor-title" ref={heading} tabIndex={-1}>配置常用应用</h3>
+          <span>已选 {selection.length} 个</span>
+        </header>
+        <div className="frequent-app-options">
+          {configurableApps.map((app) => (
+            <label key={app.id}>
+              <span className="row-icon"><Icon name={app.icon} size={16} /></span>
+              <span>{app.label}</span>
+              <input
+                type="checkbox"
+                checked={selection.includes(app.id)}
+                onChange={(event) => {
+                  setSaveError(false);
+                  setSelection(event.target.checked
+                    ? [...selection, app.id]
+                    : selection.filter((id) => id !== app.id));
+                }}
+              />
+            </label>
+          ))}
+        </div>
+        {saveError && <p className="frequent-app-error" role="alert">无法保存设置，请重试。</p>}
+        <footer>
+          <Button onClick={finishEditing}>取消</Button>
+          <Button variant="primary" disabled={!changed} onClick={() => {
+            if (!onSaveFrequentApps(selection)) {
+              setSaveError(true);
+              return;
+            }
+            w.notify('常用应用已更新');
+            finishEditing();
+          }}>保存</Button>
+        </footer>
+      </section>
+    );
+  }
   const groups = [
     { label: '业务应用', ids: ['todos', 'submission', 'documents', 'analysis'] },
     { label: '能力与资料', ids: ['rules', 'skills', 'light-apps', 'schedules', 'knowledge', 'files'] },
@@ -213,13 +291,24 @@ export function AppsPanel() {
   const matches = apps.filter((app) => app.label.includes(term) || app.keywords?.some(word => word.includes(term)));
   return (
     <div className="app-directory-panel">
-      <input
-        className="search-field"
-        aria-label="搜索应用"
-        placeholder="搜索应用"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-      />
+      <div className="app-directory-toolbar">
+        <input
+          className="search-field"
+          aria-label="搜索应用"
+          placeholder="搜索应用"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <button
+          type="button"
+          className="btn secondary"
+          ref={configure}
+          onClick={() => setSelection(frequentApps)}
+        >
+          <Icon name="settings" size={15} />
+          配置常用应用
+        </button>
+      </div>
       {groups.map((group) => {
         const items = matches.filter((app) => group.ids.includes(app.id));
         return items.length ? (
@@ -574,7 +663,7 @@ export function HelpPanel({ skillsContext = false, onClose, toolPanel }: { skill
       <section className="help-section">
         <h3>会话与应用</h3>
         <p>
-          在「能力中心」选择会话技能、专家团和连接器，在「轻应用」打开独立应用，在「自动化」管理定时任务。「常用应用」收纳我的工作、规则中心、数据分析和全部工具。从「最近会话」继续处理已有事项。
+          在「能力中心」选择会话技能、专家团和连接器，在「轻应用」打开独立应用，在「自动化」管理定时任务。打开「全部工具」可配置侧栏的常用应用。从「最近会话」继续处理已有事项。
         </p>
       </section>
       <section className="help-section">

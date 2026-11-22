@@ -2922,9 +2922,67 @@ small {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.app-directory-panel > input {
-  width: 100%;
+.app-directory-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 24px;
+}
+.app-directory-toolbar input {
+  width: 100%;
+  min-width: 0;
+}
+.app-directory-toolbar button {
+  white-space: nowrap;
+}
+.frequent-app-editor > header,
+.frequent-app-editor > footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.frequent-app-editor > header {
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.frequent-app-editor > header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.frequent-app-editor > header span {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.frequent-app-options {
+  border-block: 1px solid var(--line);
+}
+.frequent-app-options label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.frequent-app-options label:hover,
+.frequent-app-options label:focus-within {
+  background: var(--enterprise-hover);
+}
+.frequent-app-options input {
+  inline-size: 16px;
+  block-size: 16px;
+  margin-inline-start: auto;
+  accent-color: var(--enterprise-link);
+  cursor: pointer;
+}
+.frequent-app-editor > footer {
+  justify-content: flex-end;
+  padding-top: 16px;
+}
+.frequent-app-error {
+  color: var(--brand);
 }
 .app-directory-group + .app-directory-group {
   margin-top: 26px;
