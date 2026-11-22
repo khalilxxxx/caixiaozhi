@@ -14,6 +14,70 @@ const clients = new Set();
 let snapshot, task, runId, runStatus, history, sequence, submitted;
 const responseTo = () => task.messages.find(message => message.runId === runId);
 
+async function sampleActionText(activity, times, seekAnimations = false) {
+  const label = activity.getByRole('status');
+  const frames = [];
+  const start = performance.now();
+  for (const ms of times) {
+    if (seekAnimations) {
+      await activity.evaluate(async (row, time) => {
+        const animations = row.getAnimations({ subtree: true });
+        for (const animation of animations) animation.pause();
+        await Promise.all(animations.map(animation => animation.ready));
+        for (const animation of animations) animation.currentTime = time;
+      }, ms);
+    } else {
+      // Observe reduced-motion playback without advancing an intentionally paused animation.
+      await new Promise(resolve => setTimeout(resolve, Math.max(0, start + ms - performance.now())));
+    }
+    const png = await label.screenshot();
+    if (process.env.CAPTURE_PROGRESS_GIF === '1')
+      await fs.writeFile(out + '/text-' + times.length + '-' + ms + '.png', png);
+    frames.push(await label.evaluate(async (_, data) => {
+      const image = new Image();
+      image.src = 'data:image/png;base64,' + data;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width; canvas.height = image.height;
+      const context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, image.width, image.height).data;
+      const lightness = [];
+      for (let i = 0; i < pixels.length; i += 4)
+        lightness.push(Math.round(.2126 * pixels[i] + .7152 * pixels[i + 1] + .0722 * pixels[i + 2]));
+      return { width: image.width, lightness };
+    }, png.toString('base64')));
+  }
+  return frames;
+}
+
+function measureTextSweep(frames, reference) {
+  const { width, lightness } = reference;
+  const paper = lightness[0];
+  // The still frame identifies the letters independently of the animation.
+  // Measure changes against each pixel's darkest sample to locate the moving highlight.
+  const darkest = lightness.map((_, i) => Math.min(...frames.map(frame => frame.lightness[i])));
+  const centers = [];
+  let maxGlyphChange = 0, maxPaperChange = 0;
+  for (const frame of frames) {
+    assert.equal(frame.lightness.length, lightness.length);
+    let weightedX = 0, weight = 0, visiblePixels = 0;
+    for (let i = 0; i < lightness.length; i++) {
+      const change = frame.lightness[i] - darkest[i];
+      if (lightness[i] >= paper - 3) maxPaperChange = Math.max(maxPaperChange, change);
+      if (lightness[i] > paper - 45) continue;
+      maxGlyphChange = Math.max(maxGlyphChange, change);
+      if (change < 18) continue;
+      weightedX += (i % width) * change;
+      weight += change;
+      visiblePixels++;
+    }
+    if (visiblePixels >= 8) centers.push(weightedX / weight / width);
+  }
+  const travel = centers.length ? centers.at(-1) - centers[0] : 0;
+  return { maxGlyphChange, maxPaperChange, travel: Number(travel.toFixed(2)), visibleFrames: centers.length };
+}
+
 function reset(elapsedMs = 0) {
   for (const client of clients) client.end();
   clients.clear();
@@ -142,7 +206,10 @@ const url = 'http://127.0.0.1:' + server.address().port + '/agent.html#chat';
 let browser;
 try {
   browser = await chromium.launch({ channel: 'chrome', headless: true });
-  const context = await browser.newContext({ viewport: { width: 1360, height: 900 } });
+  const context = await browser.newContext({
+    viewport: { width: 1360, height: 900 },
+    deviceScaleFactor: process.env.CAPTURE_PROGRESS_GIF === '1' ? 2 : 1,
+  });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -168,6 +235,20 @@ try {
   await expect(activity).toContainText('检索差旅制度');
   await expect(activity.locator('.run-progress-face')).toBeVisible();
   await expect(message.locator('.assistant-name img')).toBeVisible();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const still = await sampleActionText(activity, [0, 400, 1000]);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect.poll(() => activity.getByRole('status').evaluate(el =>
+    el.getAnimations({ subtree: true }).some(animation => animation.playState === 'running')
+  )).toBe(true);
+  const animated = await sampleActionText(activity, Array.from({ length: 11 }, (_, i) => i * 100), true);
+  const sweep = measureTextSweep(animated, still[0]);
+  const reducedSweep = measureTextSweep(still, still[0]);
+  console.log('首秒文字像素', JSON.stringify({ sweep, reducedSweep }));
+  assert.ok(sweep.travel >= .35 && sweep.maxGlyphChange >= 25 && sweep.visibleFrames >= 5,
+    '首秒应在至少 5 帧中看到亮带沿字形向右移动超过三分之一行宽：' + JSON.stringify(sweep));
+  assert.ok(sweep.maxPaperChange <= 4, '亮带应只照亮字形，不改变文字背景');
+  assert.equal(reducedSweep.maxGlyphChange, 0, '减少动态时文字应保持完全静止');
   step('rule', 'search_policies', '检索差旅制度', 'completed', { durationMs: 60 });
   finish('completed', '境内出差可以按二等座标准订票。', { elapsedMs: 1500 });
   await expect(message).toContainText('二等座标准');
@@ -218,13 +299,25 @@ try {
   await page.locator('.composer textarea').fill('还没有发送的补充说明');
   if (process.env.CAPTURE_PROGRESS_GIF === '1') {
     await fs.mkdir(out + '/motion-frames', { recursive: true });
-    for (let frame = 0; frame < 38; frame++) {
+    const faceBox = await activity.locator('.run-progress-face').boundingBox();
+    const labelBox = await activity.getByRole('status').boundingBox();
+    const x = Math.floor(faceBox.x - 8);
+    const y = Math.floor(Math.min(faceBox.y, labelBox.y) - 5);
+    const clip = {
+      x, y,
+      width: Math.ceil(labelBox.x + labelBox.width + 8) - x,
+      height: Math.ceil(Math.max(faceBox.y + faceBox.height, labelBox.y + labelBox.height) + 5) - y,
+    };
+    const period = await activity.getByRole('status').evaluate(el =>
+      Math.max(0, ...el.getAnimations({ subtree: true }).map(a => Number(a.effect.getTiming().duration)))
+    );
+    for (let frame = 0; frame * 50 < (period || 2200); frame++) {
       await activity.evaluate((el, ms) => {
         for (const animation of el.getAnimations({ subtree: true })) {
           animation.pause(); animation.currentTime = ms;
         }
-      }, frame * 100);
-      await activity.screenshot({ path: out + '/motion-frames/frame-' + String(frame).padStart(2, '0') + '.png' });
+      }, frame * 50);
+      await page.screenshot({ clip, path: out + '/motion-frames/frame-' + String(frame).padStart(3, '0') + '.png' });
     }
     await activity.evaluate(el => el.getAnimations({ subtree: true }).forEach(a => a.play()));
   }
@@ -451,6 +544,7 @@ try {
   assert.deepEqual(errors, []);
   const results = [
     '短任务直接呈现结果',
+    '首秒文字光扫逐帧可见且横移，减少动态时字形静止',
     '单项任务超过 8 秒自动展示范围',
     '手动折叠经过工具切换仍保持可键盘展开',
     '动作、发现和当前面屏同屏',
@@ -466,7 +560,7 @@ try {
     '发送失败后仅提示一次，重发原话与引用并保留新草稿',
     '普通发送成功后保留请求途中已暂存的新草稿',
   ];
-  await fs.writeFile(out + '/browser-verification.json', JSON.stringify({ fixture: true, results, errors, status: 'passed' }, null, 2));
+  await fs.writeFile(out + '/browser-verification.json', JSON.stringify({ fixture: true, results, firstSecond: { sweep, reducedSweep }, errors, status: 'passed' }, null, 2));
   console.log(JSON.stringify({ status: 'passed', results }, null, 2));
 } finally {
   for (const client of clients) client.end();

@@ -239,12 +239,9 @@ export function RunProgress({
           <span className="run-progress-action">
             <FaceMark />
             <span className="run-progress-label" role="status">
-              {currentLabel}
-              <span
-                aria-hidden="true"
-                className="run-progress-glint"
-                data-label={currentLabel}
-              />
+              <span key={currentLabel} className="run-progress-glint">
+                {currentLabel}
+              </span>
             </span>
           </span>
           {onStop && (
