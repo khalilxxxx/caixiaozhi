@@ -69,6 +69,18 @@ def test_comparison_has_no_invented_base_and_metric_filter_preserves_totals():
     assert len(query_financials(2025, 'all')['metrics']) == 8
 
 
+def test_minority_profit_amount_and_share_move_in_opposite_directions():
+    from financial_analytics import query_financials
+    query = query_financials(2025)
+    current, previous = query['trend'][2], query['trend'][1]
+    assert current['minorityInterest'] > previous['minorityInterest']
+    assert round(current['minorityProfitShare'], 2) == 8.02
+    assert round(previous['minorityProfitShare'], 2) == 8.86
+    finding = next(item['text'] for item in query['findings'] if item['title'] == '少数股东损益')
+    assert '+6.41%' in finding and '下降 0.83 个百分点' in finding
+    assert not any(item['title'] == '少数股东损益' for item in query_financials(2023)['findings'])
+
+
 def test_sources_preserve_2023_restatement_and_per_metric_pages():
     from financial_analytics import query_financials
     result = query_financials(2024)

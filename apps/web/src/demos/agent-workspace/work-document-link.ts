@@ -1,6 +1,6 @@
 import type { GenericDocument } from '../document-query/document-model';
 
-function sourceUrl(value?: string) {
+export function sourceUrl(value?: string) {
   if (!value) return undefined;
   try {
     const url = new URL(value);
@@ -18,7 +18,7 @@ export function workDocumentHref(doc: { id: string; sourceUrl?: string }) {
 }
 
 export function progressDocumentHref(
-  doc: GenericDocument & { sourceUrl?: string; workDocumentId?: string },
+  doc: GenericDocument & { workDocumentId?: string },
 ) {
   const external = sourceUrl(doc.sourceUrl);
   if (external) return external;

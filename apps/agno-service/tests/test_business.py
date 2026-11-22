@@ -46,6 +46,10 @@ class BusinessTests(unittest.TestCase):
         self.assertEqual(result['totalMinor'], '48600000')
         self.assertEqual(result.get('countLabel'), '汇总记录')
         self.assertEqual(result.get('dataCompleteness', {}).get('missingRecords'), 0)
+        card_id = result['cards'][0]['id']
+        self.assertNotEqual(card_id, self.business.analyze('09')['cards'][0]['id'])
+        self.assertNotEqual(card_id, self.business.analyze('10', '销售')['cards'][0]['id'])
+        self.assertEqual(card_id, self.business.analyze('2026-10')['cards'][0]['id'])
         self.assertEqual(self.business.analyze('09', '销售部')['totalMinor'], '19000000')
         self.assertEqual(self.business.analyze('09', '销售部')['cards'][0]['data'].get('scope'), {'month':'09','dept':'销售','type':None})
         self.store.state['data']['analysisRecords'][0]['amount'] = '0.01'

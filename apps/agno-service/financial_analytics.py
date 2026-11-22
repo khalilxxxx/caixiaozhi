@@ -216,7 +216,8 @@ def _totals(values):
             'grossProfit': (values['revenue'] - values['costOfRevenue']) / 100,
             'otherOperatingNet': (values['operatingIncome'] - (values['revenue'] - total_costs)) / 100,
             'operatingMargin': _percentage(values['operatingIncome'], values['revenue']),
-            'netMargin': _percentage(values['netIncome'], values['revenue'])}
+            'netMargin': _percentage(values['netIncome'], values['revenue']),
+            'minorityProfitShare': _percentage(values['minorityInterest'], values['netIncome'])}
 
 
 def query_financials(year=2025, metric=None):
@@ -256,6 +257,14 @@ def query_financials(year=2025, metric=None):
         profit_change = _percentage(values['netIncome'] - prior['netIncome'], prior['netIncome'])
         revenue_description = '，收入几乎持平' if abs(revenue_change) < 0.1 else ''
         findings.append({'title': '同口径年度比较', 'text': f'营业收入较 {year - 1} 年变动 {revenue_change:+.2f}%{revenue_description}，合并净利润变动 {profit_change:+.2f}%。2023 年比较数采用 2024 年报已重述口径。'})
+        prior_share = _percentage(prior['minorityInterest'], prior['netIncome'])
+        share = totals['minorityProfitShare']
+        growth = _percentage(values['minorityInterest'] - prior['minorityInterest'], prior['minorityInterest'])
+        if prior_share is not None and share is not None:
+            delta = share - prior_share
+            change = '持平' if abs(delta) < 0.005 else f"{'上升' if delta > 0 else '下降'} {abs(delta):.2f} 个百分点"
+            amount = f'金额同比变动 {growth:+.2f}%，' if growth is not None else ''
+            findings.append({'title': '少数股东损益', 'text': f'{amount}占合并净利润的比例由 {year - 1} 年的 {prior_share:.2f}% 变为 {year} 年的 {share:.2f}%，{change}。'})
     else:
         findings.append({'title': '年度比较范围', 'text': '本数据集从 2023 年开始，缺少 2022 年基期，2023 年同比不计算。'})
     result = {

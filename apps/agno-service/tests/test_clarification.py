@@ -103,10 +103,10 @@ def test_multiple_answer_and_plain_text_keep_real_question_context(tmp_path, mon
     other_store = pending_store(tmp_path / 'plain')
     other_store.mutate(lambda state: state['tasks'][0].update(refs=[{'kind': 'submission', 'id': 'travel'}]))
     response = client_for(other_store, monkeypatch).post('/api/local/runs', json={
-        'taskId': 't', 'message': '先帮我查一下制度', 'refs': [{'kind': 'submission', 'id': 'personal'}],
+        'taskId': 't', 'message': '这次是去北京复核费用', 'refs': [{'kind': 'submission', 'id': 'personal'}],
     })
     assert response.status_code == 200
-    assert question_from(other_store)['answer'] == {'optionIds': [], 'text': '先帮我查一下制度'}
+    assert question_from(other_store)['answer'] == {'optionIds': [], 'text': '这次是去北京复核费用'}
     context = other_store.run(response.json()['runId'])['request']['questionContext']
     assert context['mode'] == 'free_text'
     assert [option['label'] for option in context['question']['options']] == ['新建北京申请', '继续上海草稿']
@@ -126,6 +126,17 @@ def test_defer_is_durable_without_model_configuration_or_run(tmp_path, monkeypat
     assert recovered.get_state()['tasks'][0]['messages'][-1]['text'] == '暂不处理'
     with store.connect() as db:
         assert db.execute('SELECT COUNT(*) FROM runs').fetchone()[0] == 0
+
+
+def test_missing_model_preserves_unprocessed_answer(tmp_path, monkeypatch):
+    store = pending_store(tmp_path)
+    client = client_for(store, monkeypatch, configured=False)
+    before = store.snapshot()
+    response = client.post('/api/local/runs', json={
+        'taskId': 't', 'questionAnswer': {'questionId': 'q1', 'text': '改成周三出发'},
+    })
+    assert response.status_code == 503
+    assert store.snapshot() == before
 
 
 def test_changed_draft_expires_question_and_rejects_old_answer(tmp_path, monkeypatch):
@@ -297,7 +308,7 @@ def question_from_runtime(store):
 def test_runtime_passes_question_and_free_answer_to_model_and_failure_keeps_them(tmp_path, monkeypatch):
     import agent_runtime
     store = pending_store(tmp_path)
-    response = client_for(store, monkeypatch).post('/api/local/runs', json={'taskId': 't', 'message': '先查制度'})
+    response = client_for(store, monkeypatch).post('/api/local/runs', json={'taskId': 't', 'message': '这次只想核对原申请'})
     seen = []
 
     class FailingAgent:
@@ -313,7 +324,7 @@ def test_runtime_passes_question_and_free_answer_to_model_and_failure_keeps_them
     runtime = Runtime(store, Business(store))
     asyncio.run(runtime.execute(response.json()['runId']))
     content = '\n'.join(seen)
-    assert '如何办理北京出差？' in content and '新建北京申请' in content and '先查制度' in content
+    assert '如何办理北京出差？' in content and '新建北京申请' in content and '这次只想核对原申请' in content
     assert 'free_text' in content
     assert question_from(store)['status'] == 'answered'
     assert store.get_state()['tasks'][0]['activeRunId'] is None
@@ -458,3 +469,65 @@ def test_question_issue_bounds_and_replaces_previous_pending(tmp_path):
     question = store.mutate(lambda state: clarification_service.issue_question(state, 't', '请补充办理方向', []))
     assert question['options'] == [] and question['status'] == 'pending'
     assert question_from(store)['status'] == 'expired'
+
+
+def test_resume_reopens_only_original_question_without_creating_a_run(tmp_path, monkeypatch):
+    store = pending_store(tmp_path, draft=True)
+    client = client_for(store, monkeypatch, configured=False)
+    original = question_from(store)
+    url = '/api/local/tasks/t/questions/q1/resume'
+    client.post('/api/local/runs', json={'taskId': 't', 'questionAnswer': {'questionId': 'q1', 'deferred': True}}).raise_for_status()
+    assert client.post('/api/local/tasks/other/questions/q1/resume').status_code == 409
+    client.post(url).raise_for_status()
+    assert question_from(Store(store.path)) == original
+    assert client.post(url).status_code == 200
+    assert store.get_state()['tasks'][0]['status'] == '待你回答'
+    assert len(store.get_state()['tasks'][0]['messages']) == 2
+    client.post('/api/local/runs', json={'taskId': 't', 'questionAnswer': {'questionId': 'q1', 'deferred': True}}).raise_for_status()
+    Business(store).update_draft('travel', {'purpose': '已手工修改'})
+    assert client.post(url).status_code == 409
+    assert question_from(store)['status'] != 'pending'
+
+
+def test_policy_side_question_preserves_date_decision(tmp_path, monkeypatch):
+    store = pending_store(tmp_path, draft=True)
+    client = client_for(store, monkeypatch)
+    q = '日期稍后再答，先查一下上海住宿标准'
+    response = client.post('/api/local/runs', json={'taskId': 't', 'questionAnswer': {'questionId': 'q1', 'text': q}})
+    response.raise_for_status()
+    assert question_from(store)['status'] == 'pending'
+    run = store.run(response.json()['runId'])
+    assert run['request']['questionContext']['mode'] == 'policy_lookup'
+    observed = []
+    class PolicyAgent:
+        def __init__(self, **kwargs):
+            observed.extend(getattr(tool, 'entrypoint', tool).__name__ for tool in kwargs['tools'])
+            self.search = kwargs['tools'][0]
+
+        async def arun(self, *args, **kwargs):
+            await self.search('上海住宿标准')
+            yield SimpleNamespace(event='RunContent', content='上海普通员工的住宿标准为每晚600元。')
+
+    import agent_runtime
+    monkeypatch.setattr(agent_runtime, 'model', lambda: object())
+    monkeypatch.setattr(agent_runtime, 'Agent', PolicyAgent)
+    asyncio.run(Runtime(store, Business(store)).execute(run['id']))
+    task = store.get_state()['tasks'][0]
+    assert observed == ['search_policies']
+    assert task['status'] == '待你回答' and question_from(store)['id'] == 'q1'
+    assert task['messages'][-1]['cards'][0]['kind'] == 'knowledge'
+    assert not any(m.get('role') == 'user' and m.get('questionAnswer') for m in task['messages'])
+
+
+
+def test_answer_keeps_question_target_after_composer_draft_changes(tmp_path, monkeypatch):
+    store = pending_store(tmp_path, draft=True)
+    replacement = Business(store).new_draft('travel')['draft']
+    other_ref = {'kind': 'submission', 'id': replacement['id'], 'title': replacement['title']}
+    store.mutate(lambda state: state['tasks'][0].update(refs=[other_ref]))
+    client = client_for(store, monkeypatch)
+    response = client.post('/api/local/runs', json={'taskId': 't', 'questionAnswer': {'questionId': 'q1', 'text': '周三出发'}})
+    response.raise_for_status()
+    run = store.run(response.json()['runId'])
+    assert [r['id'] for r in run['request']['refs']] == ['travel']
+    assert store.get_state()['tasks'][0]['refs'] == [other_ref]

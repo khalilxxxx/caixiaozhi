@@ -58,18 +58,9 @@
   font-weight: 680;
   line-height: 1.2;
 }
-.catalog-heading-text p {
-  margin: 10px 0 0;
-  max-width: 36em;
-  color: #344f61;
-  font-size: 15px;
-  line-height: 1.65;
-  text-wrap: pretty;
-}
 @container (max-width: 620px) {
   .catalog-heading-surface { min-height: 140px; }
   .catalog-heading-text { width: 52%; padding: 16px 5px 16px 16px; }
-  .catalog-heading-text p { font-size: 13px; margin-top: 7px; line-height: 1.5; }
   .catalog-heading-art::before { right: 0; }
   .catalog-heading-art::after {
     width: 49%;

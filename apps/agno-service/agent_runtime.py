@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 import config
 from business import BusinessError
 from board_conversation import BoardConversation, get_board_report, result_sentence
+from work_conversation import expense_option_ids, inbox_reply, local_work_action, progress_reply
 from document_search import DOCUMENT_NUMBER, OTHER_WORK, PROGRESS_QUESTION
 from clarification_service import conversation_content, issue_question, pending_question
 from completion_check import CompletionCheck
@@ -179,11 +180,20 @@ class Runtime:
         selected_codes = {value.rsplit('/', 1)[-1].lower() for value in selected_progress_ids}
         new_scope = bool(re.search(r'全部|所有|另查|另外|另[一张笔]|改查|换成|换一|其他单据|我的单据(?:进展|进度)', question_text)
                          or explicit_codes - selected_codes)
+        answer_context = request.get('questionContext') or {}
+        policy_aside = answer_context.get('mode') == 'policy_lookup'
+        work_action = None if team else local_work_action(question_text, request.get('capability'), answer_context)
+        if work_action:
+            new_scope = True
         cards = []
         trace = []
         text = ''
         task_type = 'assistant'
         last_submission_id = None
+        bound_drafts = {ref['id'] for ref in refs if ref.get('kind') == 'submission'}
+        candidate_draft_id = None
+        original_question = answer_context.get('question') or {}
+        question_date = original_question.get('askedOn')
         question = None
         tool_lock = asyncio.Lock()
         completion = CompletionCheck({} if team else request)
@@ -210,6 +220,8 @@ class Runtime:
 
         def bind_draft(current, card):
             nonlocal expected_composer_refs
+            if card['id'] not in bound_drafts:
+                return
             current_refs = current.get('refs', [])
             if saved_composer and (current_refs != expected_composer_refs or
                                    current.get('capability') != request.get('capability')):
@@ -242,6 +254,31 @@ class Runtime:
                 if draft_card:
                     bind_draft(current, draft_card)
             self.store.mutate(update)
+
+        def belongs_to_another_task(state, draft_id):
+            if draft_id in bound_drafts:
+                return False
+            for other in state['tasks']:
+                if other['id'] == run['task_id']:
+                    continue
+                if any(r.get('kind') == 'submission' and r.get('id') == draft_id for r in other.get('refs', [])):
+                    return True
+                for msg in other.get('messages', []):
+                    if msg.get('question', {}).get('draftId') == draft_id:
+                        return True
+                    if not any(c.get('kind') == 'submission' and c.get('id') == draft_id for c in msg.get('cards', [])):
+                        continue
+                    if any(t.get('status') == 'completed' and t.get('name') in ('new_submission_draft', 'update_submission_draft')
+                           for t in msg.get('tools', [])):
+                        return True
+            return False
+
+        def require_task_draft(draft_id):
+            question_target = original_question.get('draftId')
+            if question_target and draft_id != question_target and draft_id not in bound_drafts:
+                raise BusinessError('UNBOUND_DRAFT', '请使用这次追问对应的草稿，不能将回答写入另一份单据。')
+            if belongs_to_another_task(self.store.get_state(), draft_id):
+                raise BusinessError('UNBOUND_DRAFT', '这份草稿属于另一会话。请为本次事项新建草稿。若要修改原稿，请在原会话或从该原稿继续。')
 
         def start_step(name, label, args=(), kwargs=None):
             with self.store.lock:
@@ -298,6 +335,8 @@ class Runtime:
                         if isinstance(value, str) and value.strip():
                             entry['itinerary'][field] = value.strip()[:80]
             for card in result.get('cards', []):
+                if card.get('kind') == 'submission' and entry['name'] in ('new_submission_draft', 'update_submission_draft', 'link_travel_application'):
+                    bound_drafts.add(card['id'])
                 if card.get('kind') == 'submission':
                     cards[:] = [saved for saved in cards if saved.get('kind') != 'submission'
                                 or saved.get('id') == card.get('id')]
@@ -364,9 +403,35 @@ class Runtime:
                 nonlocal question
                 if team and draft_id:
                     raise ValueError('专家团追问仅针对本轮核对事项。')
-                question = self.store.mutate(lambda state: issue_question(
-                    state, run['task_id'], title, options, description=description,
-                    multiple=multiple, draft_id=draft_id, message_id='assistant-' + run_id, run_id=run_id))
+                if draft_id:
+                    require_task_draft(draft_id)
+                def persist(state):
+                    prompt, choices, detail, many = title, options, description, multiple
+                    candidate = state.get('data', {}).get('submissions', {}).get('drafts', {}).get(candidate_draft_id)
+                    direction = ' '.join([title, *(str(opt.get('label', '')) for opt in options or [] if isinstance(opt, dict))])
+                    locked = (candidate and (candidate.get('type') or candidate['id']) == 'travel'
+                              and candidate.get('status') != 'draft' and not draft_id and not team
+                              and re.search(r'原单|原差旅|旧单|原申请|已有|新建|另建|另起|沿用|改期|修改.{0,8}(日期|行程)', direction))
+                    if locked:
+                        prompt = '原申请已提交，这次如何办理？'
+                        detail = '原申请已锁定，仍可查询办理状态。另一次出差可以新建申请。'
+                        choices = [{'id': 'view_existing', 'label': '查看原单状态'},
+                                   {'id': 'new_application', 'label': '另建一份申请'}]
+                        many = False
+                    issued = issue_question(state, run['task_id'], prompt, choices, description=detail,
+                                            multiple=many, draft_id=draft_id, message_id='assistant-' + run_id, run_id=run_id)
+                    issued['askedOn'] = question_date or datetime.fromtimestamp(
+                        run['runStartedAt'] / 1000, ZoneInfo('Asia/Shanghai')).date().isoformat()
+                    if locked:
+                        issued['sourceDraftId'] = candidate['id']
+                        issued['sourceDraftVersion'] = candidate['version']
+                        receipt = next((r for r in state['data']['submissions'].get('requests', [])
+                                        if r.get('draftId') == candidate['id']), None)
+                        if receipt:
+                            issued['sourceDocumentId'] = receipt.get('businessId')
+                            issued['sourceReceiptId'] = receipt.get('receiptId')
+                    return issued
+                question = self.store.mutate(persist)
                 return {'question': question}
             result = tool_call('ask_user', '等待回答', save, title, options, description, multiple, draft_id)
             if question is not None:
@@ -414,6 +479,10 @@ class Runtime:
                 return summary
             return result
 
+        async def query_work_inbox(scope: Literal['both', 'approvals', 'returned'] = 'both') -> dict:
+            """只读查看我的待办：both 同时查审批与补件，approvals 为等我审批，returned 为我的退回补件。只读取已存在的审查结果。"""
+            return tool_call('query_work_inbox', '读取我的待办', self.business.query_work_inbox, scope)
+
         board = BoardConversation(self.store, run['task_id'], refs, run_id, question_text)
 
         async def query_business_board(focus: Literal['overview', 'ranking', 'travel', 'trend', 'breakdown', 'routeSpend'] = 'overview',
@@ -452,7 +521,7 @@ class Runtime:
             return tool_call('create_expense_report', '生成分析报告', self.business.create_report, month, dept, expense_type)
 
         async def query_public_financials(year: int = 2025, metric: str | None = None) -> dict:
-            """查询巨潮资讯法定披露的海康威视2023/2024/2025年度合并财报真实数据，默认2025年度，金额为人民币元。metric可为空或revenue/costOfRevenue/researchAndDevelopment/sellingGeneralAndAdministrative/operatingIncome/netIncome/attributableNetIncome/operatingCashFlow。netIncome为合并净利润，attributableNetIncome为归母净利润；销售、管理、财务费用等原始项目读取totals。2023采用已重述比较值。返回原值、实际期间、同比、图表及原始年报页码来源。"""
+            """查询巨潮资讯法定披露的海康威视2023/2024/2025年度合并财报真实数据，默认2025年度，金额为人民币元。metric可为空或revenue/costOfRevenue/researchAndDevelopment/sellingGeneralAndAdministrative/operatingIncome/netIncome/attributableNetIncome/operatingCashFlow。netIncome为合并净利润，attributableNetIncome为归母净利润；销售、管理、财务费用等原始项目读取totals。2023采用已重述比较值。解释少数股东损益时使用findings中的金额同比和占合并净利润比例的百分点变化。返回原值、实际期间、同比、图表及原始年报页码来源。"""
             from financial_analytics import query_financials
             return tool_call('query_public_financials', '查询公开财报', query_financials, year, metric)
 
@@ -492,22 +561,39 @@ class Runtime:
 
         async def get_submission_draft(draft_id: str) -> dict:
             """修改前读取当前有效草稿（含未保存修改）、submissionContext及draft.autoFill来源。draft_id使用引用或get/new返回的真实id；首次无引用可用travel差旅申请、expense差旅报销、personal个人费用报销入口。上下文和来源仅供读取。"""
-            return remember_draft(tool_call('get_submission_draft', '读取草稿', self.business.get_draft, draft_id))
+            def read(value):
+                nonlocal candidate_draft_id
+                result = self.business.get_draft(value)
+                draft = result['draft']
+                candidate_draft_id = value
+                if belongs_to_another_task(self.store.get_state(), value) and draft.get('status') == 'draft':
+                    return {'draft': {'id': value, 'type': draft.get('type'), 'status': 'draft'},
+                            'editableInTask': False, 'message': '另一会话已有草稿。本次另办须新建，不能沿用原稿字段。'}
+                return result
+            return remember_draft(tool_call('get_submission_draft', '读取草稿', read, draft_id))
 
         async def update_submission_draft(draft_id: str, patch: dict, manual_fields: list[str] | None = None,
                                           remove_rows: dict[str, list[str]] | None = None) -> dict:
             """保存用户明确变化，不提交。draft_id用get/new返回真实id。legs/expenses/activities只传新增或修改行，已有行写稳定id和变化字段。省略行会保留；用户明确删除时用remove_rows={"legs":["行id"]}；明确调整顺序时按目标顺序列出全部保留行的id。STALE_DRAFT时先读取最新草稿，确认同字段人工修改后再重试。legs支持departureCity/arrivalCity/departureDate/arrivalDate/transport及bool isReturn/isOvernight，日期YYYY-MM-DD。新行缺起点/交通/席别/到达日期时省略交后端默认。用户主动留空或明确确认同默认值时额外传manual_fields=["legs.<稳定id>.transport"]等路径，同时patch写值（文本清空用空字符串），不能标记未修改字段。用户明确返程未定时patch必须含returnDatePending:true，由后端保留或生成一次待补返程，日期不猜；后来明确返程日期只更新原返程id对应日期。明确返程行isReturn=true，返程终点未指定时省略arrivalCity。单程不自动添加返程。过夜isOvernight=true且不猜到达日。已说明目的写purpose。结果含draft.autoFill和submissionContext，仅供读取。报销不得用计划推荐补实际交通或金额。"""
-            return remember_draft(tool_call('update_submission_draft', '更新草稿', self.business.update_agent_draft,
+            def update(value, changes, snapshot, **kwargs):
+                require_task_draft(value)
+                return self.business.update_agent_draft(value, changes, snapshot, **kwargs)
+            return remember_draft(tool_call('update_submission_draft', '更新草稿', update,
                                             draft_id, patch, draft_snapshots.get(draft_id), draft_retry_id=draft_id,
                                             manual_fields=manual_fields, remove_rows=remove_rows))
 
         async def new_submission_draft(draft_id: str) -> dict:
             """用户明确要求新建时，以travel/expense/personal类型或既有草稿ID新建空白独立草稿并保留旧单。必须使用返回draft.id继续读取、更新和校验，不能回到旧类型槽。"""
+            nonlocal candidate_draft_id
+            candidate_draft_id = None
             return remember_draft(tool_call('new_submission_draft', '新建草稿', self.business.new_draft, draft_id))
 
         async def validate_submission(draft_id: str) -> dict:
             """保存已知信息后校验最新草稿，返回draft（含autoFill）、风险、依据和真正待补项。只依此次结果补问，最多3个业务问题，不重复问已默认补齐字段。用户在抽屉确认提交，本工具不提交。"""
-            return await asyncio.to_thread(tool_call, 'validate_submission', '校验草稿', lambda value: self.business.validate_draft(value, cancel_check=check_cancel), draft_id)
+            def validate(value):
+                require_task_draft(value)
+                return self.business.validate_draft(value, cancel_check=check_cancel)
+            return await asyncio.to_thread(tool_call, 'validate_submission', '校验草稿', validate, draft_id)
 
         async def list_reimbursable_travel_applications(query: str = '') -> dict:
             """查询当前员工可用于差旅报销的已审批申请；query为目的地、标题或单号，空值返回可选列表。"""
@@ -517,6 +603,7 @@ class Runtime:
         async def link_travel_application(draft_id: str, application_id: str) -> dict:
             """关联用户已明确选择的完整申请单号。先读取指定差旅报销草稿，再关联并带入可用行程，保留人工填写内容。"""
             def apply(draft_id, application_id):
+                require_task_draft(draft_id)
                 context = request.get('questionContext') or {}
                 selected_question = context.get('question') or {}
                 answer = selected_question.get('answer') or {}
@@ -734,8 +821,11 @@ class Runtime:
                     options = business_options()
                 except BusinessError:
                     options = {'departments': [], 'systems': []}
+                if question_date:
+                    instructions.append('原问题提出时的北京时间日历：' + json.dumps(submission_calendar(datetime.fromisoformat(question_date)), ensure_ascii=False)
+                                        + '。原问题中的“下周”等沿用该日历。回答给出的星期按该原范围解释；用户本轮重新指定“今天”“明天”等相对日期时，以本轮日期为准。')
                 instructions.append('业务看板授权部门、可用业务系统和默认日期范围：' + json.dumps(options, ensure_ascii=False))
-            business_tools = [query_documents, analyze_expenses, create_expense_report, query_business_board,
+            business_tools = [query_documents, query_work_inbox, analyze_expenses, create_expense_report, query_business_board,
                               create_analysis_report, read_business_report,
                                  query_public_financials, create_public_financial_report, read_public_financial_report,
                                  search_policies, get_submission_draft,
@@ -749,14 +839,68 @@ class Runtime:
                 business_tools.extend(skill_tools.tools())
                 if work_doc_ids and not progress_only:
                     business_tools.append(read_work_document)
+            if policy_aside:
+                business_tools = [fn for fn in business_tools if fn.__name__ == 'search_policies']
+                instructions.append('当前能力未提供制度工具时请说明无法查询。用户临时插问制度。只依据search_policies条款回答本轮问题，原追问仍然待答，不能修改草稿或替用户回答。')
             action = request.get('businessBoardAction') if not team else None
             bound_report = None
-            if not team and action is None and board.needs_report_read():
+            if not team and not (work_action or policy_aside) and action is None and board.needs_report_read():
                 bound_report = await read_business_report(board.report_ref['id'])
                 if 'error' in bound_report:
                     raise ValueError(bound_report['error'])
                 instructions.append('本轮引用的业务报告已由read_business_report读取。解释报告时依据已保存的章节、指标和来源；仅在用户明确要求改查范围或该报告缺少所问业务指标时再查询，并区分报告结果与新增查询。范围或指标不明确时请澄清。')
-            if action is not None:
+            if work_action and work_action[0] == 'original':
+                source_id = work_action[1]
+                if source_id:
+                    record = await query_documents(source_id, all_documents=True)
+                    if record.get('error'):
+                        raise ValueError(record['error'])
+                    item = next((item for item in record['items'] if item.get('id') == source_id), None)
+                    text = f"{source_id} 当前状态为{item['sourceStatus']}。" if item else '暂未查到原单的当前办理状态。'
+                else:
+                    text = '原申请已锁定，当前没有可核实的办理回执。'
+                self.emit(run_id, 'delta', {'text': text})
+            elif work_action and work_action[0] == 'inbox':
+                work_scope = work_action[1]
+                result = await query_work_inbox(work_scope)
+                if 'error' in result:
+                    raise ValueError(result['error'])
+                text = inbox_reply(result, work_scope)
+                task_type = 'documents'
+                self.emit(run_id, 'delta', {'text': text})
+            elif work_action:
+                direction, place = work_action
+                subject = f'{place}差旅报销'
+                if direction == 'choose':
+                    lookup_id, create_id = expense_option_ids(place)
+                    await ask_user.entrypoint(f'{subject}，要查看已有单据还是新建报销？', [
+                        {'id': lookup_id, 'label': '查看已有报销单'},
+                        {'id': create_id, 'label': '新建差旅报销单'},
+                    ])
+                elif direction == 'lookup':
+                    text = progress_reply(await query_documents(subject, all_documents=True))
+                else:
+                    result = await new_submission_draft('expense')
+                    if 'error' in result:
+                        raise ValueError(result['error'])
+                    if place:
+                        titled = await update_submission_draft(result['draft']['id'], {'title': subject})
+                        if 'error' in titled:
+                            raise ValueError(titled['error'])
+                    choices = await list_reimbursable_travel_applications(place)
+                    if 'error' in choices:
+                        raise ValueError(choices['error'])
+                    options = [{'id': item['id'], 'label': item['title'] + ' · ' + item['id']}
+                               for item in choices['items'][:6]]
+                    if options:
+                        await ask_user.entrypoint('请选择要关联的差旅申请', options,
+                                                  draft_id=result['draft']['id'])
+                    else:
+                        scope_note = '差旅申请来源暂不可用' if choices['unavailableSources'] else '尚未找到可关联的同路线申请'
+                        text = f'{subject}草稿已新建，{scope_note}。可打开草稿补充行程和费用。'
+                if text:
+                    self.emit(run_id, 'delta', {'text': text})
+            elif action is not None:
                 replies = []
                 if action.get('savedRanking'):
                     result = tool_call('read_business_report', '读取报告中的员工差旅费用排行', board.replay_ranking)
@@ -778,7 +922,7 @@ class Runtime:
                 self.emit(run_id, 'delta', {'text': text})
             else:
                 agent = Agent(id=team.id if team else 'caixiaozhi-local', name=team.name if team else '财小智', model=model(), instructions=instructions,
-                              tools=[*(guarded(fn) for fn in business_tools), ask_user],
+                              tools=[*(guarded(fn) for fn in business_tools), *([] if policy_aside else [ask_user])],
                               tool_call_limit=24, telemetry=False, markdown=True)
                 messages = []
                 # An explicit switch to a different progress query starts from its
@@ -834,7 +978,7 @@ class Runtime:
             if not text.strip():
                 raise RuntimeError('模型没有返回有效结果，请重试。')
             check_cancel()
-            if not team and question is None and not cards:
+            if not team and not (policy_aside or work_action) and question is None and not cards:
                 # A text-only continuation must not strand a draft saved before
                 # a question or provider interruption. Restore only the bound
                 # target, never a type entry point or an older draft.
@@ -883,7 +1027,10 @@ class Runtime:
                 status = '待你回答' if question is not None else ('待我核对' if task_type in {'submission', 'materials', 'audit'} else '已完成')
                 if task_type == 'submission' and any(c.get('status') == '本地已受理' or state['data'].get('submissions', {}).get('drafts', {}).get(c.get('id'), {}).get('status') == 'awaiting_receipt' for c in cards if c.get('kind') == 'submission'):
                     status = '本地已受理'
-                current.update(status=status, type=task_type, activeRunId=None, updated='刚刚')
+                if policy_aside and pending_question(current):
+                    status = '待你回答'
+                current.update(status=status, type=current.get('type', task_type) if policy_aside else task_type,
+                               activeRunId=None, updated='刚刚')
                 if task_type == 'submission' and cards:
                     draft_card = next((c for c in cards if c['kind'] == 'submission' and c.get('id') == last_submission_id), None)
                     if draft_card:

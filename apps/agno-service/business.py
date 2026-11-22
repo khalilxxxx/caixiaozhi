@@ -318,6 +318,67 @@ class Business:
         return {'items': documents, 'count': len(documents), 'unavailableSources': unavailable, 'dataSource': SOURCE,
                 'cards': [card('documents', '单据进展', data=card_data, status=f'{len(documents)}张单据')]}
 
+    def query_work_inbox(self, scope='both'):
+        """Read the signed-in approver queue and the employee's returned documents without running rules."""
+        from work_decisions import WORK_APPROVER
+        if scope not in ('both', 'approvals', 'returned'):
+            raise BusinessError('VALIDATION_ERROR', '待办查询范围无效。')
+        data = self.store.get_state()['data']
+        source_states = data.get('documentSources', {}).get('states', {})
+        unavailable = set()
+        employee = submission_context({})['currentEmployee']
+        approvals, returned, cards = [], [], []
+        counts = {'attention': 0, 'unknown': 0, 'clear': 0}
+        if scope in ('both', 'approvals'):
+            # An unavailable source can have outstanding work even when the cache is empty.
+            approval_sources = {'expense', 'oa'} | {doc['system'] for doc in data.get('auditDocuments', [])}
+            unavailable.update(system for system in approval_sources if source_states.get(system, 'ready') != 'ready')
+            for doc in data.get('auditDocuments', []):
+                if doc.get('stage') != '待审批' or not any(step.get('status') == 'current' and step.get('actor') == WORK_APPROVER
+                                                       for step in doc.get('steps', [])):
+                    continue
+                if doc['system'] in unavailable:
+                    continue
+                review = work_review_summary(doc, data.get('rulesSubmission', {}))
+                if review['risks']:
+                    category = 'attention'
+                    finding = review['risks'][0]
+                    reason = finding.get('detail') or finding['rule']['name']
+                elif review['pending'] or not review['checked']:
+                    category = 'unknown'
+                    reason = review['pending'][0]['rule']['name'] + '待核实' if review['pending'] else '尚无当前版本的有效审查结果'
+                else:
+                    category, reason = 'clear', '已执行的检查未发现异常'
+                counts[category] += 1
+                approvals.append({'id': doc['id'], 'title': doc['title'], 'category': category, 'reason': reason})
+            rank = {'attention': 0, 'unknown': 1, 'clear': 2}
+            approvals.sort(key=lambda item: rank[item['category']])
+            for item in approvals[:2]:
+                cards.append(card('audit', item['title'], item['id'], summary=item['reason']))
+        if scope in ('both', 'returned'):
+            documents, unavailable_personal = search_documents(data, '待我处理的单据')
+            unavailable.update(unavailable_personal)
+            selected = []
+            for doc in documents:
+                names = [f['value'] for f in doc.get('details', []) if f['label'] == '申请人']
+                if not employee:
+                    continue
+                belongs_to_employee = (doc['applicantId'] == employee['id'] if doc.get('applicantId') is not None
+                                       else names == [employee['name']])
+                if not belongs_to_employee:
+                    continue
+                reason = next((f['value'] for f in doc.get('details', []) if f['label'] == '退回原因'), '')
+                if not reason and '退回' not in doc.get('sourceStatus', '') and not any(step.get('status') == 'returned' for step in doc.get('steps', [])):
+                    continue
+                selected.append(doc)
+                returned.append({'id': doc['id'], 'title': doc['title'], 'reason': reason,
+                                 'sourceLabel': doc['source']['label'], 'actors': (doc.get('current') or {}).get('actors', [])})
+            if returned:
+                cards.append(card('documents', '待我补件的单据', data={'items': selected, 'documentIds': [d['key'] for d in selected],
+                                 'unavailableSources': unavailable_personal, 'query': '待我处理的单据'}))
+        return {'approvals': approvals, 'returned': returned, 'reviewCounts': counts, 'unavailableSources': sorted(unavailable),
+                'dataSource': SOURCE, 'approverName': WORK_APPROVER, 'employeeName': (employee or {}).get('name'), 'cards': cards}
+
     def _available_travel_applications(self, data):
         employee = submission_context({})['currentEmployee']
         documents = [doc for doc in data.get('documents', []) if doc.get('typeId') == 'travel_application']
@@ -387,11 +448,12 @@ class Business:
         total = sum(minor(r['amount']) for r in current)
         before = sum(minor(r['amount']) for r in selected('09')) if month == '10' else None
         scope = {'month':month,'dept':dept,'type':type}
+        card_id = f"expense-sample-2026-{month}-{dept}-{type or '全部费用'}"
         groups = lambda field: [{'name':name,'amountMinor':str(sum(minor(r['amount']) for r in current if r[field]==name))} for name in dict.fromkeys(r[field] for r in current)]
         return {'scope':scope,'budgetMinor':'60000000' if month=='10' and dept=='全部部门' and type is None else None,'budgetSource':'本地合成预算；仅提供2026年10月集团全费用口径','items':current,'count':len(current),'countLabel':'汇总记录',
                 'recordMeaning':'每条记录代表2026年某月、某部门、某费用类型的合成汇总金额，不代表一张发票或一笔原始报销。',
                 'dataCompleteness':{'scope':'本地合成统计数据集','status':'complete_within_seed_dataset','missingRecords':0,'zeroAmountGroupsOmitted':True,'identifierIsSequential':False,'explanation':'零金额分组不生成汇总记录；编号不连续不代表缺失单据、发票或资料。本数据不能证明真实企业数据完整性，不能据编号或金额推断业务原因。'},
-                'totalMinor':str(total),'total':total/100,'previousMinor':str(before) if before is not None else None,'deltaMinor':str(total-before) if before is not None else None,'categories':groups('type'),'departments':groups('dept'),'dataSource':SOURCE,'cards':[card('analysis',f'2026年{int(month)}月费用分析',data={'scope':scope},status=f'¥{total/100:,.2f}')]}
+                'totalMinor':str(total),'total':total/100,'previousMinor':str(before) if before is not None else None,'deltaMinor':str(total-before) if before is not None else None,'categories':groups('type'),'departments':groups('dept'),'dataSource':SOURCE,'cards':[card('analysis',f'2026年{int(month)}月费用分析',id=card_id,data={'scope':scope},status=f'¥{total/100:,.2f}')]}
 
     def create_report(self, month='10', dept='全部部门', type=None):
         analysis = self.analyze(month, dept, type)
@@ -788,12 +850,29 @@ class Business:
             return {'draft':current,'submissionContext':submission_context(current),'check':check,'canSubmit':allowed,'dataSource':SOURCE,'cards':[card('submission',current['title'],id,status='待确认提交' if allowed else '需补充或核实',data={'draftId':id,'canSubmit':allowed})]}
         return self.store.mutate(validate)
 
-    def submit_draft(self, id, version, idempotency_key):
+    @staticmethod
+    def _submission_fingerprint(id, version, idempotency_key):
         if not isinstance(idempotency_key,str) or not 1 <= len(idempotency_key) <= 200:
             raise BusinessError('VALIDATION_ERROR','提交需要有效的幂等标识。')
         if isinstance(version,bool) or not isinstance(version,int) or version<1:
             raise BusinessError('VALIDATION_ERROR','草稿版本无效。')
-        fingerprint = hashlib.sha256(canonical({'id':id,'version':version}).encode()).hexdigest()
+        return hashlib.sha256(canonical({'id':id,'version':version}).encode()).hexdigest()
+
+    def lookup_submission(self, id, version, idempotency_key):
+        fingerprint = self._submission_fingerprint(id, version, idempotency_key)
+        data = self.store.get_state()['data']
+        entry = data.get('submissionLedger', {}).get(idempotency_key)
+        if entry is None:
+            draft = data['submissions']['drafts'].get(id)
+            return {'status': 'unrecorded',
+                    'canRetry': bool(draft and draft['version'] == version and draft['status'] == 'draft')}
+        if entry['fingerprint'] != fingerprint:
+            raise BusinessError('IDEMPOTENCY_CONFLICT', '该提交标识已用于另一项操作。')
+        result = entry['result']
+        return {'status': 'accepted', 'receipt': result['receipt'], 'request': result['request']}
+
+    def submit_draft(self, id, version, idempotency_key):
+        fingerprint = self._submission_fingerprint(id, version, idempotency_key)
         snapshot = self.store.get_state()['data']
         if idempotency_key not in snapshot.get('submissionLedger', {}):
             draft = self._draft(snapshot, id)

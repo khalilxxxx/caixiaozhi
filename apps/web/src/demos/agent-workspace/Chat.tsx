@@ -31,6 +31,7 @@ import {
   resumeQuestionMessage,
 } from './question-model';
 import { RunProgress } from './RunProgress';
+import { acceptWorkspace, api, flushWorkspace, readWorkspace, type WorkspaceSnapshot } from './runtime-client';
 
 function taskStatusTone(status: string) {
   if (/失败|未完成|异常/.test(status)) return 'red';
@@ -766,11 +767,28 @@ export function ChatPage({
   const latestCard = last ? visibleMessageCards(last)[0]?.card : undefined;
   const kind = latestCard?.kind;
   const boardRef = task.refs.find(ref => ref.kind === 'business-board');
-  const resumeTask = () => w.send(
-    task.status === '已暂停'
+  const resumeTask = async () => {
+    const question = task.messages.filter((message) => message.question).at(-1)?.question;
+    const lastAnswer = task.messages.filter((message) => message.role === 'user').at(-1)?.questionAnswer;
+    if (task.status === '已暂停' && question?.status === 'deferred' &&
+        lastAnswer?.deferred && lastAnswer.questionId === question.id) {
+      try {
+        await flushWorkspace();
+        const response = await api<{ workspace: WorkspaceSnapshot }>(
+          `/tasks/${encodeURIComponent(task.id)}/questions/${encodeURIComponent(question.id)}/resume`,
+          {},
+        );
+        acceptWorkspace(response.workspace);
+      } catch (error) {
+        w.notify((error as Error).message);
+        await readWorkspace().catch(() => {});
+      }
+      return;
+    }
+    return w.send(task.status === '已暂停'
       ? resumeQuestionMessage(task)
-      : '继续处理当前事项，保留已保存的草稿和成果，先核对当前办理状态，再继续尚未完成的步骤，不要重复提交已提交的单据。',
-  );
+      : '继续处理当前事项，保留已保存的草稿和成果，先核对当前办理状态，再继续尚未完成的步骤，不要重复提交已提交的单据。');
+  };
   const suggestions =
     latestCard?.data?.businessBoard
       ? (latestCard.data.focus === 'ranking' ? ['哪些线路的差旅费用最高？', '生成报告'] : ['谁的差旅费最高？', '生成报告'])

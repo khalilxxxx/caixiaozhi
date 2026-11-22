@@ -1365,7 +1365,7 @@ export default function App() {
     if (!ready) return;
     for (const task of state.tasks) {
       for (const message of task.messages) {
-        if (message.question && message.question.status !== 'pending') {
+        if (message.question && ['answered', 'expired'].includes(message.question.status)) {
           // A locally edited draft can temporarily invalidate the question.
           // Keep its answer until the server confirms the question has ended.
           clearQuestionResponse(task.id, message.question.id);
@@ -1543,6 +1543,7 @@ export default function App() {
     (apps.some((app) => app.id === page) && !workspaceApps.includes(page) && !frequentApps.includes(page))
   );
   const skillReader = panel?.kind === 'skill' && !panel.data?.toolId;
+  const helpInPanelHeader = submissionSurface || panel?.kind === 'document';
   const panelHeader = (
     <header className="panel-header">
       {workDoc ? (
@@ -1563,7 +1564,7 @@ export default function App() {
         </div>
       ) : <h2 id="panel-title">{skillReader ? '技能详情' : panel?.title}</h2>}
       <div>
-        {panel?.kind === 'document' && <ContextHelp />}
+        {helpInPanelHeader && <ContextHelp />}
         <button className="icon-btn" aria-label="关闭详情" onClick={closePanel}>
           <Icon name="close" size={18} />
         </button>
@@ -1894,7 +1895,7 @@ export default function App() {
           )}
           </div>
         </main>
-        {!notificationsOpen && (!panel || inlinePanel) && panel?.kind !== 'document' && !isWorkDossier && (
+        {!notificationsOpen && (!panel || inlinePanel) && !helpInPanelHeader && !isWorkDossier && (
           <ContextHelp
             skillsContext={
               page === 'skills' || page === 'light-apps' ||
@@ -1932,7 +1933,7 @@ export default function App() {
                 {renderedPanel}
               </div>
               {progressFooter}
-              {panel && panel.kind !== 'help' && panel.kind !== 'document' && !isWorkDossier && (
+              {panel && panel.kind !== 'help' && !helpInPanelHeader && !isWorkDossier && (
                 <ContextHelp
                   skillsContext={
                     page === 'skills' || page === 'light-apps' ||
