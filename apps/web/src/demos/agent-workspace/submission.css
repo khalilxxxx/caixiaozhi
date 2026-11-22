@@ -778,31 +778,23 @@
     background 140ms;
 }
 
-.sf-entry:hover {
-  border-color: #cbd2dc;
+.sf-entry:is(:hover, :focus-visible) {
+  border-color: var(--card-hover-border);
   background: var(--enterprise-subtle);
 }
 
 .sf-entry > strong {
   flex: 1;
-  font-weight: 550;
-  font-size: 14px;
+  font-weight: var(--card-title-weight);
+  font-size: var(--card-title-size);
 }
 
-.sf-entry > svg {
+.sf-entry > svg:last-child {
   color: var(--enterprise-icon);
 }
 
-.sf-entry-icon,
-.sf-type-icon {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  flex-shrink: 0;
-  color: var(--enterprise-secondary);
-  background: var(--enterprise-hover);
-  border-radius: 11px;
+.sf-entry:is(:hover, :focus-visible) > svg:last-child {
+  color: var(--enterprise-link);
 }
 
 .sf-toolbar .tabs {
@@ -811,8 +803,8 @@
 
 .sf-toolbar .tabs small {
   margin-left: 5px;
-  font-size: 11px;
-  color: #8c8882;
+  font-size: var(--card-meta-size);
+  color: var(--muted);
 }
 
 .sf-draft-cards {
@@ -844,32 +836,34 @@
   justify-content: space-between;
   flex-wrap: wrap;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--card-body-size);
 }
 
 .sf-card-heading small {
-  font-size: 10px;
-  color: #a09a94;
+  font-size: var(--card-meta-size);
+  color: var(--muted);
 }
 
 .sf-card-heading .badge {
-  font-size: 10px;
+  font-size: var(--card-meta-size);
 }
 
-.sf-card-title {
+.sf-page .sf-card-title {
   border: 0;
   background: transparent;
   padding: 19px 0 13px;
   color: var(--ink);
   text-align: left;
-  font-size: 15px !important;
-  font-weight: 550 !important;
+  font-size: var(--card-title-size);
+  font-weight: var(--card-title-weight);
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
 
-.sf-card-title:hover {
+.sf-card-title:is(:hover, :focus-visible) {
   color: var(--enterprise-link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .sf-card-route {
@@ -877,8 +871,8 @@
   flex-direction: column;
   gap: 7px;
   min-height: 39px;
-  color: #5d5752;
-  font-size: 12px;
+  color: var(--enterprise-text);
+  font-size: var(--card-body-size);
 }
 
 .sf-card-route > span {
@@ -889,7 +883,7 @@
 }
 
 .sf-card-route svg {
-  color: #bc8c7a;
+  color: var(--enterprise-icon);
 }
 
 .sf-card-amount {
@@ -916,8 +910,8 @@
   gap: 7px;
   margin-top: 15px;
   padding-bottom: 19px;
-  color: var(--sf-muted);
-  font-size: 11px;
+  color: var(--muted);
+  font-size: var(--card-meta-size);
   line-height: 1.6;
   font-variant-numeric: tabular-nums;
 }
@@ -931,12 +925,12 @@
 }
 
 .sf-card-footer > small {
-  color: #8b7969;
-  font-size: 10px;
+  color: var(--muted);
+  font-size: var(--card-meta-size);
 }
 
 .sf-card-footer .btn {
-  font-size: 11px;
+  font-size: var(--card-body-size);
   padding: 5px 0 5px 9px;
   white-space: nowrap;
 }
@@ -1523,8 +1517,8 @@
   .sf-sheet-heading .sf-sheet-amount > span {
     font-size: 19px;
   }
-  .sf-type-icon {
-    width: 35px;
+  .sf-sheet-heading .wi-document-icon {
+    width: 33px;
     height: 35px;
   }
   .sf-sheet-heading h3 {

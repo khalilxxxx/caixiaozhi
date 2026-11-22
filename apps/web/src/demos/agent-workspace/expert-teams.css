@@ -1,7 +1,7 @@
 .et-library {
-  --et-line: #dfe4ea;
-  --et-ink: #182639;
-  --et-muted: #526172;
+  --et-line: var(--enterprise-line);
+  --et-ink: var(--enterprise-ink);
+  --et-muted: var(--enterprise-muted);
   color: var(--et-ink);
   container-type: inline-size;
 }
@@ -43,6 +43,10 @@
   color: #566273;
   font-size: 13px;
 }
+.et-filters button:hover:not([aria-pressed='true']) {
+  color: var(--enterprise-ink);
+  background: var(--enterprise-hover-fill);
+}
 .et-filters button[aria-pressed='true'] {
   color: #193956;
   background: white;
@@ -73,7 +77,7 @@
   background: transparent;
 }
 .et-search:focus-within {
-  outline: 2px solid #4175aa;
+  outline: 2px solid var(--enterprise-focus);
   outline-offset: 1px;
 }
 .agent-first .et-search input:focus-visible {
@@ -120,19 +124,20 @@
   font-size: 12px;
 }
 .et-name {
+  min-height: 26px;
   padding: 0;
   border: 0;
   text-align: left;
   background: none;
   color: var(--et-ink);
-  font-size: 18px;
-  font-weight: 650;
+  font-size: var(--card-title-size);
+  font-weight: var(--card-title-weight);
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
 .et-name:hover,
 .et-detail-btn:hover {
-  color: #244f80;
+  color: var(--enterprise-link);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -148,7 +153,8 @@
 }
 .et-summary {
   margin: 0;
-  color: #354758;
+  color: var(--enterprise-text);
+  font-size: var(--card-body-size);
 }
 .et-capabilities {
   display: grid;
@@ -164,11 +170,11 @@
 }
 .et-capabilities dt {
   min-width: 4em;
-  color: #566575;
+  color: var(--enterprise-muted);
 }
 .et-capabilities dd {
   margin: 0;
-  color: #304457;
+  color: var(--enterprise-text);
   overflow-wrap: anywhere;
 }
 .et-card footer {
@@ -179,10 +185,15 @@
 }
 .et-detail-btn {
   border: 0;
-  padding: 6px 0;
+  min-height: 36px;
+  padding: 6px 8px;
+  border-radius: 7px;
   background: transparent;
-  color: #365e8a;
+  color: var(--enterprise-link);
   font-size: 13px;
+}
+.et-detail-btn:hover {
+  background: var(--enterprise-hover);
 }
 .et-connection {
   width: 100%;
@@ -193,14 +204,14 @@
   cursor: pointer;
 }
 .et-connection:hover {
-  border-color: #b8c8d6;
-  background: #fcfdff;
+  border-color: var(--card-hover-border);
+  background: var(--enterprise-subtle);
 }
 .et-connection:focus-visible,
 .et-name:focus-visible,
 .et-detail-btn:focus-visible,
 .et-filters button:focus-visible {
-  outline: 2px solid #4671a3;
+  outline: 2px solid var(--enterprise-focus);
   outline-offset: 2px;
 }
 .et-source-heading {
@@ -216,8 +227,8 @@
 }
 .et-source-identity strong {
   color: var(--et-ink);
-  font-weight: 650;
-  font-size: 16px;
+  font-weight: var(--card-title-weight);
+  font-size: var(--card-title-size);
   overflow-wrap: anywhere;
 }
 .et-source-heading > svg:last-child {
@@ -227,7 +238,8 @@
 }
 .et-source-scope {
   display: block;
-  font-size: 13px;
+  color: var(--enterprise-text);
+  font-size: var(--card-body-size);
 }
 .et-state {
   display: inline-flex;

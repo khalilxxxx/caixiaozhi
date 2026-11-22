@@ -130,8 +130,8 @@ export function KnowledgePage() {
               w.openPanel({ kind: 'knowledge', id: p.id, title: p.title })
             }
           >
-            <span className="row-icon">
-              <Icon name="book" size={19} />
+            <span className="result-icon">
+              <Icon name="book" size={20} />
             </span>
             <span className="knowledge-info">
               <strong>{p.title}</strong>

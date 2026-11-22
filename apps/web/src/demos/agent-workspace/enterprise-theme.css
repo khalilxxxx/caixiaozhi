@@ -24,8 +24,14 @@
   --enterprise-focus: #5278b5;
   --enterprise-link: #315e96;
   --enterprise-selected: #eef3fa;
+  --card-title-size: 14px;
+  --card-title-weight: 600;
+  --card-body-size: 13px;
+  --card-meta-size: 12px;
+  --card-hover-border: #b9c5d3;
   --brand: #d23c33;
-  --brand-hover: #cf392f;
+  --brand-hover: #b8322a;
+  --brand-active: #a32c25;
   --brand-coral: #ff5b4c;
   --brand-icon: #e94e41;
   --brand-focus: #eb6354;
@@ -123,9 +129,6 @@
   color: #fff;
   background: var(--brand);
 }
-.agent-first .btn.primary:hover:not(:disabled) {
-  background: var(--brand-hover);
-}
 .agent-first .btn.primary:disabled,
 .agent-first .send-button:disabled {
   background: var(--enterprise-hover);
@@ -134,15 +137,53 @@
 }
 .agent-first .btn.secondary {
   border-color: var(--enterprise-line);
+  color: var(--enterprise-text);
 }
 .agent-first .btn.ghost,
 .agent-first .icon-btn {
   color: var(--enterprise-text);
 }
-.agent-first .btn.secondary:enabled:hover,
-.agent-first .btn.ghost:enabled:hover,
-.agent-first .icon-btn:enabled:hover {
-  background: var(--enterprise-hover);
+.agent-first .btn.link {
+  color: var(--enterprise-link);
+}
+@media (hover: hover) {
+  .agent-first .btn.primary:not(:disabled):hover {
+    background: var(--brand-hover);
+  }
+  .agent-first .btn.secondary:not(:disabled):hover {
+    background: var(--enterprise-subtle);
+    border-color: var(--card-hover-border);
+  }
+  .agent-first .btn.ghost:not(:disabled):hover,
+  .agent-first .icon-btn:enabled:hover {
+    background: var(--enterprise-hover);
+    color: var(--enterprise-ink);
+  }
+  .agent-first .btn.link:not(:disabled):hover {
+    background: var(--enterprise-selected);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .agent-first .btn.danger:enabled:hover {
+    background: #fbe0e2;
+  }
+  .agent-first a.btn:not(.link):hover {
+    text-decoration: none;
+  }
+}
+.agent-first .btn.primary:not(:disabled):active {
+  background: var(--brand-active);
+}
+.agent-first :is(.btn.secondary, .btn.ghost, .btn.link, .icon-btn):not(:disabled):active {
+  background: var(--enterprise-hover-fill);
+}
+.agent-first .btn.danger:enabled:active {
+  background: #f6cfd3;
+}
+.agent-first .btn:not(.primary):disabled {
+  color: var(--enterprise-muted);
+  background: var(--enterprise-subtle);
+  opacity: .7;
 }
 
 /* A clean white composer and gray text give the action color room to breathe. */
@@ -286,10 +327,23 @@
 .agent-first .history-search {
   border-color: var(--enterprise-line);
 }
-.agent-first .result-card:hover,
-.agent-first .history-row:hover {
+.agent-first :is(.result-card, .history-row, .knowledge-row):focus-visible {
   background: var(--enterprise-subtle);
-  border-color: #cbd2dc;
+}
+@media (hover: hover) {
+  .agent-first :is(.result-card, .history-row, .knowledge-row):enabled:hover {
+    background: var(--enterprise-subtle);
+    border-color: var(--card-hover-border);
+  }
+  .agent-first .result-card:enabled:hover :is(.result-title strong, .result-arrow),
+  .agent-first .history-row:enabled:hover .history-row-title,
+  .agent-first .knowledge-row:enabled:hover strong,
+  .agent-first .knowledge-row:enabled:hover > svg:last-child {
+    color: var(--enterprise-link);
+  }
+}
+.agent-first :is(.result-card, .history-row, .knowledge-row):enabled:active {
+  background: var(--enterprise-hover-fill);
 }
 .agent-first .result-icon,
 .agent-first .ref-chip {
@@ -396,11 +450,6 @@
     box-shadow: inset 0 -2px 0 #aab4c1;
   }
 
-  .agent-first .knowledge-row:enabled:hover {
-    background: var(--enterprise-hover);
-  }
-
-  .agent-first .knowledge-row:enabled:hover :is(strong, svg:last-child),
   .agent-first .dw-document-main:enabled:hover :is(.dw-document-title strong, .dw-card-chevron) {
     color: var(--enterprise-link);
   }
@@ -452,11 +501,14 @@
 .agent-first .as-metrics > div > span,
 .agent-first .as-metrics > div > small,
 .agent-first .as-card-top,
-.agent-first .aw-analysis-card > p,
 .agent-first .as-chart-label,
 .agent-first .as-chart-number,
 .agent-first .as-table {
   color: var(--enterprise-muted);
+}
+.agent-first .aw-analysis-card > p {
+  color: var(--enterprise-text);
+  font-size: var(--card-body-size);
 }
 .agent-first .sh-tags > span {
   background: var(--enterprise-hover);

@@ -3,13 +3,15 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { ChatMessage, ContextRef, ResultCard, Task } from './workspace';
 import { useWorkspace } from './workspace';
 import { Badge, Icon, Button } from './ui';
-import { DocumentResults, materialBatchId } from './Documents';
+import { DocumentResults, findWorkspaceDocument, materialBatchId } from './Documents';
+import { WorkDocumentIcon } from './WorkDocumentIcon';
+import { CatalogMark } from './CatalogMark';
 import { lastBoardScopeLabels } from './business-board-handoff';
 import { BusinessAnalysisCard } from './BusinessAnalysisResults';
 import { AnalysisCard } from './AnalyticsSkills';
 import { PublicFinancialCard } from './PublicFinancials';
 import { currentCard } from './card-model';
-import { withWorkDocumentTitle } from './work-document-model';
+import { findWorkDocument, withWorkDocumentTitle } from './work-document-model';
 import { getAuditSummary } from './RulesSubmission';
 import {
   capabilities,
@@ -589,6 +591,40 @@ export function Composer({
     </div>
   );
 }
+const resultIcons: Readonly<Record<string, string>> = {
+  materials: 'attach',
+  audit: 'shield',
+  rule: 'shield',
+  rules: 'shield',
+  knowledge: 'book',
+};
+
+function ResultMark({ card }: { card: ResultCard }) {
+  const { data } = useWorkspace().state;
+  const { kind, id } = card;
+  const singleAudit = kind === 'audit' && id && id !== 'batch' && id !== 'schedule';
+  if (singleAudit || kind === 'document') {
+    const document = singleAudit
+      ? findWorkDocument(data, id)
+      : id && findWorkspaceDocument(id, data.documents ?? []);
+    return document
+      ? <WorkDocumentIcon doc={document} size="compact" />
+      : <WorkDocumentIcon type="general" size="compact" />;
+  }
+  if (kind === 'skill') {
+    return card.data?.toolId
+      ? <CatalogMark kind="app" id={card.data.toolId} />
+      : <CatalogMark kind="skill" id={id ?? ''} />;
+  }
+  // The expense summary result carries the run's ID, not the catalog asset ID.
+  if (kind === 'tool') return <CatalogMark kind="app" id="expense-summary" />;
+  return (
+    <span className="result-icon">
+      <Icon name={resultIcons[kind] ?? 'file'} size={20} />
+    </span>
+  );
+}
+
 export function Result({
   card,
   latest = true,
@@ -636,21 +672,6 @@ export function Result({
         )}
       </div>
     );
-  const icon =
-    (
-      {
-        materials: 'attach',
-        submission: 'file',
-        audit: 'shield',
-        rule: 'shield',
-        rules: 'shield',
-        report: 'chart',
-        tool: 'chart',
-        skill: 'spark',
-        knowledge: 'book',
-        document: 'file',
-      } as Record<string, string>
-    )[card.kind] ?? 'file';
   return (
     <button
       className="result-card"
@@ -665,9 +686,7 @@ export function Result({
             })
       }
     >
-      <span className="result-icon">
-        <Icon name={icon} size={20} />
-      </span>
+      <ResultMark card={card} />
       <span className="result-text">
         <span className="result-title">
           <strong>{card.title}</strong>

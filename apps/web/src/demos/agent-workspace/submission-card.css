@@ -1,7 +1,7 @@
 .sc-card {
   width: 100%;
   max-width: 620px;
-  border: 1px solid #e2e2e0;
+  border: 1px solid var(--enterprise-line);
   border-radius: 14px;
   background: #fff;
   overflow: hidden;
@@ -12,53 +12,40 @@
   padding-left: 20px;
   padding-right: 20px;
 }
-.submission-open .sc-card > header small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .sc-card > header {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 17px 20px 10px;
 }
-.sc-icon {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  background: var(--enterprise-hover);
-  color: var(--enterprise-secondary);
-  border-radius: 9px;
-  flex: none;
-}
 .sc-card > header > div {
   flex: 1;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 .sc-card > header strong {
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: var(--card-title-weight);
+  font-size: var(--card-title-size);
 }
 .sc-card > header small {
   display: block;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--card-meta-size);
   margin-top: 2px;
 }
 .sc-card > header .badge {
   flex: none;
-  font-size: 10px;
+  max-width: 38%;
+  font-size: var(--card-meta-size);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .sc-purpose {
   margin: 0;
   padding: 0 20px;
-  font-size: 13px;
+  font-size: var(--card-body-size);
   color: var(--enterprise-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .sc-business {
   padding: 16px 20px;
@@ -74,30 +61,34 @@
   display: flex;
   align-items: center;
   gap: 13px;
+  max-width: 100%;
 }
 .sc-route b {
   font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
 }
 .sc-route svg {
   color: var(--enterprise-icon);
+  flex: none;
 }
 .sc-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 5px 12px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--card-meta-size);
   margin-top: 6px;
   font-variant-numeric: tabular-nums;
 }
 .sc-empty {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--card-body-size);
 }
 .sc-expense-summary {
   display: flex;
+  flex-wrap: wrap;
   gap: 18px;
   justify-content: space-between;
   align-items: center;
@@ -107,13 +98,15 @@
   font-weight: 600;
 }
 .sc-expense-summary strong small {
-  font-size: 11px;
+  font-size: var(--card-meta-size);
   color: var(--muted);
   font-weight: 400;
   margin: 0 5px;
 }
 .sc-money {
   text-align: right;
+  margin-inline-start: auto;
+  overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
 .sc-money strong {
@@ -127,7 +120,7 @@
   align-items: center;
   margin: 0 20px 13px;
   color: #98601f;
-  font-size: 11px;
+  font-size: var(--card-meta-size);
 }
 .sc-pending > span {
   min-width: 0;
@@ -143,34 +136,39 @@
 }
 .sc-card > footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   padding: 11px 20px;
-  border-top: 1px solid #eeedeb;
-  background: #fcfcfb;
+  border-top: 1px solid var(--enterprise-line);
+  background: var(--enterprise-subtle);
 }
 .sc-card > footer > div {
   display: flex;
   gap: 6px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.sc-card > footer > :last-child {
+  margin-inline-start: auto;
 }
 .sc-card .btn {
   min-height: 32px;
-  font-size: 12px;
+  font-size: var(--card-body-size);
   padding: 6px 10px;
 }
 .sc-version {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--card-meta-size);
 }
 .sc-history {
   width: 100%;
   max-width: 620px;
-  border: 1px solid #e8e7e4;
+  border: 1px solid var(--enterprise-line);
   border-radius: 10px;
   color: var(--muted);
-  background: #fafaf9;
+  background: white;
 }
 .sc-history > summary {
   display: flex;
@@ -178,27 +176,36 @@
   gap: 8px;
   padding: 12px 14px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--card-body-size);
   list-style: none;
+  border-radius: inherit;
 }
 .sc-history > summary > span {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--ink);
+  overflow-wrap: anywhere;
 }
-.sc-history small {
-  font-size: 10px;
+.sc-history > summary > small {
+  max-width: 42%;
+  font-size: var(--card-meta-size);
+}
+.sc-history[open] > summary > svg:last-child {
+  transform: rotate(90deg);
+}
+@media (hover: hover) {
+  .sc-history > summary:hover {
+    background: var(--enterprise-subtle);
+  }
 }
 .sc-history > summary::-webkit-details-marker {
   display: none;
 }
 .sc-history-content {
   padding: 0 15px 14px;
-  border-top: 1px solid #ecebe8;
+  border-top: 1px solid var(--enterprise-line);
 }
 .sc-history-content > p {
-  font-size: 12px;
+  font-size: var(--card-body-size);
 }
 .sc-history-content .sc-business {
   padding: 5px 0 15px;
@@ -208,11 +215,12 @@
 }
 .sc-history-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   justify-content: flex-end;
 }
 .sc-history-actions .btn {
-  font-size: 11px;
+  font-size: var(--card-meta-size);
   min-height: 30px;
   padding: 5px 9px;
 }
@@ -255,7 +263,6 @@
   }
   .sc-card .btn {
     padding: 6px 8px;
-    font-size: 11px;
   }
   .sc-card > header {
     padding-left: 14px;
@@ -269,9 +276,5 @@
   }
   .sc-route b {
     font-size: 18px;
-  }
-  .sc-card > header .badge {
-    max-width: 115px;
-    white-space: normal;
   }
 }

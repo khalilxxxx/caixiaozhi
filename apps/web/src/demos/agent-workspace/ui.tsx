@@ -219,7 +219,7 @@ export function Button({
   icon,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'link' | 'danger';
   icon?: string;
 }) {
   return (

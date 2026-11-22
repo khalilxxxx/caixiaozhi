@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getToolDetail, useToolCatalog, type ToolDetail, type ToolStatus } from './tool-catalog';
 import { useWorkspace } from './workspace';
 import { Button, Icon } from './ui';
+import { CatalogMark } from './CatalogMark';
 import './tool-center-embed.css';
 
 const statusNames: Record<ToolStatus, string> = {published:'已发布',draft:'草稿',review:'审核中',rejected:'已退回',disabled:'已停用'};
@@ -35,7 +36,10 @@ export function ToolDetailPanel({ id }: { id: string }) {
   if (error) return <div className="tool-detail-state" role="alert">{error}</div>;
   if (!detail) return <div className="tool-detail-state">工具不存在，或当前账号没有查看权限。</div>;
   return <div className="tool-detail">
-    <div className="tool-detail-heading"><span className="tool-detail-icon"><Icon name={detail.icon} size={22}/></span><div><h2>{detail.name}</h2><span>轻应用 · v{detail.version} · {statusNames[detail.status]}</span></div></div>
+    <div className="tool-detail-heading">
+      <CatalogMark kind="app" id={detail.id} />
+      <div><h2>{detail.name}</h2><span>轻应用 · v{detail.version} · {statusNames[detail.status]}</span></div>
+    </div>
     <p className="tool-detail-description">{detail.description}</p>
     <dl className="tool-detail-fields">
       <div><dt>维护者</dt><dd>{detail.owner}</dd></div>

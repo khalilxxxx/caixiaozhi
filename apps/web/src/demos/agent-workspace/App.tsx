@@ -760,9 +760,15 @@ export default function App() {
       location.hash = `light-apps?tool=expense-summary${next.id ? `&result=${encodeURIComponent(next.id)}` : ''}`;
       return;
     }
-    if (!panelRef.current)
-      lastFocus.current = document.activeElement as HTMLElement;
+    const trigger = document.activeElement;
+    if (trigger instanceof HTMLElement && (!panelRef.current || (inlinePanel && !trigger.closest('.inline-detail'))))
+      lastFocus.current = trigger;
     setPanel(next);
+    if (trigger?.matches('button:focus-visible, a:focus-visible')) {
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>('.inline-detail .panel-header h2')?.focus({ preventScroll: true });
+      });
+    }
   }
   function closePanel() {
     const workId = page === 'todos' && panel?.kind === 'audit' ? panel.id : null;
@@ -1561,7 +1567,7 @@ export default function App() {
             <small>{progressDoc.typeLabel} · {progressDoc.id}</small>
           </div>
         </div>
-      ) : <h2 id="panel-title">{skillReader ? '技能详情' : panel?.title}</h2>}
+      ) : <h2 id="panel-title" tabIndex={-1}>{skillReader ? '技能详情' : panel?.title}</h2>}
       <div>
         {panel?.kind === 'document' && <ContextHelp />}
         <button className="icon-btn" aria-label="关闭详情" onClick={closePanel}>

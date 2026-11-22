@@ -82,7 +82,7 @@ export function WorkDocumentSource({
   }, [id, attempt, progressKey, sourceSystem]);
 
   return (
-    <main className="work-source-page">
+    <main className="work-source-page agent-first">
       <header className="work-source-bar">
         <span className="work-source-system">
           <Icon name="file" />

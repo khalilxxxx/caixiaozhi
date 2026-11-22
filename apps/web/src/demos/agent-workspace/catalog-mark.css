@@ -11,3 +11,6 @@
   width: 100%;
   height: 100%;
 }
+.result-card > .catalog-mark {
+  --catalog-mark-size: 36px;
+}

@@ -6,9 +6,8 @@
 .tool-detail-state>.btn{margin:16px 0;display:block}
 .tool-detail{padding:8px 0;font-size:14px;color:#343438}
 .tool-detail-heading{display:flex;gap:14px;align-items:center;margin-bottom:20px}
-.tool-detail-icon{display:grid;place-items:center;width:44px;height:44px;border:1px solid #e5e5e3;border-radius:10px;background:#f7f7f6;flex:none}
 .tool-detail-heading h2{margin:0 0 5px;font-size:20px;line-height:1.4;font-weight:600}
-.tool-detail-heading span:not(.tool-detail-icon){color:#6d6d72;font-size:13px}
+.tool-detail-heading>div>span{color:var(--enterprise-muted);font-size:var(--card-body-size)}
 .tool-detail-description{line-height:1.8;margin:0 0 24px;color:#626267}
 .tool-detail-fields{display:grid;gap:16px;margin:20px 0 26px}
 .tool-detail-fields>div{display:grid;grid-template-columns:80px minmax(0,1fr);gap:14px}

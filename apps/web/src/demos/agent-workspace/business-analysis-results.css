@@ -26,13 +26,14 @@
 }
 .ba-answer-heading h3 {
   margin: 0;
-  font-size: 16px;
-  font-weight: 650;
+  color: var(--enterprise-ink);
+  font-size: var(--card-title-size);
+  font-weight: var(--card-title-weight);
   line-height: 1.5;
 }
 .ba-answer-heading a {
-  color: #315d96;
-  font-size: 12px;
+  color: var(--enterprise-link);
+  font-size: var(--card-meta-size);
   font-weight: 550;
   text-decoration: none;
   display: inline-flex;

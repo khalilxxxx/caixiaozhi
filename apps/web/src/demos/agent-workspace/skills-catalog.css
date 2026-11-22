@@ -85,8 +85,11 @@
   min-height: 36px; padding: 0 10px; font-size: 13px; color: #4e6073;
   border-radius: 7px; border: 1px solid #d8e0e7; background: #fff;
 }
+.skills-catalog .sc-options summary:hover,
+.skills-catalog .sc-options[open] summary { background: var(--enterprise-subtle); }
 .skills-catalog .sc-options summary::-webkit-details-marker { display: none; }
 .skills-catalog .sc-options summary svg { transform: rotate(90deg); }
+.skills-catalog .sc-options[open] summary svg { transform: rotate(-90deg); }
 .skills-catalog .sc-active-dot { width: 6px; height: 6px; border-radius: 50%; background: #35648d; }
 .skills-catalog .sc-options-body {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 6; display: grid; gap: 15px;
@@ -104,7 +107,7 @@
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 286px), 1fr));
   gap: 16px;
 }
-.skills-catalog .sc-card {
+.skills-catalog .sc-catalog-card {
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -120,20 +123,25 @@
   min-width: 0;
 }
 .skills-catalog .sc-card-identity { min-width: 0; flex: 1; }
-.skills-catalog .sc-card-identity small { display: block; margin-top: 3px; color: #5d6b78; font-size: 12px; overflow-wrap: anywhere; }
+.skills-catalog .sc-card-identity small { display: block; margin-top: 3px; color: var(--enterprise-muted); font-size: var(--card-meta-size); overflow-wrap: anywhere; }
 .skills-catalog .sc-card-name {
+  padding: 0;
+  min-height: 26px;
   text-align: left;
   color: var(--ink);
-  font-size: 17px;
+  font-size: var(--card-title-size);
   overflow-wrap: anywhere;
   line-height: 1.5;
-  font-weight: 600;
+  font-weight: var(--card-title-weight);
   flex: 1;
   min-width: 0;
 }
 .skills-catalog .sc-card-name:hover,
-.skills-catalog .sc-table-name:hover {
+.skills-catalog .sc-table-name:hover,
+.skills-catalog .sc-version-link:hover {
   color: var(--enterprise-link);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .skills-catalog .sc-skill-card {
   position: relative;
@@ -145,12 +153,12 @@
   inset: 0;
   z-index: 1;
 }
-.skills-catalog .sc-skill-card :is(.sc-star, .sc-pending, .sc-card-footer .btn) {
+.skills-catalog .sc-skill-card :is(.sc-star, .sc-version-link, .sc-card-footer .btn) {
   position: relative;
   z-index: 2;
 }
 .skills-catalog .sc-skill-card:has(.sc-card-name:hover) {
-  border-color: #9eb5c9;
+  border-color: var(--card-hover-border);
 }
 .skills-catalog .sc-skill-card:has(.sc-card-name:focus-visible) {
   outline: 2px solid var(--enterprise-focus);
@@ -163,10 +171,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   flex: none;
-  color: #909095;
+  color: var(--enterprise-muted);
   border-radius: 6px;
 }
 .skills-catalog .sc-star:hover {
@@ -178,16 +186,16 @@
 .skills-catalog .sc-star[aria-pressed='true'] svg {
   fill: #fff0cb;
 }
-.skills-catalog .sc-description { margin: 15px 0; color: #425469; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.skills-catalog .sc-description { margin: 15px 0; color: var(--enterprise-text); font-size: var(--card-body-size); line-height: 1.7; overflow-wrap: anywhere; }
 .skills-catalog .sc-formats {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
   padding: 9px 11px; margin: auto 0 14px; background: #f2f6f8; border-radius: 7px;
   color: #344d60; font-size: 12px;
 }
 .skills-catalog .sc-formats > span { display: grid; gap: 2px; overflow-wrap: anywhere; }
-.skills-catalog .sc-formats small { color: #5e6f7f; font-size: 11px; }
+.skills-catalog .sc-formats small { color: var(--enterprise-muted); font-size: var(--card-meta-size); }
 .skills-catalog .sc-formats svg { color: #647989; flex: none; }
-.skills-catalog .sc-pending { margin: 0 0 10px; align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; color: #725530; }
+.skills-catalog .sc-version-link { margin: 0 0 10px; align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; color: #725530; }
 .skills-catalog .sc-card-footer {
   margin-top: auto;
   display: flex;
@@ -197,12 +205,12 @@
   padding-top: 8px;
   border-top: 1px solid #ecece8;
 }
-.skills-catalog .sc-card-footer .btn {
-  padding: 7px 0 7px 8px;
+.skills-catalog .sc-card-footer .btn.ghost {
+  padding: 7px 8px;
   min-height: 36px;
   font-size: 13px;
   font-weight: 600;
-  color: #315a81;
+  color: var(--enterprise-link);
   white-space: nowrap;
 }
 .skills-catalog .sc-card-footer .btn span { display: inline-flex; align-items: center; gap: 6px; }
@@ -285,9 +293,6 @@
   border-top: 1px solid #ebebe7;
   vertical-align: middle;
 }
-.skills-catalog .sc-table tbody tr:hover {
-  background: #fbfbfa;
-}
 .skills-catalog .sc-table-name {
   display: block;
   text-align: left;
@@ -298,7 +303,7 @@
 .skills-catalog .sc-table td small {
   display: block;
   font-size: 12px;
-  color: #77777b;
+  color: var(--enterprise-muted);
   margin-top: 5px;
 }
 .skills-catalog .sc-table .btn {
@@ -392,7 +397,7 @@
 .skills-catalog .sc-options select {
     min-width: 112px;
   }
-  .skills-catalog .sc-card {
+  .skills-catalog .sc-catalog-card {
     padding: 18px 18px 10px;
   }
   .skills-catalog .sc-catalog-controls .et-filters button { padding-inline: 9px; }
@@ -450,4 +455,9 @@
 .cap-center-tabs a { color: #526077; text-decoration: none; padding: 8px 16px 10px; border-bottom: 2px solid transparent; font-weight: 550; }
 .cap-center-tabs a[aria-current="page"] { color: #24456a; border-color: #365e8a; }
 .cap-center-tabs a:hover { background: #f2f5f9; }
-.sc-card-footer a.btn { text-decoration: none; }
+.skills-catalog .sc-card-footer a.btn { text-decoration: none; }
+.skills-catalog .sc-card-footer a.btn:hover { background: var(--enterprise-hover); }
+.composer-skill-option { --catalog-mark-size: 30px; }
+.agent-first .composer-skill-option:focus-visible { outline-offset: -2px; }
+.skill-picker-row,
+.sh-governance-list { --catalog-mark-size: 36px; }

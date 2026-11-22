@@ -784,7 +784,7 @@ export function SkillsPage({ area = 'skills' }: { area?: CatalogArea }) {
           {route.view === 'catalog' ? (
             <div className="sc-grid">
               {visibleItems.map((item) => (
-                <article className={item.type === 'skill' ? 'sc-card sc-skill-card' : 'sc-card'} key={item.id}>
+                <article className={item.type === 'skill' ? 'sc-catalog-card sc-skill-card' : 'sc-catalog-card'} key={item.id}>
                   <div className="sc-card-heading">
                     <CatalogMark kind={item.type === 'tool' ? 'app' : 'skill'} id={item.id} />
                     <div className="sc-card-identity">
@@ -814,7 +814,7 @@ export function SkillsPage({ area = 'skills' }: { area?: CatalogArea }) {
                     </div>
                   )}
                   {route.scope === 'mine' && item.canManage && item.status === 'published' && item.latestStatus !== 'published' &&
-                    <button className="sc-pending" onClick={() => manage(item)}>v{item.latestVersion} · {labelForStatus(item.latestStatus)}<Icon name="chevron" size={12} /></button>}
+                    <button className="sc-version-link" onClick={() => manage(item)}>v{item.latestVersion} · {labelForStatus(item.latestStatus)}<Icon name="chevron" size={12} /></button>}
                   <div className="sc-card-footer">
                     {item.status !== 'published' ? <span className={'sc-status sc-status-' + item.status}>{labelForStatus(item.status)}</span> : (
                       <span className={`sc-availability ${item.canUse ? 'available' : ''}`} title={item.unavailableReason}>
@@ -998,7 +998,7 @@ export function ComposerSkillPicker({
                   });
               }}
             >
-              <Icon name={skill.icon} size={17} />
+              <CatalogMark kind="skill" id={skill.id} />
               <span className="composer-skill-info">
                 <strong>{skill.title}</strong>
                 <small>
@@ -1020,7 +1020,7 @@ export function ComposerSkillPicker({
             aria-pressed={true}
             onClick={() => onToggle(ref)}
           >
-            <Icon name="spark" size={17} />
+            <CatalogMark kind="skill" id={ref.id} />
             <span className="composer-skill-info">
               <strong>{ref.title}</strong>
               <small>{ref.version ? `v${ref.version} · ` : ''}已不可用</small>
@@ -1090,9 +1090,7 @@ export function SkillPickerPanel() {
                 });
               }}
             >
-              <span className="sh-skill-icon">
-                <Icon name={skill.icon} size={20} />
-              </span>
+              <CatalogMark kind="skill" id={skill.id} />
               <span className="skill-picker-info">
                 <strong>{skill.title}</strong>
                 <span className="skill-picker-meta">
@@ -1957,9 +1955,7 @@ export function GovernancePanel({ panel }: { panel: PanelSpec }) {
             .filter((s) => s.view && (reviewAccess || s.owner === '我'))
             .map((s) => (
               <button key={s.id} onClick={() => open(s)}>
-                <span className="sh-skill-icon">
-                  <Icon name={s.icon} />
-                </span>
+                <CatalogMark kind="skill" id={s.id} />
                 <span>
                   <strong>{s.title}</strong>
                   <small>

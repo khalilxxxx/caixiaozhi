@@ -187,7 +187,7 @@ function TeamCard({
         <CatalogMark kind="team" id={team.baseTeamId ?? team.id} />
         <div>
           <h3>
-            <button type="button" className="et-name" onClick={onDetail}>
+            <button type="button" className="et-name" aria-haspopup="dialog" onClick={onDetail}>
               {team.name}
             </button>
           </h3>
@@ -208,7 +208,7 @@ function TeamCard({
         )}
       </dl>
       <footer>
-        <button type="button" className="et-detail-btn" onClick={onDetail}>
+        <button type="button" className="et-detail-btn" aria-haspopup="dialog" onClick={onDetail}>
           查看详情
         </button>
         <Button icon="chat" variant="primary" onClick={onSummon}>
@@ -569,6 +569,7 @@ export function ExpertDirectory({
               <button
                 type="button"
                 className="et-connection"
+                aria-haspopup="dialog"
                 onClick={() => setOverlay({ kind: 'connector', connector: c })}
                 aria-label={'查看' + c.name + '详情'}
                 aria-describedby={`et-connection-status-${c.id} et-source-scope-${c.id}`}

@@ -1,5 +1,6 @@
 import type { GenericDocument } from '../document-query/document-model';
 import type { WorkDocument } from './work-document-model';
+import './work-document-icon.css';
 
 const symbols = {
   travel: (
@@ -45,27 +46,40 @@ const progressTypes: Record<string, keyof typeof symbols> = {
 function documentSymbol(
   doc: WorkDocument | GenericDocument,
 ): keyof typeof symbols {
-  if ('typeId' in doc) return progressTypes[doc.typeId] ?? 'general';
-  if (doc.documentType === 'travel' || /差旅申请|出差申请/.test(doc.kind))
-    return 'travel';
-  if (doc.system === 'expense') return 'expense';
-  if (doc.kind.includes('请假')) return 'leave';
-  if (doc.kind.includes('付款')) return 'payment';
-  return 'general';
+  if ('typeId' in doc)
+    return Object.hasOwn(progressTypes, doc.typeId) ? progressTypes[doc.typeId]! : 'general';
+  if (doc.documentType === 'travel') return 'travel';
+  if (doc.documentType === 'expense' || doc.documentType === 'personal') return 'expense';
+  const label = doc.kind ?? '';
+  if (/差旅申请|出差申请/.test(label)) return 'travel';
+  if (label.includes('请假')) return 'leave';
+  if (label.includes('付款')) return 'payment';
+  if (label.includes('合同审批')) return 'contract';
+  if (label.includes('预算调拨')) return 'budget';
+  return doc.system === 'expense' ? 'expense' : 'general';
 }
 
-export function WorkDocumentIcon({
-  doc,
-}: {
-  doc: WorkDocument | GenericDocument;
-}) {
-  const type = documentSymbol(doc);
+const dimensions = {
+  regular: [38, 40],
+  compact: [33, 35],
+  small: [25, 26],
+} as const;
+
+type DocumentIconProps = (
+  | { doc: WorkDocument | GenericDocument }
+  | { type: keyof typeof symbols | 'personal' }
+) & { size?: keyof typeof dimensions };
+
+export function WorkDocumentIcon(props: DocumentIconProps) {
+  const kind = 'doc' in props ? documentSymbol(props.doc) : props.type;
+  const type = kind === 'personal' ? 'expense' : kind;
+  const [width, height] = dimensions[props.size ?? 'regular'];
   return (
     <svg
       className={`wi-document-icon wi-doc-${type}`}
       viewBox="0 0 40 42"
-      width="38"
-      height="40"
+      width={width}
+      height={height}
       aria-hidden="true"
       fill="none"
     >

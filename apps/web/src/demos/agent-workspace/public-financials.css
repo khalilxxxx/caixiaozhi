@@ -286,7 +286,11 @@
   justify-content: space-between;
   flex-wrap: wrap;
   margin-bottom: 18px;
-  font-size: 13px;
+}
+.pf-chat-card > header strong {
+  font-size: var(--card-title-size);
+  font-weight: var(--card-title-weight);
+  color: var(--enterprise-ink);
 }
 .pf-chat-card .pf-metrics {
   padding: 0;

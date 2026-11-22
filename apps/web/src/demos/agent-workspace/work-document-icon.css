@@ -1,0 +1,38 @@
+.wi-document-icon {
+  display: block;
+  flex: none;
+  color: #426d9c;
+  --wi-paper: #eaf2fc;
+  --wi-fold: #c6dbf2;
+  --wi-edge: #99b4d1;
+}
+.wi-doc-expense {
+  color: #42766c;
+  --wi-paper: #e9f4f0;
+  --wi-fold: #c5e1d7;
+  --wi-edge: #95b8ab;
+}
+.wi-doc-leave {
+  color: #746595;
+  --wi-paper: #f2eef8;
+  --wi-fold: #ded5ee;
+  --wi-edge: #b4a8c8;
+}
+.wi-doc-payment {
+  color: #946940;
+  --wi-paper: #faf0e4;
+  --wi-fold: #efdbbe;
+  --wi-edge: #c8ad8f;
+}
+.wi-doc-contract {
+  color: #6b6891;
+  --wi-paper: #f0eff9;
+  --wi-fold: #dcd8ed;
+  --wi-edge: #aaa6cb;
+}
+.wi-doc-budget {
+  color: #447983;
+  --wi-paper: #eaf4f6;
+  --wi-fold: #c4e0e5;
+  --wi-edge: #94bac1;
+}

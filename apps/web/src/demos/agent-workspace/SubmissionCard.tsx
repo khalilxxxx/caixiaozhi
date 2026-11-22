@@ -1,4 +1,5 @@
 import { Badge, Button, Icon } from './ui';
+import { WorkDocumentIcon } from './WorkDocumentIcon';
 import { useWorkspace, type ResultCard } from './workspace';
 import { getSubmissionSummary, submissionLabels } from './SubmissionWorkspace';
 import { resolveDraftId, readSubmissionState } from './submission-state';
@@ -126,14 +127,14 @@ export function SubmissionCard({
     return (
       <section className="sc-card" aria-label="提交回执">
         <header>
-          <span className="sc-icon">
-            <Icon name="check" size={19} />
-          </span>
+          <WorkDocumentIcon type={getDraftType(receiptRequest.snapshot)} size="compact" />
           <div>
             <strong>{receiptRequest.title}</strong>
             <small>{receiptRequest.businessId || receiptRequest.id}</small>
           </div>
-          <Badge tone="success">本地已受理</Badge>
+          <Badge tone={receiptRequest.localStatus ? 'success' : 'warning'}>
+            {receiptRequest.localStatus ? '本地已受理' : '待回执'}
+          </Badge>
         </header>
         <p className="sc-purpose">{receiptRequest.snapshot.purpose}</p>
         <DraftPreview draft={receiptRequest.snapshot} />
@@ -171,7 +172,7 @@ export function SubmissionCard({
     return (
       <details className="sc-history">
         <summary>
-          <Icon name="file" size={15} />
+          <WorkDocumentIcon type={getDraftType(snapshot ?? id)} size="small" />
           <span>{card.title}</span>
           <small>
             {card.data?.version ? `v${card.data.version} · ` : ''}
@@ -190,7 +191,7 @@ export function SubmissionCard({
           )}
           <div className="sc-history-actions">
             <Button disabled>旧方案不可提交</Button>
-            <Button variant="ghost" onClick={() => open()}>
+            <Button variant="link" onClick={() => open()}>
               查看当前单据
             </Button>
           </div>
@@ -204,12 +205,7 @@ export function SubmissionCard({
       aria-label={`${submissionLabels[getDraftType(id)]}草稿卡片`}
     >
       <header>
-        <span className="sc-icon">
-          <Icon
-            name={getDraftType(id) === 'travel' ? 'plane' : 'wallet'}
-            size={19}
-          />
-        </span>
+        <WorkDocumentIcon type={getDraftType(snapshot ?? id)} size="compact" />
         <div>
           <strong>{submissionLabels[getDraftType(id)]}</strong>
           <small>
@@ -217,7 +213,7 @@ export function SubmissionCard({
             {snapshot?.applicant || '申请人待补充'}
           </small>
         </div>
-        <Badge tone={pending || missing ? 'warning' : current.tone}>
+        <Badge tone={current.tone}>
           {current.status}
         </Badge>
       </header>
@@ -247,7 +243,7 @@ export function SubmissionCard({
               : ' · 尚未提交'}
         </span>
         <div>
-          <Button variant="ghost" onClick={() => open()}>
+          <Button variant="link" onClick={() => open()}>
             查看详情
           </Button>
           <Button

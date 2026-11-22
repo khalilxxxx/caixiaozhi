@@ -18,8 +18,15 @@
 .question-pending-link > span {
   overflow-wrap: anywhere;
 }
-.question-pending-link:hover:not(:disabled) {
-  color: var(--enterprise-link);
+@media (hover: hover) {
+  .question-pending-link:enabled:hover > span {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .question-history > summary:hover {
+    color: var(--enterprise-link);
+    background: var(--enterprise-subtle);
+  }
 }
 .question-pending-link:disabled {
   cursor: default;

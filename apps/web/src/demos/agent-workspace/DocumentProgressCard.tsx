@@ -72,7 +72,7 @@ export function DocumentCard({
         }
       >
         <span className="dp-identity">
-          <WorkDocumentIcon doc={doc} />
+          <WorkDocumentIcon doc={doc} size={conversation ? 'compact' : 'regular'} />
           <span className="dp-copy">
             <strong>{doc.title}</strong>
             <small>

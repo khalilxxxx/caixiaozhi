@@ -602,8 +602,8 @@ function PublicReportList() {
             })
           }
         >
-          <span className="as-file-icon">
-            <Icon name="file" size={22} />
+          <span className="result-icon">
+            <Icon name="file" size={20} />
           </span>
           <span>
             <strong>{report.title}</strong>

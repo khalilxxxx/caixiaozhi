@@ -58,7 +58,7 @@ export function ProgressDocumentSource({ recordKey }: { recordKey: string }) {
     record?.details.find((field) => field.label === '数据来源')?.value ||
     (record?.synthetic ? '本地样例' : '');
   return (
-    <main className="work-source-page">
+    <main className="work-source-page agent-first">
       <header className="work-source-bar">
         <span className="work-source-system">
           <Icon name="file" />

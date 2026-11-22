@@ -7,6 +7,7 @@ import {
   type ResultCard,
 } from './workspace.js';
 import { Badge, Button, Empty, Icon, Money, Section } from './ui.js';
+import { WorkDocumentIcon } from './WorkDocumentIcon';
 import {
   INITIAL_RULES_SUBMISSION,
   RULES_SUBMISSION_KEY,
@@ -341,7 +342,11 @@ export function getSubmissionSummary(
     title: draft.title,
     subtitle: `${submissionLabels[getDraftType(id)]}${getDraftType(id) === 'travel' ? '' : ' · ' + amountLabel(draft)} · v${draft.version}`,
     status,
-    tone: status === '待回执' || status === '待完善' ? 'warning' : 'neutral',
+    tone: status === '本地已受理'
+      ? 'success'
+      : status === '待回执' || status === '待完善' || issues.length > 0
+        ? 'warning'
+        : 'neutral',
     data: {
       amountCents:
         getDraftType(id) === 'travel' ? undefined : draftTotal(draft),
@@ -400,9 +405,7 @@ function DraftOverview({
     <div className="sf-overview">
       <section className="sf-overview-sheet">
         <div className="sf-sheet-heading">
-          <span className="sf-type-icon">
-            <Icon name={travel ? 'plane' : 'wallet'} size={20} />
-          </span>
+          <WorkDocumentIcon type={getDraftType(draft)} />
           <div>
             <span>{submissionLabels[getDraftType(draft)]}</span>
             <h3>{draft.title || '未命名单据'}</h3>
@@ -751,18 +754,7 @@ export function SubmissionPage() {
             key={id}
             onClick={() => workspace.openPanel(submissionPanel(id))}
           >
-            <span className="sf-entry-icon">
-              <Icon
-                name={
-                  getDraftType(id) === 'travel'
-                    ? 'plane'
-                    : getDraftType(id) === 'expense'
-                      ? 'wallet'
-                      : 'file'
-                }
-                size={21}
-              />
-            </span>
+            <WorkDocumentIcon type={getDraftType(id)} />
             <strong>{submissionLabels[getDraftType(id)]}</strong>
             <Icon name="arrow" size={17} />
           </button>
@@ -804,10 +796,7 @@ export function SubmissionPage() {
               <article key={id} className="sf-draft-card">
                 <div className="sf-card-heading">
                   <span>
-                    <Icon
-                      name={getDraftType(id) === 'travel' ? 'plane' : 'wallet'}
-                      size={16}
-                    />
+                    <WorkDocumentIcon type={getDraftType(draft)} size="compact" />
                     {submissionLabels[getDraftType(id)]}
                     <small>v{saved.version}</small>
                   </span>
@@ -882,9 +871,7 @@ export function SubmissionPage() {
                 )
               }
             >
-              <span className="rs-item-icon">
-                <Icon name="clock" />
-              </span>
+              <WorkDocumentIcon type={getDraftType(request.snapshot)} size="compact" />
               <span>
                 <strong>{request.title}</strong>
                 <small>
