@@ -114,6 +114,40 @@ describe('输入区追问与普通消息分离', () => {
     expect(html.match(/<textarea\b/g)).toHaveLength(1);
     expect(html).not.toMatch(/type="(?:checkbox|radio)"/);
     expect(html).toContain('输入回答');
+    expect(html).toContain('Enter 发送');
+  });
+
+  it('追问回答支持上传材料并在停止处理期间提供明确反馈', () => {
+    const api = {
+      state: { data: {}, tasks: [{ id: 'task-a', input: '' }], activeTask: 'task-a' },
+    } as WorkspaceAPI;
+    const withUpload = renderToStaticMarkup(
+      createElement(
+        WorkspaceContext.Provider,
+        { value: api },
+        createElement(QuestionComposer, {
+          question,
+          taskId: 'task-a',
+          busy: false,
+          onUpload() {},
+        }),
+      ),
+    );
+    expect(withUpload).toContain('上传文件');
+    const stoppingHtml = renderToStaticMarkup(
+      createElement(
+        WorkspaceContext.Provider,
+        { value: api },
+        createElement(QuestionComposer, {
+          question,
+          taskId: 'task-a',
+          busy: true,
+          stopping: true,
+          onStop() {},
+        }),
+      ),
+    );
+    expect(stoppingHtml).toContain('正在停止');
   });
 });
 

@@ -1,6 +1,7 @@
 export type InlineToken = { kind: 'text' | 'strong' | 'code'; text: string };
 export type MessageBlock =
-  | { kind: 'paragraph' | 'heading' | 'code'; text: string }
+  | { kind: 'paragraph' | 'heading' | 'code' | 'blockquote'; text: string }
+  | { kind: 'hr' }
   | { kind: 'list'; ordered: boolean; items: string[] }
   | { kind: 'table'; header: string[]; rows: string[][] };
 
@@ -34,6 +35,8 @@ const cells = (line: string) =>
     .map((cell) => cell.trim().replace(/\\\|/g, '|'));
 const heading = (line: string) => line.match(/^\s*#{1,6}\s+(.+)$/);
 const fence = (line: string) => /^\s*```/.test(line);
+const quoteLine = (line: string) => line.match(/^\s*>\s?(.*)$/);
+const ruleLine = (line: string) => /^\s*(?:[-*_]\s*){3,}$/.test(line);
 export function parseMessageMarkdown(text: string): MessageBlock[] {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   const blocks: MessageBlock[] = [];
@@ -50,6 +53,8 @@ export function parseMessageMarkdown(text: string): MessageBlock[] {
   const isStart = (index: number) =>
     fence(lines[index]!) ||
     heading(lines[index]!) ||
+    ruleLine(lines[index]!) ||
+    quoteLine(lines[index]!) ||
     listLine(lines[index]!) ||
     isTable(index);
   let index = 0;
@@ -72,6 +77,22 @@ export function parseMessageMarkdown(text: string): MessageBlock[] {
     if (title) {
       blocks.push({ kind: 'heading', text: title[1]! });
       index += 1;
+      continue;
+    }
+    if (ruleLine(line)) {
+      blocks.push({ kind: 'hr' });
+      index += 1;
+      continue;
+    }
+    if (quoteLine(line)) {
+      const quoted: string[] = [];
+      while (index < lines.length) {
+        const match = quoteLine(lines[index]!);
+        if (!match) break;
+        quoted.push(match[1]!);
+        index += 1;
+      }
+      blocks.push({ kind: 'blockquote', text: quoted.join('\n').trim() });
       continue;
     }
     if (isTable(index)) {

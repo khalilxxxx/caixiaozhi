@@ -24,6 +24,7 @@ interface RunProgressProps {
   activity?: string;
   phase?: string;
   onStop?: () => void;
+  stopping?: boolean;
   runStartedAt?: number;
   runFinishedAt?: number;
 }
@@ -35,24 +36,25 @@ function FaceMark() {
       aria-hidden="true"
       width="20"
       height="20"
-      viewBox="0 0 32 32"
+      viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="1.65"
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <path d="M15.8 8.8V5.7a1.2 1.2 0 0 0-1.2-1.2h-3M2.4 17.9h3.3m20.6 0h3.3" />
-      <rect x="5.7" y="9" width="20.6" height="17.2" rx="4.7" />
+      <path d="M4.2 10.1c0-2.3.4-4.6 1.3-6.6 1.8.4 3.6 1.7 5 3.4m3 0c1.4-1.7 3.2-3 5-3.4.9 2 1.3 4.3 1.3 6.6" />
+      <path d="M12 7.4c1.5 0 2.6-.6 4-.6 3.2 0 5.3 2.9 5.3 6.4 0 4.6-3.5 7.2-9.3 7.2s-9.3-2.6-9.3-7.2c0-3.5 2.1-6.4 5.3-6.4 1.4 0 2.5.6 4 .6Z" />
       <g className="run-face-gaze">
-        <g className="run-face-lids">
-          <path d="M11.9 15.1v3.4m8.2-3.4v3.4" strokeWidth="2.4" />
+        <g className="run-face-lids" fill="currentColor" stroke="none">
+          <rect x="8.1" y="11" width="2.2" height="4" rx="1.1" />
+          <rect x="13.7" y="11" width="2.2" height="4" rx="1.1" />
         </g>
       </g>
       <path
         className="run-face-light"
-        d="M9.1 22.6h4.4"
-        strokeWidth="1.5"
+        d="M7.5 17.6h3.6"
+        strokeWidth="1.35"
         opacity="0"
       />
     </svg>
@@ -131,6 +133,7 @@ export function RunProgress({
   activity,
   phase,
   onStop,
+  stopping = false,
   runStartedAt,
   runFinishedAt,
 }: RunProgressProps) {
@@ -148,7 +151,8 @@ export function RunProgress({
     uncertainEnd ? undefined : runFinishedAt,
   );
   const progress = useMotionVisibility(live);
-  const active = steps.filter((step) => step.status === 'running').at(-1);
+  const runningSteps = steps.filter((step) => step.status === 'running');
+  const active = runningSteps.at(-1);
   const items = feedItems(steps, live || state === 'waiting');
   const slow = elapsed !== null && elapsed >= longRunMs;
   const needsContext =
@@ -160,7 +164,13 @@ export function RunProgress({
   const scope = needsContext ? openingScope(steps) : undefined;
   const hasFeed = needsContext && (items.length > 0 || !!scope);
   const showElapsed = elapsed !== null && (slow || (!live && hasFeed));
-  const toggleLabel = showElapsed ? elapsedLabel(elapsed) : '本轮进展';
+  const baseLabel = showElapsed ? elapsedLabel(elapsed) : '本轮进展';
+  const toggleLabel =
+    hasFeed && !live && !blocked && items.length > 0
+      ? showElapsed
+        ? `已完成 ${items.length} 步 · ${baseLabel}`
+        : `本轮进展 · ${items.length} 步`
+      : baseLabel;
   const sources = hasFeed
     ? []
     : [...new Set(steps.map(stepSource).filter(Boolean))];
@@ -171,7 +181,9 @@ export function RunProgress({
   const phaseActivity =
     phase === 'working' && steps.length > 0 ? undefined : activity?.trim();
   const currentLabel = active
-    ? actionText(active)
+    ? runningSteps.length > 1
+      ? `${actionText(active)}（共 ${runningSteps.length} 项并行）`
+      : actionText(active)
     : phaseActivity ||
       (phase === 'responding'
         ? '正在整理回复'
@@ -187,7 +199,7 @@ export function RunProgress({
       {hasFeed ? (
         <details className="run-progress-details" open={live || blocked}>
           <summary className="run-progress-toggle">
-            {toggleLabel}
+            <span>{toggleLabel}</span>
             <Icon name="chevron" size={12} className="run-progress-chevron" />
           </summary>
           {scope && <p className="run-progress-scope">{scope}</p>}
@@ -225,7 +237,7 @@ export function RunProgress({
           )}
         </details>
       ) : showElapsed ? (
-        <span className="run-progress-elapsed">{toggleLabel}</span>
+        <span className="run-progress-elapsed">{baseLabel}</span>
       ) : null}
       {live ? (
         <div
@@ -248,10 +260,11 @@ export function RunProgress({
             <button
               className="run-progress-stop"
               type="button"
+              disabled={stopping}
               onClick={onStop}
             >
               <Icon name="stop" size={12} />
-              停止办理
+              {stopping ? '正在停止…' : '停止办理'}
             </button>
           )}
         </div>

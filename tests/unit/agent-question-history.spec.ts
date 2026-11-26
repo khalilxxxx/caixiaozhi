@@ -47,7 +47,7 @@ describe('消息中的追问记录', () => {
     expect(html).not.toContain('type="radio"');
     expect(html).not.toContain('<form');
   });
-  it('已回答问题仍保留可展开的回答摘要', () => {
+  it('已回答问题仍保留可展开的回答摘要，并同时呈现原问题标题与回答内容', () => {
     const html = render({
       ...question,
       status: 'answered',
@@ -55,6 +55,7 @@ describe('消息中的追问记录', () => {
     });
     expect(html).toContain('<details');
     expect(html).toContain('已回答');
+    expect(html).toContain('哪天从杭州出发？');
     expect(html).toContain('周四出发；返程未定');
     expect(html).not.toContain('转到输入区回答');
   });

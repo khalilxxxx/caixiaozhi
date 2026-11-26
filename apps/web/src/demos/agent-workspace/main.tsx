@@ -1,8 +1,8 @@
 import { createRoot } from 'react-dom/client';
+import './styles.css';
 import App from './App';
 import { WorkDocumentSource } from './WorkDocumentSource';
 import { ProgressDocumentSource } from './ProgressDocumentSource';
-import './styles.css';
 import './enterprise-theme.css';
 import './home.css';
 

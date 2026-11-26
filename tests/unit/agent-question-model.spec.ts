@@ -123,20 +123,22 @@ describe('Agent 结构化追问', () => {
       }),
     ).toBeUndefined();
   });
-  it('暂不处理后继续办理会恢复任务，而不会重新发送暂不处理', () => {
-    const deferred = {
-      ...task,
-      messages: [
-        {
-          ...task.messages[0]!,
-          question: { ...question, status: 'deferred' as const },
-        },
-        { id: 'defer', role: 'user' as const, text: '暂不处理' },
-      ],
-    };
-    expect(resumeQuestionMessage(deferred)).toBe(
-      '继续刚才暂缓的任务，请根据当前信息确认下一步。',
-    );
+  it('稍后回答或旧版暂不处理后继续办理会恢复任务，而不会重复发送暂停文案', () => {
+    for (const deferredText of ['稍后回答', '暂不处理']) {
+      const deferred = {
+        ...task,
+        messages: [
+          {
+            ...task.messages[0]!,
+            question: { ...question, status: 'deferred' as const },
+          },
+          { id: 'defer', role: 'user' as const, text: deferredText },
+        ],
+      };
+      expect(resumeQuestionMessage(deferred)).toBe(
+        '继续刚才暂缓的任务，请根据当前信息确认下一步。',
+      );
+    }
     expect(
       resumeQuestionMessage({
         ...task,
@@ -230,7 +232,7 @@ describe('Agent 结构化追问', () => {
       ).message,
     ).toBe('新建北京差旅申请、修改现有上海申请');
   });
-  it('暂不处理不混入未提交的选项或说明', () => {
+  it('稍后回答不混入未提交的选项或说明', () => {
     expect(
       prepareQuestionAnswer(
         task,
@@ -243,7 +245,7 @@ describe('Agent 结构化追问', () => {
         data,
       ),
     ).toEqual({
-      message: '暂不处理',
+      message: '稍后回答',
       answer: {
         questionId: question.id,
         optionIds: [],

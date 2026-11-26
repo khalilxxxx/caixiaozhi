@@ -123,7 +123,7 @@ def test_defer_is_durable_without_model_configuration_or_run(tmp_path, monkeypat
     assert response.json()['workspace']['state']['tasks'][0]['status'] == '已暂停'
     recovered = Store(store.path)
     assert question_from(recovered)['status'] == 'deferred'
-    assert recovered.get_state()['tasks'][0]['messages'][-1]['text'] == '暂不处理'
+    assert recovered.get_state()['tasks'][0]['messages'][-1]['text'] == '稍后回答'
     with store.connect() as db:
         assert db.execute('SELECT COUNT(*) FROM runs').fetchone()[0] == 0
 

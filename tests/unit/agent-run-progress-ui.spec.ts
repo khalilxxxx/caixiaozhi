@@ -364,4 +364,77 @@ describe('会话内真实执行进度', () => {
     expect(html).toContain('分析费用');
     expect(html).not.toContain('正在处理');
   });
+
+  it('并行执行多项工具时提示并行数，点击停止时反馈正在停止', () => {
+    const html = renderToStaticMarkup(
+      createElement(RunProgress, {
+        running: true,
+        stopping: true,
+        onStop() {},
+        steps: [
+          { name: 'query_documents', status: 'running' },
+          { name: 'search_policy', status: 'running' },
+        ],
+      }),
+    );
+    expect(html).toContain('共 2 项并行');
+    expect(html).toContain('正在停止');
+    expect(html).toContain('run-progress-face');
+  });
+
+  it('消息保留用户引用回显、离线重连提示及完成步数摘要', () => {
+    const task: Task = {
+      id: 'task-refs',
+      title: '核对合同',
+      type: 'chat',
+      status: '已完成',
+      input: '',
+      refs: [],
+      updated: '',
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          text: '请核对这份发票',
+          refs: [{ kind: 'file', id: 'f1', title: '上海住宿发票.pdf' }],
+          createdAt: Date.now(),
+        },
+        {
+          id: 'a1',
+          role: 'assistant',
+          text: '已完成核对。',
+          runStatus: 'completed',
+          runStartedAt: 1_790_000_000_000,
+          runFinishedAt: 1_790_000_018_000,
+          tools: [
+            { name: 'query_documents', status: 'completed' },
+            { name: 'search_policy', status: 'completed' },
+          ],
+          createdAt: Date.now(),
+        },
+      ],
+    };
+    const api = {
+      state: { data: {}, tasks: [task], activeTask: task.id },
+    } as WorkspaceAPI;
+    const html = renderToStaticMarkup(
+      createElement(
+        WorkspaceContext.Provider,
+        { value: api },
+        createElement(ChatPage, {
+          task,
+          busy: false,
+          composer: null,
+          runtimeStatus: { state: 'offline', message: '本地服务已断开' },
+          onReconnect() {},
+          onRename() {},
+        }),
+      ),
+    );
+    expect(html).toContain('上海住宿发票.pdf');
+    expect(html).toContain('本地服务已断开');
+    expect(html).toContain('重新连接');
+    expect(html).toContain('已完成 2 步');
+    expect(html).toContain('用时 18 秒');
+  });
 });

@@ -235,6 +235,16 @@ export default function App() {
       () => homeDraft().expertTeamName ?? null,
     ),
     [busyIds, setBusyIds] = useState<string[]>([]),
+    [stoppingIds, setStoppingIds] = useState<string[]>([]),
+    [uploading, setUploading] = useState(false),
+    [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+      try {
+        return localStorage.getItem('cx.sidebar.collapsed') === '1';
+      } catch {
+        return false;
+      }
+    }),
+    [inlineSidebarOverride, setInlineSidebarOverride] = useState(false),
     [compact, setCompact] = useState(
       () => localStorage.getItem('cx.compact') === '1',
     ),
@@ -308,6 +318,28 @@ export default function App() {
         'skill',
       ].includes(panel.kind) &&
       viewportWidth >= (submissionSurface ? 1280 : 1100);
+  const autoSidebarCollapsed = Boolean(
+    inlinePanel && viewportWidth < 1440 && viewportWidth > 640,
+  );
+  const effectiveSidebarCollapsed =
+    viewportWidth > 640 &&
+    (autoSidebarCollapsed ? !inlineSidebarOverride : sidebarCollapsed);
+  useEffect(() => {
+    if (!inlinePanel) setInlineSidebarOverride(false);
+  }, [inlinePanel]);
+  function toggleSidebar() {
+    if (autoSidebarCollapsed) {
+      setInlineSidebarOverride((prev) => !prev);
+      return;
+    }
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('cx.sidebar.collapsed', next ? '1' : '0');
+      } catch {}
+      return next;
+    });
+  }
   const attention = selectHomeTasks(state.tasks).attention;
   const attentionCount = attention.length;
   const conversations = recentConversations(state.tasks);
@@ -912,7 +944,7 @@ export default function App() {
     }
     const question = pendingQuestion(task);
     if (question && questionState(question, stateRef.current.data) === 'pending') {
-      notify('请先回答当前问题，或选择“暂不处理”后再切换。');
+      notify('请先回答当前问题，或选择“稍后回答”后再切换。');
       return true;
     }
     return false;
@@ -1073,6 +1105,9 @@ export default function App() {
           : explicitRefs?.some((ref) => ref.kind === 'submission')
             ? 'submission'
             : task.capability;
+    const messageRefs = refs
+      .filter((ref) => ref.kind !== 'submission')
+      .map((ref) => ({ ...ref }));
     updateTask(id, (current) => ({
       ...current,
       title: ['新任务', '新会话'].includes(current.title)
@@ -1089,7 +1124,13 @@ export default function App() {
           ? current.messages
           : [
               ...current.messages,
-              { id: uid(), role: 'user', text, createdAt: Date.now() },
+              {
+                id: uid(),
+                role: 'user',
+                text,
+                ...(messageRefs.length ? { refs: messageRefs } : {}),
+                createdAt: Date.now(),
+              },
             ],
     }));
     if (useHomeDraft) clearHomeDraft();
@@ -1240,17 +1281,23 @@ export default function App() {
   }
   async function stop() {
     if (!active?.activeRunId) return;
+    const taskId = active.id;
+    setStoppingIds((old) => [...old.filter((value) => value !== taskId), taskId]);
     try {
       await runtimeApi(`/runs/${encodeURIComponent(active.activeRunId)}/cancel`, {});
       await refresh();
     } catch (error) {
       notify((error as Error).message);
+    } finally {
+      if (mounted.current)
+        setStoppingIds((old) => old.filter((value) => value !== taskId));
     }
   }
   async function upload(files: FileList) {
     const targetTaskId = page === 'chat' ? stateRef.current.activeTask : null;
     const selected = Array.from(files);
     if (!selected.length) return;
+    setUploading(true);
     const refs: ContextRef[] = [];
     try {
       await flushWorkspace();
@@ -1267,6 +1314,8 @@ export default function App() {
     } catch (error) {
       notify((error as Error).message);
       await readWorkspace().catch(() => {});
+    } finally {
+      if (mounted.current) setUploading(false);
     }
     if (refs.length) {
       if (targetTaskId)
@@ -1276,6 +1325,36 @@ export default function App() {
         }));
       else setHomeRefs((old) => [...old, ...refs]);
     }
+  }
+  function openRef(ref: ContextRef) {
+    if (ref.kind === 'file') {
+      openPanel({
+        kind: 'materials',
+        title: ref.title,
+        data: { fileId: ref.id },
+      });
+      return;
+    }
+    if (ref.kind === 'business-board') {
+      navigate('analysis');
+      return;
+    }
+    if (
+      ['document', 'submission', 'audit', 'knowledge', 'report', 'skill'].includes(
+        ref.kind,
+      )
+    ) {
+      openPanel({
+        kind: ref.kind,
+        id: ref.id,
+        title: ref.title,
+        data: ref.followupId
+          ? { businessReport: ref.id.startsWith('business-report-') }
+          : undefined,
+      });
+      return;
+    }
+    openPanel({ kind: 'context', title: ref.title });
   }
   function setMode(value: Mode) {
     setModeState(value);
@@ -1394,6 +1473,9 @@ export default function App() {
         taskId={active.id}
         question={answerQuestionAtInput}
         busy={busyIds.includes(active.id)}
+        stopping={stoppingIds.includes(active.id)}
+        uploading={uploading}
+        onUpload={upload}
         onStop={stopActive}
       />
     ) : (
@@ -1436,8 +1518,11 @@ export default function App() {
               )
         }
         busy={!!chatVisible && busyIds.includes(active.id)}
+        stopping={!!chatVisible && stoppingIds.includes(active.id)}
+        uploading={uploading}
         onStop={stopActive}
         onUpload={upload}
+        onOpenRef={openRef}
         compact={!!chatVisible}
       />
     );
@@ -1549,7 +1634,8 @@ export default function App() {
     (apps.some((app) => app.id === page) && !workspaceApps.includes(page) && !frequentApps.includes(page))
   );
   const skillReader = panel?.kind === 'skill' && !panel.data?.toolId;
-  const helpInPanelHeader = submissionSurface || panel?.kind === 'document';
+  const helpInPanelHeader =
+    submissionSurface || panel?.kind === 'document' || panel?.kind === 'report';
   const panelHeader = (
     <header className="panel-header">
       {workDoc ? (
@@ -1580,7 +1666,7 @@ export default function App() {
   return (
     <WorkspaceContext.Provider value={api}>
       <div
-        className={`app-shell agent-first mode-${mode} ${compact ? 'compact-mode' : ''} ${inlinePanel && panel?.kind === 'submission' ? 'submission-open' : ''}`}
+        className={`app-shell agent-first mode-${mode} ${compact ? 'compact-mode' : ''} ${inlinePanel && panel?.kind === 'submission' ? 'submission-open' : ''} ${effectiveSidebarCollapsed ? 'sidebar-collapsed' : ''}`}
       >
         {mobileOpen && (
           <button
@@ -1591,13 +1677,34 @@ export default function App() {
         )}
         <aside
           id="workspace-navigation"
-          inert={viewportWidth <= 640 && !mobileOpen ? true : undefined}
-          aria-hidden={viewportWidth <= 640 && !mobileOpen ? true : undefined}
+          inert={
+            (viewportWidth <= 640 && !mobileOpen) || effectiveSidebarCollapsed
+              ? true
+              : undefined
+          }
+          aria-hidden={
+            (viewportWidth <= 640 && !mobileOpen) || effectiveSidebarCollapsed
+              ? true
+              : undefined
+          }
           className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`}
         >
-          <button type="button" className="brand" onClick={newTask} title="财小智">
-            <BrandWordmark />
-          </button>
+          <div className="sidebar-brand-row">
+            <button type="button" className="brand" onClick={newTask} title="财小智">
+              <BrandWordmark />
+            </button>
+            {viewportWidth > 640 && (
+              <button
+                type="button"
+                className="icon-btn sidebar-collapse-btn"
+                aria-label="收起侧栏"
+                title="收起侧栏"
+                onClick={toggleSidebar}
+              >
+                <Icon name="layout" size={16} />
+              </button>
+            )}
+          </div>
           <button
             type="button"
             className="new-task new-chat-trigger"
@@ -1717,6 +1824,17 @@ export default function App() {
           </div>
         </aside>
         <main className="main-shell" id="workspace-main" tabIndex={-1}>
+          {effectiveSidebarCollapsed && !chatVisible && !notificationsOpen && (
+            <button
+              type="button"
+              className="icon-btn sidebar-expand-fab"
+              aria-label="展开侧栏"
+              title="展开侧栏"
+              onClick={toggleSidebar}
+            >
+              <Icon name="layout" size={17} />
+            </button>
+          )}
           {viewportWidth <= 640 && (
             <header className="mobile-topbar">
               <button
@@ -1807,12 +1925,26 @@ export default function App() {
                     task={active}
                     composer={composer}
                     busy={busyIds.includes(active.id)}
+                    stopping={stoppingIds.includes(active.id)}
                     activity={streams[active.id]?.activity}
                     phase={streams[active.id]?.phase}
+                    runtimeStatus={runtimeStatus}
+                    onReconnect={() => void connectRuntime()}
                     onStop={stopActive}
                     onRetrySend={retrySend}
+                    onSaveTitle={(name) =>
+                      updateTask(active.id, (t) => ({ ...t, title: name }))
+                    }
                     onRename={() =>
                       openPanel({ kind: 'rename', title: '重命名会话' })
+                    }
+                    sidebarCollapsed={effectiveSidebarCollapsed}
+                    onToggleSidebar={toggleSidebar}
+                    onOpenRef={openRef}
+                    headerExtra={
+                      !notificationsOpen && (!panel || (inlinePanel && !helpInPanelHeader)) ? (
+                        <ContextHelp />
+                      ) : null
                     }
                   />
                 ) : (
@@ -1901,7 +2033,7 @@ export default function App() {
           )}
           </div>
         </main>
-        {!notificationsOpen && (!panel || inlinePanel) && !helpInPanelHeader && !isWorkDossier && (
+        {!notificationsOpen && !chatVisible && (!panel || inlinePanel) && !helpInPanelHeader && !isWorkDossier && (
           <ContextHelp
             skillsContext={
               page === 'skills' || page === 'light-apps' ||
@@ -1921,7 +2053,13 @@ export default function App() {
           onClick={(e) => {
             if (e.target === dialog.current) {
               const r = dialog.current.getBoundingClientRect();
-              if (e.clientX < r.left || e.clientX > r.right) closePanel();
+              if (
+                e.clientX < r.left ||
+                e.clientX > r.right ||
+                e.clientY < r.top ||
+                e.clientY > r.bottom
+              )
+                closePanel();
             }
           }}
         >

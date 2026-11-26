@@ -162,9 +162,9 @@ def answer_question(state, task_id, answer, message):
         raise QuestionError('该问题只能选择一项。', status=422)
     if deferred:
         if option_ids or text:
-            raise QuestionError('暂不处理时不能同时提交答案。', status=422)
+            raise QuestionError('稍后回答时不能同时提交答案。', status=422)
         question['status'] = 'deferred'
-        return {'question': copy.deepcopy(question), 'mode': 'deferred'}, '暂不处理'
+        return {'question': copy.deepcopy(question), 'mode': 'deferred'}, '稍后回答'
     if not option_ids and not text:
         raise QuestionError('请选择一个选项或填写回答。', status=422)
     if not option_ids and is_policy_aside(text):

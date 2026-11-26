@@ -31,7 +31,7 @@ interface NotificationSource {
 }
 
 function preview(text: string): string {
-  const blocks = parseMessageMarkdown(text);
+  const blocks = parseMessageMarkdown(text).filter((block) => block.kind !== 'hr');
   const summary = blocks.slice(0, 2).map((block) => {
     if (block.kind === 'list') return block.items.join(' ');
     if (block.kind === 'table') return block.header.join(' · ');

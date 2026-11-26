@@ -72,17 +72,24 @@ export function QuestionComposer({
   taskId,
   busy,
   onStop,
+  stopping = false,
+  onUpload,
+  uploading = false,
 }: {
   question: ClarificationQuestion;
   taskId: string;
   busy: boolean;
   onStop?: () => void;
+  stopping?: boolean;
+  onUpload?: (files: FileList) => void;
+  uploading?: boolean;
 }) {
   const w = useWorkspace();
   const titleId = useId();
   const contextId = useId();
   const errorId = useId();
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const inFlight = useRef(false);
   const composing = useRef(false);
   const focusAttempted = useRef(false);
@@ -115,6 +122,14 @@ export function QuestionComposer({
   useEffect(() => {
     writeQuestionResponse(taskId, question.id, response);
   }, [taskId, question.id, response]);
+
+  useEffect(() => {
+    const field = textarea.current;
+    if (!field) return;
+    field.style.height = 'auto';
+    field.style.height = `${Math.min(field.scrollHeight, 120)}px`;
+    field.style.overflowY = field.scrollHeight > 120 ? 'auto' : 'hidden';
+  }, [response.text]);
 
   useEffect(() => {
     if (disabled || focusAttempted.current) return;
@@ -189,43 +204,55 @@ export function QuestionComposer({
               <div
                 className={`question-composer-options${hasDetails ? ' has-details' : ''}`}
               >
-                {question.options.map((option) => (
-                  <label
-                    className="question-composer-option"
-                    data-selected={selected.includes(option.id)}
-                    key={option.id}
-                  >
-                    <input
-                      type={question.multiple ? 'checkbox' : 'radio'}
-                      name={`question-answer-${question.id}`}
-                      value={option.id}
-                      checked={selected.includes(option.id)}
-                      onChange={() => {
-                        setError('');
-                        setResponse((previous) => ({
-                          ...previous,
-                          selected: question.multiple
-                            ? previous.selected.includes(option.id)
-                              ? previous.selected.filter(
-                                  (id) => id !== option.id,
-                                )
-                              : [...previous.selected, option.id]
-                            : [option.id],
-                        }));
-                      }}
-                    />
-                    <span>
-                      <strong>{option.label}</strong>
-                      {option.description && (
-                        <small>{option.description}</small>
-                      )}
-                    </span>
-                  </label>
-                ))}
+                {question.options.map((option) => {
+                  const isSelected = selected.includes(option.id);
+                  return (
+                    <label
+                      className="question-composer-option"
+                      data-selected={isSelected}
+                      key={option.id}
+                    >
+                      <input
+                        type={question.multiple ? 'checkbox' : 'radio'}
+                        name={`question-answer-${question.id}`}
+                        value={option.id}
+                        checked={isSelected}
+                        onClick={() => {
+                          if (!question.multiple && isSelected && !disabled) {
+                            setError('');
+                            setResponse((previous) => ({
+                              ...previous,
+                              selected: [],
+                            }));
+                          }
+                        }}
+                        onChange={() => {
+                          setError('');
+                          setResponse((previous) => ({
+                            ...previous,
+                            selected: question.multiple
+                              ? previous.selected.includes(option.id)
+                                ? previous.selected.filter(
+                                    (id) => id !== option.id,
+                                  )
+                                : [...previous.selected, option.id]
+                              : [option.id],
+                          }));
+                        }}
+                      />
+                      <span>
+                        <strong>{option.label}</strong>
+                        {option.description && (
+                          <small>{option.description}</small>
+                        )}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             </fieldset>
           )}
-          {selected.length > 0 && (
+          {selected.length > 0 && question.multiple && (
             <button
               className="question-composer-clear"
               type="button"
@@ -242,7 +269,7 @@ export function QuestionComposer({
         <textarea
           id="question-answer-input"
           ref={textarea}
-          rows={2}
+          rows={1}
           maxLength={2000}
           aria-label="回答追问"
           aria-describedby={
@@ -252,7 +279,9 @@ export function QuestionComposer({
           }
           aria-invalid={error ? true : undefined}
           placeholder={
-            question.options.length ? '补充或直接回答…' : '输入回答…'
+            question.options.length
+              ? '补充说明、直接回答，或临时询问制度…'
+              : '输入回答…'
           }
           value={response.text}
           disabled={disabled}
@@ -288,20 +317,53 @@ export function QuestionComposer({
           </p>
         )}
         <footer className="question-composer-toolbar">
+          {onUpload && (
+            <button
+              type="button"
+              className="composer-tool"
+              aria-label="上传文件"
+              disabled={disabled || uploading}
+              onClick={() => fileInput.current?.click()}
+            >
+              <Icon name="attach" size={15} />
+              <span>{uploading ? '上传中…' : '上传文件'}</span>
+            </button>
+          )}
           {busy && onStop && (
-            <Button type="button" variant="ghost" icon="stop" onClick={onStop}>
-              停止处理
+            <Button
+              type="button"
+              variant="ghost"
+              icon="stop"
+              disabled={stopping}
+              onClick={onStop}
+            >
+              {stopping ? '正在停止…' : '停止处理'}
             </Button>
           )}
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={disabled || !hasAnswer}
-          >
-            {sending ? '正在发送…' : '发送回答'}
-            <Icon name="up" size={14} />
-          </Button>
+          <div className="question-composer-submit">
+            {!disabled && <span className="composer-hint">Enter 发送</span>}
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={disabled || !hasAnswer}
+            >
+              {sending ? '正在发送…' : '发送回答'}
+              <Icon name="up" size={14} />
+            </Button>
+          </div>
         </footer>
+        {onUpload && (
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            hidden
+            onChange={(event) => {
+              if (event.target.files) onUpload(event.target.files);
+              event.target.value = '';
+            }}
+          />
+        )}
       </form>
     </section>
   );

@@ -774,7 +774,12 @@ export function RenamePanel({
 }) {
   const [value, setValue] = useState(initial);
   return (
-    <>
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (value.trim()) onSave(value.trim());
+      }}
+    >
       <Field label="会话名称">
         <input
           autoFocus
@@ -784,14 +789,10 @@ export function RenamePanel({
         />
       </Field>
       <div className="panel-footer">
-        <Button
-          variant="primary"
-          disabled={!value.trim()}
-          onClick={() => onSave(value.trim())}
-        >
+        <Button type="submit" variant="primary" disabled={!value.trim()}>
           保存名称
         </Button>
       </div>
-    </>
+    </form>
   );
 }

@@ -115,6 +115,12 @@
 }
 
 /* The send gradient and text-bearing actions share a warm coral hue. */
+.agent-first .send-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  transition: background-color 140ms ease, color 140ms ease;
+}
 .agent-first .send-button:not(:disabled) {
   color: #fff;
   background: var(--brand-gradient);
@@ -122,8 +128,12 @@
 .agent-first .send-button:hover:not(:disabled) {
   background: linear-gradient(135deg, #f45043, #ee2739);
 }
-.agent-first .send-button {
-  border-radius: 12px;
+.agent-first .send-button.is-stop:not(:disabled) {
+  background: var(--enterprise-ink);
+  color: #fff;
+}
+.agent-first .send-button.is-stop:hover:not(:disabled) {
+  background: #273044;
 }
 .agent-first .btn.primary {
   color: #fff;
@@ -186,44 +196,78 @@
   opacity: .7;
 }
 
-/* A clean white composer and gray text give the action color room to breathe. */
+/* Home and Chat composers share one clean white card, neutral resting border, and single focus cue. */
 .agent-first .workspace-home .composer,
 .agent-first .composer {
   background: #fff;
   border-color: var(--enterprise-line);
-  border-radius: 18px;
+  border-radius: 16px;
+  box-shadow: 0 2px 10px rgb(18 24 38 / 4%);
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
 }
 .agent-first .chat-compose > .composer {
-  --composer-line: var(--brand-line-soft);
-  --composer-focus: var(--brand-focus);
+  --composer-line: var(--enterprise-line);
+  --composer-focus: #cc7a70;
+  padding: 14px 16px 12px;
   border-color: var(--composer-line);
 }
 .agent-first .chat-compose > .question-composer {
   --composer-line: var(--enterprise-line);
   --composer-focus: var(--enterprise-focus);
+  padding: 14px 16px 12px;
 }
 @media (hover: hover) {
-  .agent-first .workspace-home .composer:hover:not(:focus-within) {
-    border-color: var(--brand-line);
+  .agent-first .workspace-home .composer:hover:not(:focus-within),
+  .agent-first .chat-compose > .composer:hover:not(:focus-within) {
+    border-color: #cfd5de;
   }
 }
 .agent-first .workspace-home .composer:focus-within {
   border-color: #cc7a70;
+  box-shadow: 0 2px 12px rgb(210 60 51 / 8%);
 }
 @media (forced-colors: active) {
-  .agent-first .workspace-home .composer:focus-within {
+  .agent-first .workspace-home .composer:focus-within,
+  .agent-first .chat-compose > .composer:focus-within {
     border-color: Highlight;
   }
 }
 .agent-first .chat-compose > .composer:focus-within {
   border-color: var(--composer-focus);
+  box-shadow: 0 2px 12px rgb(210 60 51 / 8%);
 }
-.agent-first .chat-compose > .composer:has(textarea:focus-visible) {
-  outline: 1px solid var(--composer-focus);
+.agent-first .chat-compose > .question-composer:focus-within {
+  border-color: var(--enterprise-focus);
+  box-shadow: 0 2px 12px rgb(82 120 181 / 12%);
+}
+.agent-first .composer.is-drag-over {
+  border-color: var(--enterprise-focus);
+  background: #f8fbff;
+  box-shadow: 0 0 0 3px rgb(82 120 181 / 12%);
+}
+.agent-first .chat-compose .composer textarea {
+  font-size: 14px;
+  line-height: 1.65;
+  min-height: 44px;
+}
+.agent-first .chat-compose .composer-toolbar {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #f0f1f3;
+}
+.agent-first .composer-tool-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--enterprise-line);
+  margin-inline: 2px;
+  flex: none;
 }
 .agent-first .composer textarea {
   color: var(--enterprise-ink);
   caret-color: var(--brand-icon);
+}
+.agent-first .question-composer textarea {
+  caret-color: var(--enterprise-link);
 }
 .agent-first .workspace-home .composer textarea {
   caret-color: auto;
@@ -654,6 +698,451 @@
   }
 }
 
+/* Collapsible desktop sidebar (manual toggle + auto-collapse in split-pane <1440px). */
+.agent-first .sidebar-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.agent-first .sidebar-brand-row .brand {
+  margin-bottom: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.agent-first .sidebar-collapse-btn {
+  width: 32px;
+  height: 32px;
+  color: var(--enterprise-muted);
+  flex: none;
+}
+.agent-first.mode-operations .sidebar-collapse-btn {
+  display: none;
+}
+.agent-first.sidebar-collapsed .sidebar {
+  transform: translateX(-100%);
+  visibility: hidden;
+  pointer-events: none;
+}
+.agent-first.sidebar-collapsed .main-shell {
+  margin-left: 0;
+}
+.agent-first .sidebar-expand-fab {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 16;
+  width: 36px;
+  height: 36px;
+  background: #fff;
+  border: 1px solid var(--enterprise-line);
+  box-shadow: 0 2px 8px rgb(18 24 38 / 6%);
+  color: var(--enterprise-secondary);
+}
+.agent-first .sidebar-expand-fab:hover {
+  color: var(--enterprise-ink);
+  border-color: var(--card-hover-border);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .agent-first .sidebar {
+    transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), visibility 180ms;
+  }
+  .agent-first .main-shell {
+    transition: margin-left 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+
+/* Clickable composer refs and visual separation of uploaded files vs bound context. */
+.agent-first .ref-chip {
+  padding: 3px 6px 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  gap: 4px;
+}
+.agent-first .ref-chip[data-ref-kind='file'] {
+  background: var(--enterprise-selected);
+  color: var(--enterprise-link);
+  border-color: #d6e3f4;
+}
+.agent-first .ref-chip-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  padding: 0;
+  color: inherit;
+}
+.agent-first .ref-chip-open > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-first .ref-chip-open:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.agent-first .ref-chip-remove {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--enterprise-muted);
+}
+.agent-first .ref-chip-remove:hover {
+  background: rgb(18 24 38 / 8%);
+  color: var(--enterprise-ink);
+}
+
+/* Chat titlebar, inline rename, embedded context help, and offline recovery banner. */
+.agent-first .chat-titlebar {
+  padding: 18px 0 13px;
+  border-bottom: 1px solid var(--enterprise-line);
+  gap: 12px;
+}
+.agent-first .chat-titlebar-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.agent-first .chat-titlebar-main h1 {
+  padding: 2px 5px;
+  margin: -2px -5px;
+  border-radius: 6px;
+}
+.agent-first .chat-titlebar-main h1[title] {
+  cursor: text;
+}
+.agent-first .chat-titlebar-main h1:hover {
+  background: var(--enterprise-hover);
+}
+.agent-first .chat-rename-form {
+  flex: 1;
+  min-width: 0;
+  max-width: 420px;
+}
+.agent-first .chat-rename-form input {
+  width: 100%;
+  height: 32px;
+  padding: 4px 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--enterprise-ink);
+  border: 1px solid var(--enterprise-focus);
+  border-radius: 7px;
+  background: #fff;
+}
+.agent-first .chat-titlebar .inline-actions {
+  flex-wrap: nowrap;
+  gap: 6px;
+  flex: none;
+}
+.agent-first .chat-titlebar .help-trigger {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  margin: 0;
+  padding: 4px 10px;
+  min-height: 28px;
+  border: 1px solid var(--enterprise-line);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 12px;
+  color: var(--enterprise-muted);
+  white-space: nowrap;
+}
+.agent-first .chat-titlebar .help-trigger:hover {
+  background: var(--enterprise-hover);
+  color: var(--enterprise-ink);
+  border-color: var(--card-hover-border);
+}
+.chat-connection-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 9px 14px;
+  border: 1px solid #f4cfd1;
+  border-radius: 10px;
+  background: #fff5f5;
+  color: #9c2b35;
+  font-size: 13px;
+  line-height: 1.5;
+  flex: none;
+}
+.chat-connection-banner > svg {
+  flex: none;
+}
+.chat-connection-banner > span {
+  flex: 1;
+  min-width: 0;
+}
+.chat-connection-retry {
+  flex: none;
+  padding: 4px 11px;
+  border: 1px solid #e7b3b7;
+  border-radius: 6px;
+  background: #fff;
+  color: #9c2b35;
+  font-size: 12px;
+  font-weight: 550;
+}
+.chat-connection-retry:hover {
+  background: #fdecee;
+}
+
+/* Conversation messages: readable 14px rhythm, user refs echo, timestamps, copy feedback, team avatar & error callout. */
+.agent-first .chat-thread {
+  padding: 18px 4px 28px;
+}
+.agent-first .message {
+  margin: 0 0 26px;
+}
+.agent-first .user-message-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  max-width: 82%;
+}
+.agent-first .user-message-refs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+.agent-first .user-ref-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 280px;
+  padding: 3px 9px;
+  border: 1px solid var(--enterprise-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--enterprise-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.agent-first .user-ref-pill > svg {
+  flex: none;
+}
+.agent-first .user-ref-pill > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-first .user-ref-pill[data-ref-kind='file'] {
+  background: var(--enterprise-selected);
+  border-color: #d6e3f4;
+  color: var(--enterprise-link);
+}
+.agent-first .user-ref-pill.is-clickable:hover {
+  border-color: var(--card-hover-border);
+  color: var(--enterprise-link);
+}
+.agent-first .user-bubble {
+  background: #eef1f5;
+  color: var(--enterprise-ink);
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 11px 16px;
+  border-radius: 16px 16px 4px 16px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.agent-first .user-message-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+.agent-first .message-time {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--enterprise-muted);
+  font-variant-numeric: tabular-nums;
+}
+.agent-first .assistant-name .message-time {
+  margin-left: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .agent-first .user-message-meta,
+  .agent-first .assistant-name .message-time {
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+  .agent-first .message:hover .user-message-meta,
+  .agent-first .message:focus-within .user-message-meta,
+  .agent-first .user-message-meta:has(.is-copied),
+  .agent-first .message:hover .assistant-name .message-time,
+  .agent-first .message:focus-within .assistant-name .message-time,
+  .agent-first .message-tools:has(.is-copied) {
+    opacity: 1;
+  }
+}
+.agent-first .message-copy-btn {
+  width: auto;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  gap: 4px;
+  border-radius: 7px;
+  color: var(--enterprise-muted);
+}
+.agent-first .message-copy-btn.is-copied {
+  color: #167a5c;
+  background: #eaf7f1;
+}
+.agent-first .copy-feedback-label {
+  font-size: 11px;
+  font-weight: 550;
+}
+.agent-first .team-reply-mark {
+  padding: 0;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--enterprise-line);
+}
+.agent-first .team-reply-mark .catalog-mark {
+  width: 100%;
+  height: 100%;
+}
+.agent-first .team-reply-mark .catalog-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.agent-first .chat-error-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 640px;
+  margin: 4px 0 12px var(--reply-indent, 41px);
+  padding: 12px 14px;
+  border: 1px solid #f4cfd1;
+  border-radius: 12px;
+  background: #fff5f5;
+  color: #9c2b35;
+}
+.agent-first .chat-error-callout > svg {
+  flex: none;
+  margin-top: 3px;
+}
+.agent-first .chat-error-callout-body {
+  flex: 1;
+  min-width: 0;
+}
+.agent-first .chat-error-callout-body .assistant-text {
+  margin: 0 !important;
+  color: #8c2630;
+}
+
+/* Follow-up suggestion pills aligned to the assistant text column. */
+.agent-first .chat-page .chat-thread .suggestions {
+  margin: 14px 0 4px var(--reply-indent, 41px);
+  gap: 8px;
+}
+.agent-first .chat-empty-brand .suggestions {
+  margin-left: 0;
+  justify-content: center;
+}
+.agent-first .chat-page .suggestions button {
+  padding: 6px 13px;
+  border: 1px solid var(--enterprise-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--enterprise-text);
+  font-size: 13px;
+  gap: 5px;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+.agent-first .chat-page .suggestions button:hover {
+  border-color: var(--card-hover-border);
+  background: var(--enterprise-subtle);
+  color: var(--enterprise-link);
+}
+
+/* Top-center toast so transient feedback never overlaps the bottom composer. */
+.agent-first .toast {
+  top: 18px;
+  bottom: auto;
+  left: calc(50% + 136px);
+  padding: 10px 18px;
+  border-radius: 10px;
+  background: var(--enterprise-ink);
+  font-size: 13px;
+  box-shadow: 0 8px 26px rgb(18 24 38 / 18%);
+}
+.agent-first.sidebar-collapsed .toast {
+  left: 50%;
+}
+.agent-first.mode-operations .toast {
+  left: calc(50% + 38px);
+}
+
+/* Split-pane space balance when an inline side panel (submission or report) is open. */
+.agent-first .work-layout:has(.inline-detail) .work-main {
+  min-width: 340px;
+}
+.agent-first .work-layout:has(.inline-detail) .chat-page {
+  padding-inline: 18px;
+}
+.agent-first .inline-detail.submission-detail {
+  width: clamp(560px, 46vw, 660px);
+}
+.agent-first .inline-detail.report-detail {
+  width: min(860px, 60vw);
+  flex-basis: 58%;
+}
+
+/* Unified conversation card tokens across all 6 card types (radius, border, hierarchy, compact vs wide width). */
+.agent-first .sc-card,
+.agent-first .sc-history,
+.agent-first .chat-page .result-card,
+.agent-first .question-pending-link,
+.agent-first .question-history {
+  max-width: 640px;
+  border-color: var(--enterprise-line);
+}
+.agent-first .sc-card,
+.agent-first .chat-page .result-card,
+.agent-first .pf-chat-card,
+.agent-first .ba-answer,
+.agent-first .ar-chat-card {
+  border-radius: 14px;
+  border-color: var(--enterprise-line);
+}
+.agent-first .chat-page .result-card {
+  min-height: 76px;
+}
+.agent-first .pf-chat-card,
+.agent-first .ba-answer,
+.agent-first .ar-chat-card {
+  max-width: none;
+}
+.agent-first .pf-chat-card {
+  color: var(--enterprise-ink);
+}
+.agent-first .pf-card-actions .btn {
+  min-height: 32px;
+  font-size: var(--card-meta-size);
+}
+.agent-first .ar-card-metrics strong {
+  color: var(--enterprise-ink);
+}
+.agent-first .ba-answer {
+  --ba-ink: var(--enterprise-ink);
+  --ba-muted: var(--enterprise-muted);
+  --ba-border: var(--enterprise-line);
+}
+.agent-first .ba-source {
+  font-size: var(--card-meta-size);
+}
+
 /* Keep the desktop conversation shell from overriding the narrow layouts. */
 @media (max-width: 1079px) {
   .agent-first.mode-assistant {
@@ -663,8 +1152,11 @@
     width: 190px;
     padding-inline: 10px;
   }
-  .agent-first.mode-assistant .main-shell {
+  .agent-first.mode-assistant:not(.sidebar-collapsed) .main-shell {
     margin-left: 190px;
+  }
+  .agent-first.mode-assistant:not(.sidebar-collapsed) .toast {
+    left: calc(50% + 95px);
   }
 }
 
@@ -672,8 +1164,11 @@
   .agent-first.mode-assistant .sidebar {
     width: 181px;
   }
-  .agent-first.mode-assistant .main-shell {
+  .agent-first.mode-assistant:not(.sidebar-collapsed) .main-shell {
     margin-left: 181px;
+  }
+  .agent-first.mode-assistant:not(.sidebar-collapsed) .toast {
+    left: calc(50% + 90px);
   }
 }
 
@@ -682,8 +1177,14 @@
     width: 234px;
     padding-inline: 14px;
   }
+  .agent-first.mode-assistant:not(.sidebar-collapsed) .main-shell,
   .agent-first.mode-assistant .main-shell {
     margin-left: 0;
+  }
+  .agent-first.mode-assistant:not(.sidebar-collapsed) .toast,
+  .agent-first .toast {
+    left: 50%;
+    top: 12px;
   }
   .agent-first .mobile-topbar {
     height: 58px;
@@ -723,8 +1224,19 @@
     height: calc(100dvh - 58px);
   }
   .agent-first .chat-titlebar {
-    padding-top: 17px;
+    padding-top: 14px;
     min-width: 0;
+  }
+  .agent-first .chat-titlebar .help-trigger {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+  .agent-first .user-message-wrap {
+    max-width: 92%;
+  }
+  .agent-first .chat-error-callout,
+  .agent-first .chat-page .chat-thread .suggestions {
+    margin-left: 0;
   }
   .agent-first .page-container {
     padding-top: 23px;

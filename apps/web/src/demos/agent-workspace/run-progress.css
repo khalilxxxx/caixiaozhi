@@ -12,7 +12,7 @@
   justify-content: center;
   height: 0;
   position: relative;
-  z-index: 2;
+  z-index: 3;
 }
 
 .chat-latest-button {
@@ -22,23 +22,33 @@
   gap: 5px;
   min-height: 32px;
   position: absolute;
-  bottom: 10px;
-  padding: 5px 11px;
-  border: 1px solid #d5d5d2;
-  border-radius: 16px;
+  bottom: 12px;
+  padding: 5px 13px;
+  border: 1px solid var(--enterprise-line, #e5e7eb);
+  border-radius: 999px;
   background: #fff;
-  color: #525257;
+  color: var(--enterprise-text, #394150);
+  box-shadow: 0 4px 14px rgb(18 24 38 / 10%);
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.14s ease;
 }
 
 .chat-latest-button:hover {
-  background: #f4f4f2;
-  color: #29292d;
+  background: var(--enterprise-subtle, #f8f9fb);
+  border-color: var(--card-hover-border, #b9c5d3);
+  color: var(--enterprise-ink, #121826);
+}
+
+.chat-latest-button.is-attention {
+  border-color: #b7cbe6;
+  background: var(--enterprise-selected, #eef3fa);
+  color: var(--enterprise-link, #315e96);
 }
 
 .chat-page {
-  --reply-indent: 41px;
+  --reply-indent: 42px;
 }
 .chat-page .message.assistant:has(+ .chat-resume-action) {
   margin-bottom: 10px;
@@ -55,7 +65,7 @@
 }
 .chat-page .message.assistant .assistant-name {
   min-height: 24px;
-  margin-bottom: 4px;
+  margin-bottom: 5px;
 }
 .chat-page .message.assistant .reply-mark {
   position: absolute;
@@ -66,27 +76,28 @@
   padding: 0;
   background: transparent;
 }
-.chat-page .assistant-text,
-.run-progress {
-  font-size: 13px;
+.chat-page .assistant-text {
+  font-size: 14px;
+  line-height: 1.75;
 }
 .run-progress {
+  font-size: 13px;
   min-width: 0;
-  margin-bottom: 9px;
+  margin-bottom: 10px;
   color: var(--enterprise-secondary);
-  line-height: 1.7;
+  line-height: 1.65;
   overflow-wrap: anywhere;
 }
 .run-progress-summary {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-height: 28px;
 }
 .run-progress-action {
   display: inline-flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: 7px;
   min-width: 0;
 }
 .run-progress-face {
@@ -107,17 +118,24 @@
   gap: 5px;
   min-height: 27px;
   margin-inline-start: auto;
-  padding: 2px 7px;
-  border: 0;
-  border-radius: 5px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
   background: transparent;
   color: var(--enterprise-muted);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
-.run-progress-stop:hover {
+.run-progress-stop:enabled:hover {
   background: var(--enterprise-hover);
+  border-color: var(--enterprise-line);
+  color: var(--enterprise-ink);
+}
+.run-progress-stop:disabled {
+  cursor: default;
+  opacity: 0.65;
 }
 .run-progress-stop:focus-visible,
 .run-progress-toggle:focus-visible {
@@ -125,7 +143,7 @@
   outline-offset: 2px;
 }
 .run-progress-details {
-  margin-block: 0 7px;
+  margin-block: 0 8px;
 }
 .run-progress-toggle,
 .run-progress-elapsed {
@@ -135,22 +153,27 @@
   font-variant-numeric: tabular-nums;
 }
 .run-progress-toggle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   min-height: 26px;
-  border-radius: 3px;
+  padding: 2px 8px 2px 6px;
+  margin-inline-start: -6px;
+  border-radius: 6px;
   list-style: none;
   cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease;
 }
 .run-progress-toggle::-webkit-details-marker {
   display: none;
 }
 .run-progress-toggle:hover {
+  background: var(--enterprise-hover);
   color: var(--enterprise-link);
 }
 .run-progress-chevron {
   flex: none;
+  transition: transform 0.15s ease;
 }
 .run-progress-details[open] .run-progress-chevron {
   transform: rotate(90deg);
@@ -159,37 +182,46 @@
 .run-progress-finding {
   margin: 5px 0;
   color: var(--enterprise-secondary);
-  line-height: 1.7;
+  line-height: 1.65;
 }
 .run-progress-steps {
   list-style: none;
   margin: 6px 0 0;
-  padding: 0 0 0 12px;
-  border-inline-start: 1px solid var(--enterprise-line);
+  padding: 2px 0 2px 13px;
+  border-inline-start: 1.5px solid var(--enterprise-line);
 }
 .run-progress-step + .run-progress-step {
-  margin-top: 7px;
+  margin-top: 8px;
 }
 .run-progress-step-title {
   display: flex;
   gap: 6px;
   align-items: baseline;
-  color: var(--enterprise-muted);
+  color: var(--enterprise-secondary);
   font-size: 12px;
+  font-weight: 500;
 }
 .run-progress-step-title svg {
   flex: none;
   align-self: flex-start;
   margin-top: 3px;
+  color: var(--enterprise-muted);
+}
+.run-progress-step.is-completed .run-progress-step-title svg {
+  color: #227a61;
 }
 .run-progress-step.is-failed .run-progress-step-title,
+.run-progress-step.is-failed .run-progress-step-title svg,
 .run-progress-step.is-incomplete .run-progress-step-title,
+.run-progress-step.is-incomplete .run-progress-step-title svg,
 .run-progress.is-failed .run-progress-state,
 .run-progress.is-incomplete .run-progress-state {
   color: #973e38;
 }
 .run-progress-finding {
   margin: 2px 0 0 19px;
+  font-size: 12.5px;
+  color: var(--enterprise-muted);
 }
 .run-progress-details[open] ~ .run-progress-state .run-problem-action {
   display: none;
@@ -197,10 +229,11 @@
 .run-progress-state {
   margin: 0;
   color: var(--enterprise-secondary);
+  font-size: 13px;
 }
 .run-expert-source {
   display: block;
-  margin-top: 1px;
+  margin-top: 2px;
   color: var(--enterprise-muted);
   font-size: 12px;
 }
@@ -212,8 +245,8 @@
     animation: run-face-look 2.8s ease-in-out infinite;
   }
   .run-face-lids {
-    transform-origin: 16px 16.8px;
-    animation: run-face-blink 5.6s ease-in-out infinite;
+    transform-origin: 12px 13px;
+    animation: run-face-blink 5.4s ease-in-out infinite;
   }
   .run-face-light {
     animation: run-face-light 2.8s ease-in-out infinite;
@@ -221,20 +254,20 @@
   @supports ((background-clip: text) or (-webkit-background-clip: text)) {
     .run-progress-glint {
       display: block;
-      background-color: var(--enterprise-text);
+      background-color: var(--enterprise-muted, #667085);
       background-image: linear-gradient(
         90deg,
-        transparent calc(50% - 1.55em),
-        #3975b3 calc(50% - 0.4em),
-        #3975b3 calc(50% + 0.4em),
-        transparent calc(50% + 1.55em)
+        transparent calc(50% - 2.1em),
+        #121826 calc(50% - 0.5em),
+        #315e96 calc(50% + 0.45em),
+        transparent calc(50% + 2.1em)
       );
-      background-size: 200% 100%;
+      background-size: 220% 100%;
       background-repeat: no-repeat;
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
-      animation: run-progress-glint 2.2s linear infinite;
+      animation: run-progress-glint 2.1s linear infinite;
     }
   }
   .run-progress[data-motion-paused='true']
@@ -250,11 +283,11 @@
   }
   14%,
   32% {
-    transform: translateX(1.8px);
+    transform: translateX(1.3px);
   }
   54%,
   68% {
-    transform: translateX(-1.6px);
+    transform: translateX(-1.2px);
   }
 }
 @keyframes run-face-blink {
@@ -275,26 +308,26 @@
     transform: translateX(0);
   }
   25% {
-    opacity: 0.56;
+    opacity: 0.65;
   }
   43%,
   100% {
     opacity: 0;
-    transform: translateX(9px);
+    transform: translateX(5.5px);
   }
 }
 @keyframes run-progress-glint {
   from {
     background-position: calc(100% - 1em) 0;
   }
-  58%,
+  62%,
   100% {
     background-position: 1.55em 0;
   }
 }
 @media (max-width: 480px) {
   .chat-page {
-    --reply-indent: 33px;
+    --reply-indent: 34px;
   }
   .chat-page .message.assistant .reply-mark {
     width: 26px;

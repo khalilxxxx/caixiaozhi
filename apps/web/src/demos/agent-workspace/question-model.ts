@@ -40,7 +40,7 @@ export function resumeQuestionMessage(task: Task): string {
   if (savedResult)
     return '继续处理当前已保存的草稿，保留已填写内容，接着完成尚未完成的步骤。';
   return latestQuestion?.status === 'deferred' &&
-    latestUser?.text === '暂不处理'
+    ['稍后回答', '暂不处理'].includes(latestUser?.text ?? '')
     ? '继续刚才暂缓的任务，请根据当前信息确认下一步。'
     : (latestUser?.text ?? '继续处理当前事项');
 }
@@ -131,7 +131,7 @@ export function prepareQuestionAnswer(
     throw new Error('草稿已变化，请根据最新信息重新确认。');
   if (input.deferred)
     return {
-      message: '暂不处理',
+      message: '稍后回答',
       answer: {
         questionId: question.id,
         optionIds: [],

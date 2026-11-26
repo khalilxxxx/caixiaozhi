@@ -33,7 +33,14 @@ import {
   resumeQuestionMessage,
 } from './question-model';
 import { RunProgress } from './RunProgress';
-import { acceptWorkspace, api, flushWorkspace, readWorkspace, type WorkspaceSnapshot } from './runtime-client';
+import {
+  acceptWorkspace,
+  api,
+  flushWorkspace,
+  readWorkspace,
+  type RuntimeStatus,
+  type WorkspaceSnapshot,
+} from './runtime-client';
 
 function taskStatusTone(status: string) {
   if (/失败|未完成|异常/.test(status)) return 'red';
@@ -41,6 +48,21 @@ function taskStatusTone(status: string) {
   if (/暂停|停止|中断/.test(status)) return 'neutral';
   if (/已完成|已受理/.test(status)) return 'green';
   return 'blue';
+}
+
+function formatMessageTime(timestamp?: number) {
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp) || timestamp <= 0)
+    return '';
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return '';
+  const now = new Date();
+  const hhmm = date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  if (date.toDateString() === now.toDateString()) return hhmm;
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${hhmm}`;
 }
 
 function messageProgressStatus(
@@ -61,12 +83,62 @@ function messageProgressStatus(
   return runStatus;
 }
 
-export const logo = '/agent-assets/caixiaozhi.png';
+export const logo = '/agent-assets/caixiaozhi.webp';
 function XiaozhiMark({ className = '' }: { className?: string }) {
   return (
     <span className={`xiaozhi-mark ${className}`} aria-hidden="true">
       <img src={logo} alt="" draggable={false} />
     </span>
+  );
+}
+
+function ReplyAvatar({ teamId }: { teamId?: string }) {
+  if (teamId)
+    return (
+      <span className="xiaozhi-mark reply-mark team-reply-mark" aria-hidden="true">
+        <CatalogMark kind="team" id={teamId} />
+      </span>
+    );
+  return <XiaozhiMark className="reply-mark" />;
+}
+
+function CopyButton({
+  text,
+  label = '复制回复',
+  onFail,
+}: {
+  text: string;
+  label?: string;
+  onFail?: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  return (
+    <button
+      type="button"
+      className={`icon-btn message-copy-btn${copied ? ' is-copied' : ''}`}
+      title={copied ? '已复制' : label}
+      aria-label={copied ? '已复制' : label}
+      onClick={() => {
+        navigator.clipboard?.writeText(text).then(
+          () => {
+            setCopied(true);
+            if (timer.current) clearTimeout(timer.current);
+            timer.current = setTimeout(() => setCopied(false), 1800);
+          },
+          () => onFail?.(),
+        );
+      }}
+    >
+      <Icon name={copied ? 'check' : 'copy'} size={13} />
+      {copied && <span className="copy-feedback-label">已复制</span>}
+    </button>
   );
 }
 
@@ -79,7 +151,7 @@ function HomeMascot() {
     let cancelled = false;
     Promise.all(['blink', 'write'].map((frame) => {
       const image = new Image();
-      image.src = `/agent-assets/xiaozhi-ready-${frame}.png`;
+      image.src = `/agent-assets/xiaozhi-ready-${frame}.webp`;
       return image.decode();
     })).then(() => {
       if (!cancelled) setFramesReady(true);
@@ -126,12 +198,12 @@ function HomeMascot() {
             <rect x="345" y="510" width="370" height="175" rx="28" />
           </clipPath>
         </defs>
-        <image href="/agent-assets/xiaozhi-ready.png" width="1280" height="1280" clipPath={`url(#${id}-body)`} />
+        <image href="/agent-assets/xiaozhi-ready.webp" width="1280" height="1280" clipPath={`url(#${id}-body)`} />
         <g clipPath={`url(#${id}-hand)`}>
-          <image className="home-mascot-hand-rest" href="/agent-assets/xiaozhi-ready.png" width="1280" height="1280" />
-          <image className="home-mascot-hand-write" href="/agent-assets/xiaozhi-ready-write.png" width="1280" height="1280" />
+          <image className="home-mascot-hand-rest" href="/agent-assets/xiaozhi-ready.webp" width="1280" height="1280" />
+          <image className="home-mascot-hand-write" href="/agent-assets/xiaozhi-ready-write.webp" width="1280" height="1280" />
         </g>
-        <image className="home-mascot-blink" href="/agent-assets/xiaozhi-ready-blink.png" width="1280" height="1280" clipPath={`url(#${id}-eyes)`} />
+        <image className="home-mascot-blink" href="/agent-assets/xiaozhi-ready-blink.webp" width="1280" height="1280" clipPath={`url(#${id}-eyes)`} />
       </svg>
     </span>
   );
@@ -310,8 +382,11 @@ export function Composer({
   onAdd,
   onRemove,
   busy,
+  stopping = false,
+  uploading = false,
   onStop,
   onUpload,
+  onOpenRef,
   compact = false,
   capability,
   teamName,
@@ -324,8 +399,11 @@ export function Composer({
   onAdd: (ref: ContextRef) => void;
   onRemove: (ref: ContextRef) => void;
   busy: boolean;
+  stopping?: boolean;
+  uploading?: boolean;
   onStop?: () => void;
   onUpload: (files: FileList) => void;
+  onOpenRef?: (ref: ContextRef) => void;
   compact?: boolean;
   capability: CapabilityId | null;
   teamName?: string | null;
@@ -338,7 +416,9 @@ export function Composer({
     skills = useRef<HTMLDivElement>(null),
     skillButton = useRef<HTMLButtonElement>(null),
     skillSearch = useRef<HTMLInputElement>(null),
-    [openMenu, setOpenMenu] = useState<'skills' | null>(null);
+    composing = useRef(false),
+    [openMenu, setOpenMenu] = useState<'skills' | null>(null),
+    [dragActive, setDragActive] = useState(false);
   const selectedSkills = refs.filter((ref) => ref.kind === 'skill');
   const materialRefs = refs.filter((ref) => ref.kind !== 'skill')
     .map((ref) => withWorkDocumentTitle(ref, workspace.state.data));
@@ -392,7 +472,26 @@ export function Composer({
     };
   }, [openMenu]);
   return (
-    <div className={`composer ${compact ? 'composer-compact' : ''}`} data-expert-team={expertTeam?.id}>
+    <div
+      className={`composer ${compact ? 'composer-compact' : ''}${dragActive ? ' is-drag-over' : ''}`}
+      data-expert-team={expertTeam?.id}
+      onDragOver={(event) => {
+        if (event.dataTransfer?.types?.includes('Files')) {
+          event.preventDefault();
+          if (!dragActive) setDragActive(true);
+        }
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+          setDragActive(false);
+      }}
+      onDrop={(event) => {
+        if (!event.dataTransfer?.files?.length) return;
+        event.preventDefault();
+        setDragActive(false);
+        if (!uploading) onUpload(event.dataTransfer.files);
+      }}
+    >
       <div className="refs">
         {showLastScope && (sourceBoard && !activeReport ? (
           <details className="ba-composer-scope">
@@ -402,21 +501,41 @@ export function Composer({
             </div>
           </details>
         ) : <span className="ba-composer-scope">上次查询 · {lastScopes.join(' / ')}</span>)}
-        {materialRefs.filter(ref => !(ref.kind === 'business-board' && (showLastScope || activeReport))).map((ref) => (
-          <span className={`ref-chip${ref.kind === 'business-board' || ref.followupId ? ' ba-wrapped-ref' : ''}`} key={`${ref.kind}/${ref.id}`}>
-            <Icon name={ref.kind === 'file' ? 'attach' : 'link'} size={13} />
-            <span>
-              {ref.kind === 'business-board' ? '来源看板 · ' : ref.followupId ? '引用报告 · ' : ''}{ref.title}
-              {ref.version ? ` · ${ref.version}` : ''}
-            </span>
-            <button
-              aria-label={`移除${ref.title}`}
-              onClick={() => onRemove(ref)}
+        {materialRefs.filter(ref => !(ref.kind === 'business-board' && (showLastScope || activeReport))).map((ref) => {
+          const label = `${ref.kind === 'business-board' ? '来源看板 · ' : ref.followupId ? '引用报告 · ' : ''}${ref.title}${ref.version ? ` · ${ref.version}` : ''}`;
+          return (
+            <span
+              className={`ref-chip${ref.kind === 'business-board' || ref.followupId ? ' ba-wrapped-ref' : ''}`}
+              data-ref-kind={ref.kind}
+              key={`${ref.kind}/${ref.id}`}
             >
-              <Icon name="close" size={12} />
-            </button>
-          </span>
-        ))}
+              {onOpenRef ? (
+                <button
+                  type="button"
+                  className="ref-chip-open"
+                  title={`查看${ref.title}`}
+                  onClick={() => onOpenRef(ref)}
+                >
+                  <Icon name={ref.kind === 'file' ? 'attach' : 'link'} size={13} />
+                  <span>{label}</span>
+                </button>
+              ) : (
+                <>
+                  <Icon name={ref.kind === 'file' ? 'attach' : 'link'} size={13} />
+                  <span>{label}</span>
+                </>
+              )}
+              <button
+                type="button"
+                className="ref-chip-remove"
+                aria-label={`移除${ref.title}`}
+                onClick={() => onRemove(ref)}
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </span>
+          );
+        })}
       </div>
       <label className="sr-only" htmlFor="message-input">
         给{expertTeam?.label ?? '财小智'}发送消息
@@ -429,12 +548,33 @@ export function Composer({
           getCapability(capability)?.placeholder ??
           (refs.some((ref) => ref.kind === 'audit' && ref.id !== 'batch')
             ? '询问这张单据的明细、风险或审批进度…'
-            : compact ? '继续补充需求…' : '交给财小智，从一件事开始…')
+            : refs.some((ref) => ref.kind === 'file')
+              ? '说说要对已上传文件做什么…'
+              : compact ? '继续补充需求…' : '交给财小智，从一件事开始…')
         }
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onCompositionStart={() => {
+          composing.current = true;
+        }}
+        onCompositionEnd={() => {
+          composing.current = false;
+        }}
+        onPaste={(e) => {
+          const files = e.clipboardData?.files;
+          if (files && files.length > 0 && !uploading) {
+            e.preventDefault();
+            onUpload(files);
+          }
+        }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+          if (
+            e.key === 'Enter' &&
+            !e.shiftKey &&
+            !composing.current &&
+            !e.nativeEvent.isComposing &&
+            e.nativeEvent.keyCode !== 229
+          ) {
             e.preventDefault();
             if (value.trim() && !busy) onSend();
           }
@@ -443,12 +583,14 @@ export function Composer({
       <div className="composer-toolbar">
         <div className="composer-tools">
           <button
+            type="button"
             className="composer-tool"
+            disabled={uploading}
             onClick={() => input.current?.click()}
-            aria-label="上传文件"
+            aria-label={uploading ? '正在上传文件' : '上传文件'}
           >
             <Icon name="attach" size={15} />
-            <span>上传文件</span>
+            <span>{uploading ? '上传中…' : '上传文件'}</span>
           </button>
           {!expertTeam && <div
             className="composer-skills"
@@ -467,6 +609,7 @@ export function Composer({
               className={`composer-skill-control ${selectedSkills.length ? 'selected' : ''}`}
             >
               <button
+                type="button"
                 ref={skillButton}
                 className="composer-tool"
                 aria-label={
@@ -496,6 +639,7 @@ export function Composer({
               </button>
               {selectedSkills.length > 0 && (
                 <button
+                  type="button"
                   className="composer-skill-clear"
                   aria-label="清除已选技能"
                   title="清除已选技能"
@@ -528,6 +672,9 @@ export function Composer({
               </div>
             )}
           </div>}
+          {!expertTeam && (capability || compact) && (
+            <span className="composer-tool-divider" aria-hidden="true" />
+          )}
           {(capability || compact) && (
             <CapabilityControl
               value={capability}
@@ -537,6 +684,7 @@ export function Composer({
           )}
           {capability === 'translation' && (
             <button
+              type="button"
               className="composer-tool"
               onClick={() =>
                 workspace.openPanel({
@@ -557,24 +705,28 @@ export function Composer({
           )}
         </div>
         <div className="inline-actions">
-          <span className="composer-hint">Enter 发送</span>
+          <span className="composer-hint">
+            {busy ? (stopping ? '正在停止…' : '草稿已保留') : 'Enter 发送'}
+          </span>
           {busy ? (
             <button
-              className="send-button"
-              aria-label={onStop ? '停止当前任务' : '正在发送请求'}
-              disabled={!onStop}
+              type="button"
+              className="send-button is-stop"
+              aria-label={stopping ? '正在停止' : onStop ? '停止当前任务' : '正在发送请求'}
+              disabled={!onStop || stopping}
               onClick={onStop}
             >
-              <Icon name={onStop ? 'stop' : 'clock'} size={16} />
+              <Icon name={onStop && !stopping ? 'stop' : 'clock'} size={15} />
             </button>
           ) : (
             <button
+              type="button"
               className="send-button"
               aria-label="发送消息"
               disabled={!value.trim()}
               onClick={onSend}
             >
-              <Icon name="up" size={18} />
+              <Icon name="up" size={17} />
             </button>
           )}
         </div>
@@ -707,34 +859,65 @@ export function ChatPage({
   task,
   composer,
   busy,
+  stopping = false,
   activity,
   phase,
   streamingRunId,
+  runtimeStatus,
+  onReconnect,
   onRename,
+  onSaveTitle,
   onStop,
   onRetrySend,
+  sidebarCollapsed = false,
+  onToggleSidebar,
+  headerExtra,
+  onOpenRef,
 }: {
   task: Task;
   composer: React.ReactNode;
   busy: boolean;
+  stopping?: boolean;
   activity?: string;
   phase?: string;
   streamingRunId?: string;
-  onRename: () => void;
+  runtimeStatus?: RuntimeStatus;
+  onReconnect?: () => void;
+  onRename?: () => void;
+  onSaveTitle?: (name: string) => void;
   onStop?: () => void;
   onRetrySend?: () => void;
+  sidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
+  headerExtra?: React.ReactNode;
+  onOpenRef?: (ref: ContextRef) => void;
 }) {
   const w = useWorkspace(),
     scroll = useRef<HTMLDivElement>(null),
     content = useRef<HTMLDivElement>(null),
+    renameInput = useRef<HTMLInputElement>(null),
     followLatest = useRef(true);
   const [showLatest, setShowLatest] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(task.title);
   const latestQuestionId = task.messages.filter((message) => message.role === 'user').at(-1)?.id;
   const scrollToLatest = () => {
     followLatest.current = true;
     setShowLatest(false);
     if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
   };
+
+  useEffect(() => {
+    setRenaming(false);
+    setTitleDraft(task.title);
+  }, [task.id]);
+
+  useEffect(() => {
+    if (renaming) {
+      renameInput.current?.focus();
+      renameInput.current?.select();
+    }
+  }, [renaming]);
 
   useEffect(() => {
     scrollToLatest();
@@ -755,6 +938,20 @@ export function ChatPage({
     if (scroll.current) observer.observe(scroll.current);
     return () => observer.disconnect();
   }, []);
+
+  const startRename = () => {
+    if (onSaveTitle) {
+      setTitleDraft(task.title);
+      setRenaming(true);
+    } else {
+      onRename?.();
+    }
+  };
+  const commitRename = () => {
+    const next = titleDraft.trim();
+    if (next && next !== task.title) onSaveTitle?.(next);
+    setRenaming(false);
+  };
 
   const last = task.messages.filter((m) => m.role === 'assistant').at(-1);
   const currentRunId = task.activeRunId ?? streamingRunId;
@@ -778,6 +975,7 @@ export function ChatPage({
   const activeTeam = isExpertTeam(task.capability)
     ? getCapability(task.capability, task.expertTeamName)?.label
     : undefined;
+  const activeTeamId = isExpertTeam(task.capability) ? task.capability : undefined;
   const canResume =
     !busy &&
     !pendingId &&
@@ -829,23 +1027,82 @@ export function ChatPage({
   return (
     <div className="chat-page">
       <div className="chat-titlebar">
-        <h1>{task.title}</h1>
+        <div className="chat-titlebar-main">
+          {sidebarCollapsed && onToggleSidebar && (
+            <button
+              type="button"
+              className="icon-btn sidebar-toggle-btn"
+              aria-label="展开侧栏"
+              title="展开侧栏"
+              onClick={onToggleSidebar}
+            >
+              <Icon name="layout" size={17} />
+            </button>
+          )}
+          {renaming ? (
+            <form
+              className="chat-rename-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                commitRename();
+              }}
+            >
+              <input
+                ref={renameInput}
+                aria-label="编辑会话标题"
+                value={titleDraft}
+                maxLength={60}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    setRenaming(false);
+                  }
+                }}
+              />
+            </form>
+          ) : (
+            <h1
+              title={task.title}
+              onDoubleClick={onSaveTitle ? startRename : undefined}
+            >
+              {task.title}
+            </h1>
+          )}
+        </div>
         <div className="inline-actions">
           {pending && activeTeam && <span className="chat-question-team">{activeTeam}</span>}
-          {!busy && (
-            <Badge tone={taskStatusTone(task.status)}>
-              {task.status}
-            </Badge>
-          )}
+          <Badge tone={busy ? 'blue' : taskStatusTone(task.status)}>
+            {busy ? '处理中' : task.status}
+          </Badge>
           <button
+            type="button"
             className="icon-btn"
             aria-label="重命名会话"
-            onClick={onRename}
+            title="重命名会话"
+            onClick={startRename}
           >
-            <Icon name="edit" size={16} />
+            <Icon name="edit" size={15} />
           </button>
+          {headerExtra}
         </div>
       </div>
+      {runtimeStatus?.state === 'offline' && (
+        <div className="chat-connection-banner" role="status">
+          <Icon name="error-circle" size={15} />
+          <span>{runtimeStatus.message || '本地服务连接已断开，请恢复服务后重试。'}</span>
+          {onReconnect && (
+            <button
+              type="button"
+              className="chat-connection-retry"
+              onClick={onReconnect}
+            >
+              重新连接
+            </button>
+          )}
+        </div>
+      )}
       <div
         className="chat-thread"
         ref={scroll}
@@ -875,9 +1132,13 @@ export function ChatPage({
             const visibleCards = visibleMessageCards(message);
             const messageRunning = isRunningMessage(message);
             const sendFailed = onRetrySend && message.id === last?.id;
+            const authorTeamId = isExpertTeam(message.capability)
+              ? message.capability
+              : messageRunning ? activeTeamId : undefined;
             const author = isExpertTeam(message.capability)
               ? getCapability(message.capability, message.expertTeamName)?.label
               : messageRunning ? activeTeam : undefined;
+            const timeLabel = formatMessageTime(message.createdAt);
             const progressStatus = messageProgressStatus(
               message,
               pendingId,
@@ -896,12 +1157,61 @@ export function ChatPage({
             return (
               <article className={`message ${message.role}`} key={message.id} data-team-author={author || undefined}>
                 {message.role === 'user' ? (
-                  <div className="user-bubble">{message.text}</div>
+                  <div className="user-message-wrap">
+                    {message.refs && message.refs.length > 0 && (
+                      <div className="user-message-refs">
+                        {message.refs.map((ref) => {
+                          const label = `${ref.kind === 'business-board' ? '来源看板 · ' : ref.followupId ? '引用报告 · ' : ''}${ref.title}${ref.version ? ` · ${ref.version}` : ''}`;
+                          const iconName =
+                            ref.kind === 'file'
+                              ? 'attach'
+                              : ref.kind === 'skill'
+                                ? 'spark'
+                                : 'link';
+                          return onOpenRef ? (
+                            <button
+                              key={`${ref.kind}/${ref.id}`}
+                              type="button"
+                              className="user-ref-pill is-clickable"
+                              data-ref-kind={ref.kind}
+                              onClick={() => onOpenRef(ref)}
+                            >
+                              <Icon name={iconName} size={12} />
+                              <span>{label}</span>
+                            </button>
+                          ) : (
+                            <span
+                              key={`${ref.kind}/${ref.id}`}
+                              className="user-ref-pill"
+                              data-ref-kind={ref.kind}
+                            >
+                              <Icon name={iconName} size={12} />
+                              <span>{label}</span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div className="user-bubble">{message.text}</div>
+                    {(timeLabel || message.text.trim()) && (
+                      <div className="user-message-meta">
+                        {timeLabel && <time className="message-time">{timeLabel}</time>}
+                        {message.text.trim() && (
+                          <CopyButton
+                            text={message.text}
+                            label="复制消息"
+                            onFail={() => w.notify('复制失败，请选择文字复制')}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div>
                     <div className="assistant-name">
-                      <XiaozhiMark className="reply-mark" />
+                      <ReplyAvatar teamId={authorTeamId} />
                       <span>{author ?? '财小智'}</span>
+                      {timeLabel && <time className="message-time">{timeLabel}</time>}
                     </div>
                     {!sendFailed && (
                       <RunProgress
@@ -909,6 +1219,7 @@ export function ChatPage({
                         runStartedAt={message.runStartedAt}
                         runFinishedAt={message.runFinishedAt}
                         running={messageRunning}
+                        stopping={stopping}
                         onStop={onStop}
                         status={progressStatus}
                         activity={messageRunning ? activity : undefined}
@@ -918,7 +1229,16 @@ export function ChatPage({
                     {message.text.trim() &&
                       (!message.question ||
                         message.text !== message.question.title) && (
-                        <MessageText text={message.text} />
+                        sendFailed || message.id.startsWith('failure-') ? (
+                          <div className="chat-error-callout" role="alert">
+                            <Icon name="error-circle" size={16} />
+                            <div className="chat-error-callout-body">
+                              <MessageText text={message.text} />
+                            </div>
+                          </div>
+                        ) : (
+                          <MessageText text={message.text} streaming={messageRunning} />
+                        )
                       )}
                     {message.question && (
                       <QuestionCard
@@ -945,21 +1265,13 @@ export function ChatPage({
                         ))}
                       </div>
                     )}
-                    {message.text.trim() && (
+                    {message.text.trim() && !messageRunning && (
                       <div className="message-tools">
-                        <button
-                          className="icon-btn"
-                          title="复制回复"
-                          aria-label="复制回复"
-                          onClick={() => {
-                            navigator.clipboard?.writeText(message.text).then(
-                              () => w.notify('已复制回复'),
-                              () => w.notify('复制失败，请选择文字复制'),
-                            );
-                          }}
-                        >
-                          <Icon name="copy" size={13} />
-                        </button>
+                        <CopyButton
+                          text={message.text}
+                          label="复制回复"
+                          onFail={() => w.notify('复制失败，请选择文字复制')}
+                        />
                       </div>
                     )}
                   </div>
@@ -971,11 +1283,12 @@ export function ChatPage({
             <article className="message assistant" data-team-author={activeTeam}>
               <div>
                 <div className="assistant-name">
-                  <XiaozhiMark className="reply-mark" />
+                  <ReplyAvatar teamId={activeTeamId} />
                   <span>{activeTeam ?? '财小智'}</span>
                 </div>
                 <RunProgress
                   running
+                  stopping={stopping}
                   activity={activity}
                   phase={phase}
                   onStop={task.activeRunId ? onStop : undefined}
@@ -997,7 +1310,7 @@ export function ChatPage({
           {!busy && !pending && !canResume && suggestions.length > 0 && (
             <div className="suggestions">
               {suggestions.map((s) => (
-                <button onClick={() => w.send(s)} key={s}>
+                <button type="button" onClick={() => w.send(s)} key={s}>
                   {s}
                   <Icon name="chevron" size={12} />
                 </button>
@@ -1010,11 +1323,11 @@ export function ChatPage({
         <div className="chat-latest">
           <button
             type="button"
-            className="chat-latest-button"
+            className={`chat-latest-button${pendingId ? ' is-attention' : ''}`}
             onClick={scrollToLatest}
           >
             <Icon name="down" size={13} />
-            回到最新
+            {pendingId ? '有待回答问题' : '回到最新'}
           </button>
         </div>
       )}

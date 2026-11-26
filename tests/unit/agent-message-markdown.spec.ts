@@ -38,4 +38,16 @@ describe('模型回复的安全 Markdown 呈现', () => {
       { kind: 'code', text: '- **原样**\n<script>' },
     ]);
   });
+  it('支持引用块与水平分割线用于制度依据与分区呈现', () => {
+    expect(
+      parseMessageMarkdown('> 第十二条：上海住宿标准 600 元/晚\n> 超标需说明\n\n---\n\n请核对。'),
+    ).toEqual([
+      {
+        kind: 'blockquote',
+        text: '第十二条：上海住宿标准 600 元/晚\n超标需说明',
+      },
+      { kind: 'hr' },
+      { kind: 'paragraph', text: '请核对。' },
+    ]);
+  });
 });

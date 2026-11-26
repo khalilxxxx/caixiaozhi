@@ -50,6 +50,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  refs?: ContextRef[];
   cards?: ResultCard[];
   submissionPhase?: 'collecting' | 'ready';
   tools?: ToolStep[];

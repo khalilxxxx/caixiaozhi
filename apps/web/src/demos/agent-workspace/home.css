@@ -7,7 +7,7 @@
   min-height: 40px;
   max-width: 100%;
   padding-inline: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 0;
 }
 
 .agent-first .brand-wordmark {
@@ -15,6 +15,10 @@
   width: 108px;
   max-width: 100%;
   height: auto;
+}
+
+.agent-first.mode-operations .sidebar-brand-row {
+  justify-content: center;
 }
 
 .agent-first.mode-operations .sidebar .brand {
@@ -356,7 +360,7 @@
 }
 
 .workspace-home .home-greeting h1,
-.chat-page .assistant-name > span:last-child {
+.chat-page .assistant-name > span:not(.xiaozhi-mark) {
   overflow-wrap: anywhere;
 }
 
