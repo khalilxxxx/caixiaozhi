@@ -21,7 +21,7 @@ import {
 import './documents.css';
 import './document-progress-list.css';
 import { DocumentCard } from './DocumentProgressCard';
-import { progressDocumentHref } from './work-document-link';
+import { progressDocumentHref, sourceUrl } from './work-document-link';
 import { getDocumentProgress } from './document-progress';
 import { ApprovalNodeCard } from './ApprovalNodeCard';
 import { WorkDocumentDetails } from './WorkDocumentDetails';
@@ -537,7 +537,9 @@ export function DocumentPanelActions({
             target="_blank"
             rel="noopener noreferrer"
           >
-            查看详情
+            {doc.status === 'needs_action' && sourceUrl(doc.sourceUrl)
+              ? '前往原单办理'
+              : '查看详情'}
             <Icon name="external" size={14} />
           </a>
         ) : (

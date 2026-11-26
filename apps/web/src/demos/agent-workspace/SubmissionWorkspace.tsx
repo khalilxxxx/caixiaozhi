@@ -50,6 +50,10 @@ export { SUBMISSIONS_KEY } from './submission-state.js';
 import './submission.css';
 import './submission-expense-shell.css';
 import { api } from './runtime-client';
+import {
+  beginSubmissionAttempt, clearSubmissionAttempt, recordSubmissionReceipt,
+  submitWasRejected, useSubmissionAttempt, type SubmissionAttempt,
+} from './submission-attempt';
 
 export { submissionLabels } from './submission-model.js';
 
@@ -919,7 +923,16 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
   const [error, setError] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const submissionKeys = useRef(new Map<string, string>());
+  const attempt = useSubmissionAttempt(id);
+  const [retryKey, setRetryKey] = useState('');
+  const submissionOperation = useRef(false);
+  const panelMounted = useRef(false);
+  const currentTaskId = useRef(workspace.state.activeTask);
+  currentTaskId.current = workspace.state.activeTask;
+  useEffect(() => {
+    panelMounted.current = true;
+    return () => { panelMounted.current = false; };
+  }, []);
   const editingExpense = !!workspace.state.data.submissionExpenseEditors?.[id];
   const [view, setView] = useState<'overview' | 'edit'>(() =>
     editingExpense ||
@@ -1153,27 +1166,39 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
     }
   };
 
-  const submit = async () => {
-    if (!canSubmit || !confirmed || busy) {
-      setError('请核对当前单据及检查结果。');
+  type AcceptedSubmission = {
+    request: SubmissionRequest;
+    receipt: { status: string; businessId: string };
+  };
+  const request =
+    state.requests.find((item) => item.id === panel.data?.requestId) ??
+    state.requests.find((item) => item.draftId === id);
+  const recordedVersion =
+    request?.localStatus === 'accepted' ? request.snapshot.version : undefined;
+  useEffect(() => {
+    if (attempt && recordedVersion === attempt.version)
+      clearSubmissionAttempt(id, attempt);
+  }, [id, attempt?.key, recordedVersion]);
+
+  const showReceipt = async (
+    original: SubmissionAttempt,
+    result: AcceptedSubmission,
+    announce: boolean,
+  ) => {
+    recordSubmissionReceipt(id, original, {
+      requestId: result.request.id,
+      businessId: result.receipt.businessId,
+    });
+    // Keep the known receipt across reloads if synchronizing the workspace fails.
+    await workspace.refresh();
+    clearSubmissionAttempt(id, original);
+    if (
+      !panelMounted.current ||
+      currentTaskId.current !== workspace.state.activeTask
+    )
       return;
-    }
-    setBusy(true);
-    setError('');
-    const identity = `${id}:${saved.version}`;
-    const idempotencyKey =
-      submissionKeys.current.get(identity) ?? crypto.randomUUID();
-    submissionKeys.current.set(identity, idempotencyKey);
-    try {
-      await workspace.flush();
-      const result = await api<{
-        request: SubmissionRequest;
-        receipt: { businessId: string; status: string };
-      }>('/business/submit', { id, version: saved.version, idempotencyKey });
-      await workspace.refresh();
-      workspace.openPanel(
-        submissionPanel(id, { requestId: result.request.id }),
-      );
+    workspace.openPanel(submissionPanel(id, { requestId: result.request.id }));
+    if (announce) {
       workspace.setTaskStatus('本地已受理');
       workspace.message(
         `本地业务服务已受理，单号 ${result.receipt.businessId}。`,
@@ -1188,20 +1213,139 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
           },
         ],
       );
+    }
+  };
+
+  const submit = async (retry?: SubmissionAttempt) => {
+    if (submissionOperation.current || busy) return;
+    if (retry ? retryKey !== retry.key : !canSubmit || !confirmed || attempt) {
+      setError('请核对当前单据及检查结果。');
+      return;
+    }
+    submissionOperation.current = true;
+    setBusy(true);
+    setError('');
+    setRetryKey('');
+    try {
+      await workspace.flush();
+      const original = retry ?? beginSubmissionAttempt(id, saved.version);
+      let result: AcceptedSubmission;
+      try {
+        result = await api<AcceptedSubmission>('/business/submit', {
+          id,
+          version: original.version,
+          idempotencyKey: original.key,
+        });
+      } catch (error) {
+        if (submitWasRejected(error)) {
+          clearSubmissionAttempt(id, original);
+          setConfirmed(false);
+          await workspace.refresh().catch(() => undefined);
+        }
+        throw error;
+      }
+      await showReceipt(original, result, true);
     } catch (error) {
       setError(
         error instanceof Error
           ? error.message
-          : '提交结果未取得，请查询回执后重试',
+          : '未取得提交结果，请查询原请求。',
       );
     } finally {
+      submissionOperation.current = false;
       setBusy(false);
     }
   };
 
-  const request =
-    state.requests.find((item) => item.id === panel.data?.requestId) ??
-    state.requests.find((item) => item.draftId === id);
+  const lookupReceipt = async (original: SubmissionAttempt) => {
+    if (submissionOperation.current) return;
+    submissionOperation.current = true;
+    setBusy(true);
+    setError('');
+    setRetryKey('');
+    try {
+      const params = new URLSearchParams({
+        id,
+        version: String(original.version),
+        idempotencyKey: original.key,
+      });
+      const result = await api<
+        | ({ status: 'accepted' } & AcceptedSubmission)
+        | { status: 'unrecorded'; canRetry: boolean }
+      >('/business/submission-receipt?' + params);
+      if (result.status === 'accepted') {
+        await showReceipt(original, result, false);
+      } else if (result.canRetry && !original.receipt) {
+        setRetryKey(original.key);
+      } else {
+        await workspace.refresh();
+        clearSubmissionAttempt(id, original);
+        setConfirmed(false);
+        setError('未查到此请求的回执，草稿状态已更新，请重新核对。');
+      }
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : '回执查询失败，请重试。',
+      );
+    } finally {
+      submissionOperation.current = false;
+      setBusy(false);
+    }
+  };
+
+  if (attempt && !request?.localStatus) {
+    return (
+      <div className={panelClass}>
+        <div className="rs-receipt-state">
+          <span>
+            <Icon name={attempt.receipt ? 'check' : 'clock'} size={26} />
+          </span>
+          <div>
+            <h3>{attempt.receipt ? '本地已受理' : '提交结果待核实'}</h3>
+          </div>
+        </div>
+        <dl className="rs-definition">
+          <dt>单据事由</dt>
+          <dd>{saved.purpose}</dd>
+          <dt>提交版本</dt>
+          <dd>v{attempt.version}</dd>
+          {attempt.receipt && (
+            <>
+              <dt>业务单号</dt>
+              <dd>{attempt.receipt.businessId}</dd>
+            </>
+          )}
+        </dl>
+        <p role="status">
+          {attempt.receipt
+            ? '已取得本地受理回执。'
+            : retryKey === attempt.key
+              ? '暂未查到受理记录，可使用原请求重新提交。'
+              : '请查询原提交请求，确认是否已受理。'}
+        </p>
+        {error && (
+          <p className="rs-error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="rs-panel-actions">
+          <Button
+            variant="primary"
+            icon="refresh"
+            disabled={busy}
+            onClick={() => void lookupReceipt(attempt)}
+          >
+            查询原请求回执
+          </Button>
+          {retryKey === attempt.key && (
+            <Button disabled={busy} onClick={() => void submit(attempt)}>
+              使用原请求重试
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
   if (saved.status === 'awaiting_receipt' || panel.data?.requestId) {
     const snapshot = request?.snapshot ?? saved;
     const receiptDetails = (
@@ -1449,7 +1593,7 @@ function ExistingSubmissionPanel({ panel }: { panel: PanelSpec }) {
           <Button
             variant="primary"
             disabled={!canSubmit || !confirmed || busy}
-            onClick={submit}
+            onClick={() => void submit()}
           >
             确认提交
           </Button>

@@ -11,6 +11,7 @@ import {
 } from './submission-model';
 import './submission-card.css';
 import { activeSubmissionDefaults } from './submission-defaults';
+import { useSubmissionAttempt } from './submission-attempt';
 
 function periodLabel(draft: SubmissionDraft) {
   const period = draftPeriod(draft);
@@ -117,6 +118,7 @@ export function SubmissionCard({
 }) {
   const w = useWorkspace();
   const id = resolveDraftId(card.id);
+  const attempt = useSubmissionAttempt(id);
   const requestId = card.data?.requestId || card.data?.receipt?.requestId;
   const receiptRequest = requestId
     ? readSubmissionState(w.state.data).requests.find(
@@ -159,8 +161,10 @@ export function SubmissionCard({
   const current = getSubmissionSummary(w.state.data, id);
   const shown = latest ? current : card;
   const snapshot = shown.data?.snapshot as SubmissionDraft | undefined;
-  const pending =
-    current.status === '待回执' || current.status === '本地已受理';
+  const knownReceipt = current.status === '本地已受理' || !!attempt?.receipt;
+  const unresolved = !!attempt && !knownReceipt;
+  const pending = current.status === '待回执' || knownReceipt || unresolved;
+  const displayStatus = knownReceipt ? '本地已受理' : unresolved ? '提交结果待核实' : current.status;
   const open = (view?: string) =>
     w.openPanel({
       kind: 'submission',
@@ -213,8 +217,16 @@ export function SubmissionCard({
             {snapshot?.applicant || '申请人待补充'}
           </small>
         </div>
-        <Badge tone={current.tone}>
-          {current.status}
+        <Badge
+          tone={
+            knownReceipt
+              ? 'success'
+              : pending || missing
+                ? 'warning'
+                : current.tone
+          }
+        >
+          {displayStatus}
         </Badge>
       </header>
       <p className="sc-purpose">{snapshot?.purpose || '单据事由待补充'}</p>
@@ -234,13 +246,15 @@ export function SubmissionCard({
       <footer>
         <span className="sc-version">
           v{current.data?.version ?? 1}
-          {current.status === '有未保存更改'
-            ? ' · 未保存'
-            : pending
-              ? current.status === '本地已受理'
-                ? ' · 本地已受理'
-                : ' · 等待回执'
-              : ' · 尚未提交'}
+          {unresolved
+            ? ''
+            : current.status === '有未保存更改'
+              ? ' · 未保存'
+              : pending
+                ? knownReceipt
+                  ? ' · 本地已受理'
+                  : ' · 等待回执'
+                : ' · 尚未提交'}
         </span>
         <div>
           <Button variant="link" onClick={() => open()}>
@@ -250,7 +264,13 @@ export function SubmissionCard({
             variant="primary"
             onClick={() => open(missing && !pending ? 'edit' : undefined)}
           >
-            {pending ? '查看回执' : missing ? '补充信息' : '核对单据'}
+            {unresolved
+              ? '核实提交结果'
+              : pending
+                ? '查看回执'
+                : missing
+                  ? '补充信息'
+                  : '核对单据'}
           </Button>
         </div>
       </footer>

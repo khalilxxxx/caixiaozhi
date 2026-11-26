@@ -63,6 +63,7 @@ export interface ChatMessage {
   createdAt?: number;
   question?: ClarificationQuestion;
   questionAnswer?: QuestionAnswerInput;
+  asideForQuestionId?: string;
 }
 export interface Task {
   id: string;

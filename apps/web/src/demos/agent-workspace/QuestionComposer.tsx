@@ -101,6 +101,17 @@ export function QuestionComposer({
   const hasAnswer = selected.length > 0 || response.text.trim().length > 0;
   const hasDetails = question.options.some((option) => option.description);
 
+  const acceptedAside = w.state.tasks.find((task) => task.id === taskId)?.messages
+    ?.filter((message) => message.asideForQuestionId === question.id).at(-1);
+  const observedAside = useRef(acceptedAside?.id);
+  useEffect(() => {
+    if (acceptedAside && acceptedAside.id !== observedAside.current) {
+      setResponse((current) => current.text.trim() === acceptedAside.text
+        ? { selected: [], text: '' } : current);
+    }
+    observedAside.current = acceptedAside?.id;
+  }, [acceptedAside?.id, acceptedAside?.text]);
+
   useEffect(() => {
     writeQuestionResponse(taskId, question.id, response);
   }, [taskId, question.id, response]);

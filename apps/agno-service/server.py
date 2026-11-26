@@ -20,6 +20,7 @@ from store import Store, Conflict
 from business import Business, BusinessError
 from agent_runtime import Runtime, generate_rule, model
 from board_conversation import get_board_report, lookup_plan
+from work_conversation import local_work_action
 from rule_service import SemanticRuleService, validate_semantic_rule
 from rule_catalog import demo_cases
 from expert_teams import TeamError, TeamRequest, is_team
@@ -28,8 +29,12 @@ from reimbursement_routes import register_reimbursement_routes
 from scheduled_tasks import ScheduledTasks
 from scheduled_task_routes import register_scheduled_task_routes
 from translation_service import TranslationService, TranslationError
-from clarification_service import QuestionError, answer_question
+from clarification_service import QuestionError, answer_question, reopen_question
 from work_decisions import decision_context, decide
+
+
+class ModelNotConfigured(Exception):
+    """Raised before storing a turn that requires inference."""
 
 
 class QuestionAnswer(BaseModel):
@@ -205,6 +210,13 @@ def create_app(store=None, rule_service=None):
         except Conflict:
             return JSONResponse({'message': '数据已更新，正在重新同步。', **store.snapshot()}, status_code=409)
 
+    @app.post('/api/local/tasks/{task_id}/questions/{question_id}/resume')
+    async def resume_question(task_id: str, question_id: str):
+        restored = store.mutate(lambda state: reopen_question(state, task_id, question_id), only_if_changed=True)
+        if not restored:
+            return JSONResponse({'message': '原草稿已变化，请核对最新内容。', 'workspace': store.snapshot()}, status_code=409)
+        return {'workspace': store.snapshot()}
+
     @app.post('/api/local/runs')
     async def create_run(payload: RunRequest):
         if not payload.message.strip() and payload.questionAnswer is None:
@@ -234,12 +246,13 @@ def create_app(store=None, rule_service=None):
                 plan = lookup_plan(store, current, requested_refs, capability, payload.message)
                 if plan is not None:
                     request_data['businessBoardAction'] = plan
-            if not deferred and not config.API_KEY and 'businessBoardAction' not in request_data:
-                return JSONResponse({'message': '尚未配置模型，请配置本地 AGNO_API_KEY 后重启服务。'}, status_code=503)
             if not deferred and len(runtime.tasks) >= 4:
                 return JSONResponse({'message': '正在处理其他任务，请稍后再试。'}, status_code=429)
             def begin(state):
                 context, user_text = answer_question(state, payload.taskId, request_data.get('questionAnswer'), payload.message)
+                if not deferred and not config.API_KEY and 'businessBoardAction' not in request_data:
+                    if team or not local_work_action(user_text, capability, context):
+                        raise ModelNotConfigured()
                 task = next((t for t in state['tasks'] if t['id'] == payload.taskId), None)
                 if task is None:
                     task = {'id': payload.taskId, 'title': user_text[:24], 'status': '处理中', 'type': 'chat', 'messages': [], 'input': '', 'refs': [], 'updated': '刚刚'}
@@ -247,10 +260,13 @@ def create_app(store=None, rule_service=None):
                 messages = task['messages']
                 user_message = {'id': 'user-' + uuid.uuid4().hex, 'role': 'user', 'text': user_text, 'createdAt': int(time.time()*1000)}
                 if context:
+                    request_data['questionContext'] = context
+                    if context['mode'] == 'policy_lookup':
+                        user_message['asideForQuestionId'] = context['question']['id']
+                if context and context['mode'] != 'policy_lookup':
                     question = context['question']
                     user_message['questionAnswer'] = {'questionId': question['id'], **question.get('answer', {}),
                                                       'deferred': deferred, 'mode': context['mode']}
-                    request_data['questionContext'] = context
                     # Ordinary text may already be present from the client's optimistic save.
                     if messages and messages[-1].get('role') == 'user' and messages[-1].get('text') == user_text and not messages[-1].get('questionAnswer'):
                         messages[-1]['questionAnswer'] = user_message['questionAnswer']
@@ -258,11 +274,21 @@ def create_app(store=None, rule_service=None):
                         messages.append(user_message)
                 elif not messages or messages[-1].get('role') != 'user' or messages[-1].get('text') != user_text:
                     messages.append(user_message)
+                elif user_message.get('asideForQuestionId'):
+                    messages[-1]['asideForQuestionId'] = user_message['asideForQuestionId']
                 request_data['message'] = user_text
                 keep_composer = bool(payload.useSavedComposer and current is not None and not context)
                 request_data['useSavedComposer'] = keep_composer
                 if context or ('refs' not in payload.model_fields_set and not keep_composer):
                     request_data['refs'] = task.get('refs', [])
+                if context and context['mode'] != 'policy_lookup' and (target := context['question'].get('draftId')):
+                    # Answer the object that asked, even if the composer now points at another draft.
+                    current_refs = request_data['refs']
+                    if [ref.get('id') for ref in current_refs if ref.get('kind') == 'submission'] != [target]:
+                        draft = state['data']['submissions']['drafts'][target]
+                        request_data['refs'] = [ref for ref in current_refs if ref.get('kind') != 'submission'] + [
+                            {'kind': 'submission', 'id': target, 'title': draft['title']}]
+                        keep_composer = request_data['useSavedComposer'] = True
                 if team:
                     request_data['expertTeamName'] = team.name
                     team.visible_refs(request_data['refs'])
@@ -280,7 +306,10 @@ def create_app(store=None, rule_service=None):
             if deferred:
                 store.mutate(begin)
             else:
-                store.create_run(run_id, payload.taskId, request_data, initialize=begin)
+                try:
+                    store.create_run(run_id, payload.taskId, request_data, initialize=begin)
+                except ModelNotConfigured:
+                    return JSONResponse({'message': '尚未配置模型，请配置本地 AGNO_API_KEY 后重启服务。'}, status_code=503)
         if run_id:
             runtime.launch(run_id)
         return {'runId': run_id, 'taskId': payload.taskId, 'workspace': store.snapshot()}
@@ -405,6 +434,10 @@ def create_app(store=None, rule_service=None):
             raise ValueError('提交需要当前版本和幂等编号。')
         return await asyncio.to_thread(business.submit_draft, payload.get('id', 'expense'), payload['version'], payload['idempotencyKey'])
 
+    @app.get('/api/local/business/submission-receipt')
+    async def lookup_submission_receipt(id: str, version: int, idempotencyKey: str):
+        return business.lookup_submission(id, version, idempotencyKey)
+
     @app.post('/api/local/business/new-draft')
     async def new_draft(payload: dict):
         return business.new_draft(payload.get('id', 'expense'))
@@ -428,6 +461,11 @@ def create_app(store=None, rule_service=None):
     @app.post('/api/local/business/preaudit')
     async def preaudit(payload: dict):
         return await asyncio.to_thread(business.preaudit, payload.get('system'), payload.get('ids'))
+
+    @app.get('/api/local/business/work-inbox')
+    async def work_inbox():
+        queue = business.query_work_inbox('approvals')
+        return {key: queue[key] for key in ('approvals', 'reviewCounts', 'unavailableSources')}
 
     @app.get('/api/local/business/work-documents/{document_id}/decision-context')
     def work_decision_context(document_id: str):

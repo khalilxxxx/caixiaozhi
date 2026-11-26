@@ -260,3 +260,68 @@ def test_saved_cards_reach_model_as_system_context_instead_of_assistant_prose(tm
     assert '"id": "travel"' in system_context
     assert '"kind": "submission"' in system_context
     assert '"submissionPhase": "ready"' in system_context
+
+
+def test_other_conversations_trip_is_read_only_until_selected(tmp_path, monkeypatch):
+    store = prepare_store(tmp_path, monkeypatch)
+    old = Business(store).update_draft('travel', {'purpose': '12月上海出差'})['draft']
+    ref = {'kind': 'submission', 'id': 'travel', 'title': '原差旅草稿'}
+    store.mutate(lambda s: s['tasks'].append({'id': 'original-trip', 'refs': [ref], 'messages': [], 'status': '待核对'}))
+    seen = {}
+    async def collect(tools):
+        seen['read'] = await tools['get_submission_draft']('travel')
+        seen['refs'] = store.get_state()['tasks'][0].get('refs', [])
+        seen['write'] = await tools['update_submission_draft']('travel', {'purpose': '改到了别人的草稿'})
+        seen['check'] = await tools['validate_submission']('travel')
+        fresh = (await tools['new_submission_draft']('travel'))['draft']
+        await tools['update_submission_draft'](fresh['id'], {'purpose': '本次拜访客户'})
+        await tools['ask_user']('下周哪天出发？', [], draft_id=fresh['id'])
+
+    msg = run_journey(store, monkeypatch, 'scope', '下周杭州到上海拜访客户', collect)
+    assert seen['refs'] == []
+    assert seen['write'].get('error') and seen['check'].get('error')
+    assert store.get_state()['data']['submissions']['drafts']['travel'] == old
+    assert msg['question']['draftId'] != 'travel'
+    assert store.get_state()['tasks'][0]['refs'][0]['id'] == msg['question']['draftId']
+
+
+def test_locked_trip_offers_only_actions_supported_by_its_state(tmp_path, monkeypatch):
+    store = prepare_store(tmp_path, monkeypatch)
+    store.mutate(lambda s: s['data']['submissions']['drafts']['travel'].update(status='awaiting_receipt'))
+    async def collect(tools):
+        await tools['get_submission_draft']('travel')
+        await tools['ask_user']('原差旅如何处理？', [{'id': 'new', 'label': '新建申请'}, {'id': 'edit', 'label': '沿用原单并修改日期'}])
+    msg = run_journey(store, monkeypatch, 'lock', '我明天去北京出差', collect)
+    assert [o['id'] for o in msg['question']['options']] == ['view_existing', 'new_application']
+    assert msg['question']['sourceDraftId'] == 'travel'
+    assert not store.get_state()['tasks'][0]['refs']
+
+
+def test_viewing_locked_trip_reads_its_own_submitted_document(tmp_path, monkeypatch):
+    store = prepare_store(tmp_path, monkeypatch)
+    business = Business(store)
+    draft_id = business.new_draft('travel')['draft']['id']
+    draft = business.update_draft(draft_id, {'purpose': '北京客户拜访', 'legs': [{
+        'departureCity': '杭州', 'arrivalCity': '北京', 'departureDate': '2026-11-20',
+        'arrivalDate': '2026-11-20', 'transport': '高铁',
+    }, {
+        'departureCity': '北京', 'arrivalCity': '杭州', 'departureDate': '2026-11-22',
+        'arrivalDate': '2026-11-22', 'transport': '高铁',
+    }]})['draft']
+    check = business.validate_draft(draft_id)
+    assert check['canSubmit'], check['check']['issues']
+    receipt = business.submit_draft(draft_id, draft['version'], 'source-trip')['receipt']
+
+    async def collect(tools):
+        await tools['get_submission_draft'](draft_id)
+        await tools['ask_user']('是否沿用原单？', [{'id': 'edit', 'label': '修改日期'}])
+    asked = run_journey(store, monkeypatch, 'read-lock', '查看原有差旅', collect)['question']
+    assert asked['sourceDocumentId'] == receipt['businessId']
+    context, label = store.mutate(lambda state: answer_question(state, 't', {
+        'questionId': asked['id'], 'optionIds': ['view_existing']}, ''))
+    async def unexpected_model(tools):
+        pytest.fail('选好原单后应直接读其真实进展')
+    reply = run_journey(store, monkeypatch, 'view', label, unexpected_model, question_context=context)
+    assert receipt['businessId'] in reply['text']
+    assert reply['cards'][0]['data']['items'][0]['id'] == receipt['businessId']
+    assert len(store.get_state()['data']['submissions']['requests']) == 1

@@ -53,6 +53,17 @@
 .dp-node-meta time {
   color: #5b6979;
 }
+.dp-node-next {
+  display: grid;
+  gap: 4px;
+  color: #374b60;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.dp-node-next p {
+  margin: 0;
+}
 @media (max-width: 480px) {
   .dp-node-card {
     padding: 12px 14px;

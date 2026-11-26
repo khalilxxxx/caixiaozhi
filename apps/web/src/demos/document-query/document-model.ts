@@ -24,6 +24,7 @@ export interface DocumentStep {
 export interface GenericDocument {
   key: string;
   source: { id: string; label: string };
+  sourceUrl?: string;
   typeId: string;
   typeLabel: string;
   id: string;

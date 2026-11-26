@@ -14,6 +14,8 @@ export function ApprovalNodeCard({ document }: { document: GenericDocument }) {
       : '当前办理节点'
     : '最近办理节点';
   const time = businessTime(node.time);
+  const needsAction = document.status === 'needs_action';
+  const reason = document.details?.find((field) => field.label === '退回原因')?.value;
   return (
     <section className="dp-node-card" aria-label="审批进展">
       <header>
@@ -39,6 +41,12 @@ export function ApprovalNodeCard({ document }: { document: GenericDocument }) {
           {node.time && (
             <time>{current && !time.endsWith('起') ? time + ' 起' : time}</time>
           )}
+        </div>
+      )}
+      {needsAction && (
+        <div className="dp-node-next">
+          {reason && <p>退回原因：{reason}</p>}
+          <p>请在{document.source.label}按原单号 {document.id} 继续办理。</p>
         </div>
       )}
     </section>

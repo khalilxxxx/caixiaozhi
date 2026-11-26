@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useWorkspace, type PanelSpec } from './workspace';
 import { Button, Empty, Icon } from './ui';
+import { api } from './runtime-client';
 import {
   INITIAL_RULES_SUBMISSION,
   readAuditReview,
@@ -26,7 +27,11 @@ const labels = {
   unknown: '待核实',
   clear: '未发现异常',
 };
-const rank = { attention: 0, unknown: 1, clear: 2 };
+type WorkQueue = {
+  approvals: { id: string; category: Status }[];
+  unavailableSources: string[];
+};
+const sourceLabels: Record<string, string> = { expense: '费用报销系统', oa: 'OA办公系统' };
 const outcomes = ['attention', 'unknown', 'clear'] as const;
 type Item = { doc: WorkDocument; result: WorkReview; status: Status };
 
@@ -39,9 +44,11 @@ function stateLabel(result: WorkReview) {
 function WorkOverview({
   items,
   counts,
+  partial,
 }: {
   items: Item[];
   counts: Record<Status, number>;
+  partial: boolean;
 }) {
   const frequency = new Map<string, number>();
   for (const { result } of items) {
@@ -49,7 +56,7 @@ function WorkOverview({
       frequency.set(name, (frequency.get(name) ?? 0) + 1);
   }
   const risks = [...frequency].sort((a, b) => b[1] - a[1]).slice(0, 2);
-  let headline = '当前没有待办单据';
+  let headline = partial ? '已读取的范围内暂无待办' : '当前没有待办单据';
   if (counts.attention) headline = `${counts.attention} 张单据需优先关注`;
   else if (counts.unknown) headline = `${counts.unknown} 张单据待核实`;
   else if (items.length) headline = '当前待办未发现异常';
@@ -73,7 +80,7 @@ function WorkOverview({
         <div className="wi-chart-heading">
           <strong>待办分布</strong>
           <span>
-            共 <b>{items.length}</b> 张
+            {partial ? '已读取' : '共'} <b>{items.length}</b> 张
           </span>
         </div>
         <div className="wi-bar" aria-hidden="true">
@@ -106,27 +113,71 @@ function WorkList({
 }) {
   const w = useWorkspace();
   const [filter, setFilter] = useState<Filter>('all');
-  const items = useMemo(
-    () =>
-      docs
-        .map((doc) => {
-          const result = summarizeWorkReview(doc, readAuditReview(doc, state));
-          return { doc, result, status: result.review.status };
-        })
-        .sort((a, b) => rank[a.status] - rank[b.status]),
-    [docs, state],
+  const [retry, setRetry] = useState(0);
+  const [response, setResponse] = useState<{ key: string; queue?: WorkQueue; error?: string }>();
+  const key = JSON.stringify([
+    docs.map((doc) => [doc.id, doc.version, doc.stage, doc.steps?.filter((step) => step.status === 'current').map((step) => step.actor)]),
+    state.rules.map((rule) => [rule.id, rule.version, rule.enabled]),
+    Object.entries(state.reviewResults || {}).map(([id, result]) => [id, result.documentVersion, result.checkedAt, result.signature]),
+    w.state.data.documentSources?.states,
+    retry,
+  ]);
+  useEffect(() => {
+    let active = true;
+    api<WorkQueue>('/business/work-inbox').then(
+      (queue) => { if (active) setResponse({ key, queue }); },
+      () => { if (active) setResponse({ key, error: '暂时无法读取待办单据。' }); },
+    );
+    return () => { active = false; };
+  }, [key]);
+  const current = response?.key === key ? response : undefined;
+  const queue = current?.queue;
+  const items = useMemo(() => {
+    const byId = new Map(docs.map((doc) => [doc.id, doc]));
+    return (queue?.approvals ?? []).flatMap(({ id, category }) => {
+      const doc = byId.get(id);
+      if (!doc) return [];
+      return [{ doc, result: summarizeWorkReview(doc, readAuditReview(doc, state)), status: category }];
+    });
+  }, [queue, docs, state]);
+  const syncAttempt = useRef('');
+  const missing = queue && items.length !== queue.approvals.length;
+  const syncKey = missing ? JSON.stringify([retry, queue.approvals.map(item => item.id)]) : '';
+  useEffect(() => {
+    if (!syncKey || syncAttempt.current === syncKey) return;
+    syncAttempt.current = syncKey;
+    void w.refresh().catch(() => {});
+  }, [syncKey, w.refresh]);
+  if (missing) return (
+    <div className="wi-inbox" role="status">
+      待办队列现有 {queue.approvals.length} 张，单据详情尚待同步。
+      <Button variant="ghost" onClick={() => setRetry(n => n + 1)}>重新同步</Button>
+    </div>
   );
+  if (!queue) return (
+    <div className="wi-inbox" role="status">
+      {current?.error || '正在读取待办单据…'}
+      {current?.error && <Button variant="ghost" onClick={() => setRetry(n => n + 1)}>重试</Button>}
+    </div>
+  );
+  const partial = queue.unavailableSources.length > 0;
   const counts = { attention: 0, unknown: 0, clear: 0 };
   items.forEach(({ status }) => counts[status]++);
   const filtered =
     filter === 'all' ? items : items.filter((i) => i.status === filter);
   return (
     <div className="wi-inbox">
-      <WorkOverview items={items} counts={counts} />
+      {partial && (
+        <div role="status">
+          {queue.unavailableSources.map((source) => sourceLabels[source] || source).join('、')}暂不可用，仅显示已读取的待办。
+          <Button variant="ghost" onClick={() => setRetry(n => n + 1)}>重试</Button>
+        </div>
+      )}
+      <WorkOverview items={items} counts={counts} partial={partial} />
       <section className="wi-list">
         <header className="wi-list-heading">
           <h2>
-            待办单据 <span>{docs.length}</span>
+            待办单据 <span>{items.length}</span>
           </h2>
           <div className="wi-filters" role="group" aria-label="按审查结果筛选">
             {filters.map((k) => (
@@ -192,7 +243,7 @@ function WorkList({
           ))}
         </ul>
         {!filtered.length && (
-          <Empty title={docs.length ? '当前筛选下暂无单据' : '暂无待办单据'} />
+          <Empty title={items.length ? '当前筛选下暂无单据' : partial ? '已读取的范围内暂无待办' : '暂无待办单据'} />
         )}
       </section>
     </div>

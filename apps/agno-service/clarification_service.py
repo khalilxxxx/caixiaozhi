@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import time
 import uuid
 
@@ -19,9 +20,14 @@ def pending_question(task):
 
 
 def draft_is_current(state, question):
+    drafts = state.get('data', {}).get('submissions', {}).get('drafts', {})
+    if question.get('sourceDraftId'):
+        source = drafts.get(question['sourceDraftId'])
+        if not source or source.get('status') == 'draft' or source.get('version') != question.get('sourceDraftVersion'):
+            return False
     if not question.get('draftId'):
         return True
-    draft = state.get('data', {}).get('submissions', {}).get('drafts', {}).get(question['draftId'])
+    draft = drafts.get(question['draftId'])
     return bool(draft and draft.get('version') == question.get('draftVersion') and draft.get('status') == 'draft')
 
 
@@ -38,6 +44,35 @@ def expire_questions(state):
             task['status'] = '待我核对'
             changed = True
     return changed
+
+
+def reopen_question(state, task_id, question_id):
+    """Restore the original decision without starting a run or adopting another draft."""
+    task = next((item for item in state['tasks'] if item['id'] == task_id), None)
+    last = next((entry['question'] for entry in reversed((task or {}).get('messages', []))
+                 if entry.get('question')), None)
+    if not last or last['id'] != question_id or task.get('activeRunId'):
+        raise QuestionError('该追问已变化，请查看当前会话。')
+    if last['status'] == 'pending' and draft_is_current(state, last):
+        return True
+    last_user = next((m for m in reversed(task['messages']) if m.get('role') == 'user'), {})
+    deferred = last_user.get('questionAnswer') or {}
+    if (task.get('status') != '已暂停' or last['status'] != 'deferred'
+        or not deferred.get('deferred') or deferred.get('questionId') != question_id):
+        raise QuestionError('该追问当前不能恢复，请查看当前会话。')
+    if not draft_is_current(state, last):
+        last['status'] = 'expired'
+        task['status'] = '待我核对'
+        return False
+    last['status'] = 'pending'
+    task['status'] = '待你回答'
+    return True
+
+
+def is_policy_aside(text):
+    """Only an explicit intervening policy lookup bypasses the open question."""
+    return bool(re.search(r'(?:先|顺便)(?:帮我|给我)?(?:查|问|看|了解|确认|核对)', text)
+                and re.search(r'制度|政策|标准|规定|能否报销|能不能报销', text))
 
 
 def issue_question(state, task_id, title, options=None, *, description=None, multiple=False,
@@ -132,6 +167,8 @@ def answer_question(state, task_id, answer, message):
         return {'question': copy.deepcopy(question), 'mode': 'deferred'}, '暂不处理'
     if not option_ids and not text:
         raise QuestionError('请选择一个选项或填写回答。', status=422)
+    if not option_ids and is_policy_aside(text):
+        return {'question': copy.deepcopy(question), 'mode': 'policy_lookup'}, text
     question.update(status='answered', answer={'optionIds': option_ids, 'text': text})
     summary = '；'.join([*(allowed[value] for value in option_ids), *([text] if text else [])])
     return {'question': copy.deepcopy(question), 'mode': 'selection' if option_ids else 'free_text'}, summary
